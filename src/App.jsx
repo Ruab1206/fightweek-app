@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
-  History, Globe 
+  History, Globe, LogOut, Lock 
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -10,7 +10,13 @@ import { initializeApp } from "firebase/app";
 import { 
   getFirestore, doc, setDoc, getDoc, onSnapshot 
 } from "firebase/firestore";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+import { 
+  getAuth, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut, 
+  onAuthStateChanged 
+} from "firebase/auth";
 
 // --- CONFIG & CONSTANTS ---
 const DAYS = ['Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag', 'Søndag'];
@@ -39,10 +45,22 @@ const GLOBAL_TEMPLATES = [
   { id: 'g22', day: 'Lørdag', name: 'Brydning', category: 'Brydning', start: '14:00', end: '16:00', location: 'Roskilde' }
 ];
 
-const FIGHTERS = ['Karl', 'Frode', 'Anton'];
+// USER MAPPING & CONFIGURATION
+const USER_MAPPING = {
+  'carolinemollerh@gmail.com': { name: 'Caroline', role: 'fighter' },
+  'sankarem00@gmail.com': { name: 'San', role: 'fighter' },
+  'eneasopa354@gmail.com': { name: 'Enea', role: 'fighter' },
+  'anton.emil.bang@gmail.com': { name: 'Anton', role: 'fighter' },
+  'duraceljones@gmail.com': { name: 'Jonas', role: 'fighter' },
+  'karl.lindsgren@gmail.com': { name: 'Karl', role: 'fighter' },
+  'frodihansen@hotmail.com': { name: 'Frodi', role: 'coach' }, // Coach ser alt
+  'rune.abrahamsson@gmail.com': { name: 'Rune', role: 'admin' } // Admin ser alt
+};
+
+// Listen over dem, man kan planlægge for (Fjernet coaches/admin fra selve listen over atleter)
+const FIGHTERS = ['Caroline', 'San', 'Enea', 'Anton', 'Jonas', 'Karl'];
 
 // --- FIREBASE SETUP ---
-// Her er din rigtige konfiguration indsat:
 const firebaseConfig = {
   apiKey: "AIzaSyDdOsNxPtlvWBP3SmNOxo1JfVXV9KeGUVA",
   authDomain: "fightweek-app.firebaseapp.com",
@@ -56,7 +74,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Data Path Helper - Bruger 'production' som ID hvis ikke andet er sat
+// Data Path Helper
 const ROOT_COLLECTION = `artifacts/production/users`; 
 
 // --- UTILS ---
@@ -64,21 +82,46 @@ const formatCancellationTime = (isoString) => {
     if (!isoString) return '';
     const date = new Date(isoString);
     const now = new Date();
-    
-    // Hvis samme dag: Vis tidspunkt
     if (date.toDateString() === now.toDateString()) {
         return `Kl. ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
     }
-    
-    // Ellers vis ugedag
-    const dayIndex = date.getDay(); // 0 = Søndag
+    const dayIndex = date.getDay();
     const dayName = dayIndex === 0 ? 'Søndag' : DAYS[dayIndex - 1];
     return dayName;
 };
 
 // --- COMPONENTS ---
 
-const Header = ({ activeFighter, isLocked, onSwitchFighter }) => (
+const LoginScreen = ({ onLogin }) => (
+  <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+    <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center">
+      <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
+        <ShieldCheck className="w-8 h-8 text-white" />
+      </div>
+      <h1 className="text-2xl font-bold text-white mb-2">FightWeek</h1>
+      <p className="text-slate-400 mb-8 text-sm">Log ind for at se din træningsplan</p>
+      
+      <button 
+        onClick={onLogin}
+        className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2"
+      >
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+        Log ind med Google
+      </button>
+    </div>
+  </div>
+);
+
+const AccessDenied = ({ email, onLogout }) => (
+  <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
+    <Lock className="w-12 h-12 text-red-500 mb-4" />
+    <h2 className="text-xl font-bold text-white mb-2">Ingen Adgang</h2>
+    <p className="text-slate-400 mb-6 max-w-xs">Emailen <strong>{email}</strong> er ikke oprettet i systemet endnu.</p>
+    <button onClick={onLogout} className="text-slate-500 underline text-sm">Log ud</button>
+  </div>
+);
+
+const Header = ({ activeFighter, isLocked, onSwitchFighter, currentUser, onLogout }) => (
   <div className="bg-slate-900 p-4 shadow-lg border-b border-slate-800 sticky top-0 z-20">
     <div className="flex justify-between items-center max-w-md mx-auto">
       <div className="flex items-center space-x-2">
@@ -87,44 +130,55 @@ const Header = ({ activeFighter, isLocked, onSwitchFighter }) => (
         </div>
         <div>
           <h1 className="text-white font-bold text-lg leading-tight">FightWeek</h1>
-          <p className="text-blue-400 text-xs font-bold uppercase tracking-wide">Production</p>
+          <p className="text-blue-400 text-xs font-bold uppercase tracking-wide">
+             {USER_MAPPING[currentUser?.email?.toLowerCase()]?.role === 'admin' ? 'Admin' : 'Production'}
+          </p>
         </div>
       </div>
       
-      {isLocked ? (
-        <div className="flex items-center bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700/50">
-          <User className="w-3 h-3 text-slate-400 mr-2" />
-          <span className="text-sm font-bold text-white">{activeFighter}</span>
-        </div>
-      ) : (
-        <div className="relative group">
-          <select 
-            value={activeFighter} 
-            onChange={(e) => onSwitchFighter(e.target.value)}
-            className="appearance-none bg-slate-800 text-white pl-4 pr-10 py-2 rounded-lg border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold shadow-sm"
-          >
-            {FIGHTERS.map(f => <option key={f} value={f}>{f}</option>)}
-          </select>
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
-            <ChevronDown className="w-4 h-4" />
+      <div className="flex items-center gap-3">
+        {isLocked ? (
+          <div className="flex items-center bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700/50">
+            <User className="w-3 h-3 text-slate-400 mr-2" />
+            <span className="text-sm font-bold text-white">{activeFighter}</span>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="relative group">
+            <select 
+              value={activeFighter} 
+              onChange={(e) => onSwitchFighter(e.target.value)}
+              className="appearance-none bg-slate-800 text-white pl-4 pr-10 py-2 rounded-lg border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold shadow-sm"
+            >
+              {FIGHTERS.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400">
+              <ChevronDown className="w-4 h-4" />
+            </div>
+          </div>
+        )}
+        <button onClick={onLogout} className="p-2 text-slate-500 hover:text-white transition-colors">
+            <LogOut className="w-5 h-5" />
+        </button>
+      </div>
     </div>
   </div>
 );
 
 const App = () => {
-  // State
+  // Auth State
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
+
+  // App State
   const [activeFighter, setActiveFighter] = useState('Karl');
-  const [isLocked, setIsLocked] = useState(false);
-  const [currentWeek, setCurrentWeek] = useState(5); // Startede på 6 før, rettet til 5 jf. bug
+  const [isLocked, setIsLocked] = useState(true);
+  const [currentWeek, setCurrentWeek] = useState(5); 
   const [systemWeek] = useState(5); 
   const [view, setView] = useState('personal'); 
   const [isStandardMode, setIsStandardMode] = useState(false);
   const [scheduleData, setScheduleData] = useState({}); 
   const [teamData, setTeamData] = useState({}); 
-  const [user, setUser] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   
   // Modal State
@@ -132,27 +186,57 @@ const App = () => {
   const [editingDay, setEditingDay] = useState(null);
   const [editingSession, setEditingSession] = useState(null); 
 
-  // --- AUTH & INIT ---
+  // --- AUTH LOGIC ---
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const fighterParam = params.get('fighter');
-    if (fighterParam && FIGHTERS.includes(fighterParam)) {
-      setActiveFighter(fighterParam);
-      setIsLocked(true);
-    }
-
-    const initAuth = async () => {
-        // Bruger anonymt login til MVP
-        await signInAnonymously(auth); 
-    };
-    initAuth();
-    const unsubAuth = onAuthStateChanged(auth, (u) => setUser(u));
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
+      setAuthLoading(false);
+      if (u) {
+        const email = u.email ? u.email.toLowerCase() : '';
+        const userProfile = USER_MAPPING[email];
+        
+        if (userProfile) {
+            setUser(u);
+            setAccessDenied(false);
+            
+            // Konfigurer rettigheder baseret på rolle
+            if (userProfile.role === 'coach' || userProfile.role === 'admin') {
+                // Coach/Admin må skifte bruger. Start med Karl som default eller første på listen.
+                setIsLocked(false);
+                setActiveFighter('Karl'); 
+            } else {
+                // Fighter låses til sit eget navn
+                setActiveFighter(userProfile.name);
+                setIsLocked(true);
+            }
+        } else {
+            // Ukendt email
+            setAccessDenied(true);
+            setUser(u);
+        }
+      } else {
+        setUser(null);
+      }
+    });
     return () => unsubAuth();
   }, []);
 
+  const handleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+        await signInWithPopup(auth, provider);
+    } catch (error) {
+        console.error("Login failed", error);
+    }
+  };
+
+  const handleLogout = () => {
+      signOut(auth);
+      setAccessDenied(false);
+  };
+
   // --- DATA SYNC ---
   useEffect(() => {
-    if (!user) return;
+    if (!user || accessDenied) return;
 
     const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
     const collectionPath = isStandardMode ? 'templates' : 'weeks';
@@ -176,13 +260,11 @@ const App = () => {
       }
     });
 
-    // B. Listen to TEAM data (Dynamisk baseret på Standard/Uge)
+    // B. Listen to TEAM data
     const teamDocId = isStandardMode ? 'standard' : `week_${currentWeek}`;
     const teamColPath = isStandardMode ? 'templates' : 'weeks';
-    
     const unsubsTeam = [];
     
-    // Vi lytter altid på teamet, så viewet er klar hvis man skifter
     FIGHTERS.forEach(fighter => {
         const fRef = doc(db, ROOT_COLLECTION, fighter, teamColPath, teamDocId);
         const unsub = onSnapshot(fRef, (snap) => {
@@ -199,17 +281,14 @@ const App = () => {
       unsubPersonal();
       unsubsTeam.forEach(u => u());
     };
-  }, [user, activeFighter, currentWeek, isStandardMode]);
+  }, [user, activeFighter, currentWeek, isStandardMode, accessDenied]);
 
   // --- HELPERS ---
   const saveToDb = async (newData) => {
       const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
       const collectionPath = isStandardMode ? 'templates' : 'weeks';
       const docRef = doc(db, ROOT_COLLECTION, activeFighter, collectionPath, docId);
-      
-      // Add Timestamp
       newData.lastUpdated = new Date().toISOString();
-      
       await setDoc(docRef, newData);
   };
 
@@ -217,32 +296,21 @@ const App = () => {
 
   const handleSaveSession = async (session) => {
     if (!user) return;
-    
-    // Deep copy
     const newData = JSON.parse(JSON.stringify(scheduleData));
     if (!newData[editingDay]) newData[editingDay] = [];
 
     if (session.id) {
         const idx = newData[editingDay].findIndex(s => s.id === session.id);
-        if (idx > -1) {
-            newData[editingDay][idx] = session;
-        } else {
-            newData[editingDay].push(session); 
-        }
+        if (idx > -1) newData[editingDay][idx] = session;
+        else newData[editingDay].push(session);
     } else {
         session.id = Date.now();
         newData[editingDay].push(session);
     }
     
-    // Sort logic
-    newData[editingDay].sort((a,b) => {
-        if (!a.start) return 1;
-        if (!b.start) return -1;
-        return a.start.localeCompare(b.start);
-    });
-
-    setScheduleData(newData); // Optimistic UI
-    await saveToDb(newData); // Sync DB
+    newData[editingDay].sort((a,b) => a.start.localeCompare(b.start));
+    setScheduleData(newData); 
+    await saveToDb(newData); 
     setModalOpen(false);
   };
 
@@ -258,60 +326,38 @@ const App = () => {
 
   const handleToggleRestDay = async (day) => {
     if (!user || (currentWeek < systemWeek && !isStandardMode)) return; 
-
     const newData = JSON.parse(JSON.stringify(scheduleData));
     let currentSessions = newData[day] || [];
     const isRest = currentSessions.some(s => s.isRestDay);
 
     if (isRest) {
-        // Fjern hviledag -> Behold sessions, men fjern 'isRestDay' flaget
-        // Hvis der var gamle sessions, vil de stadig ligge der som cancelled.
-        // For simpelhedens skyld fjerner vi bare selve hviledags-objektet.
         newData[day] = currentSessions.filter(s => !s.isRestDay);
     } else {
-        // Sæt hviledag
         const activeSessions = currentSessions.filter(s => s.status !== 'cancelled' && !s.isRestDay);
-        
         if (activeSessions.length > 0) {
             if (!confirm(`Du har ${activeSessions.length} planlagte pas. Vil du aflyse dem og holde hviledag?`)) return;
-            
-            // Marker alle aktive som aflyst
             currentSessions = currentSessions.map(s => {
                 if (s.status !== 'cancelled' && !s.isRestDay) {
-                    return {
-                        ...s,
-                        status: 'cancelled',
-                        cancellationReason: 'Hviledag',
-                        cancellationTime: new Date().toISOString()
-                    };
+                    return { ...s, status: 'cancelled', cancellationReason: 'Hviledag', cancellationTime: new Date().toISOString() };
                 }
                 return s;
             });
         }
-        // Tilføj hviledags markør
         currentSessions.push({ isRestDay: true, id: Date.now() });
         newData[day] = currentSessions;
     }
-
     await saveToDb(newData);
   };
 
   const handleAddClick = (day) => {
       const sessions = scheduleData[day] || [];
       const isRest = sessions.some(s => s.isRestDay);
-      
       if (isRest) {
           if(!confirm("Dette er en hviledag. Vil du fjerne hviledagen og oprette et pas?")) return;
-          handleToggleRestDay(day); // Fjerner hviledag
-          // Vent lidt med at åbne modal til state er opdateret, eller bare åbn den nu
-          setTimeout(() => {
-             setEditingDay(day);
-             setEditingSession(null);
-             setModalOpen(true);
-          }, 100);
+          handleToggleRestDay(day); 
+          setTimeout(() => { setEditingDay(day); setEditingSession(null); setModalOpen(true); }, 100);
           return;
       }
-      
       setEditingDay(day);
       setEditingSession(null);
       setModalOpen(true);
@@ -320,40 +366,44 @@ const App = () => {
   const handleImportStandard = async () => {
     if (!user) return;
     if (!confirm("Dette vil overskrive hele ugen med din Standarduge. Er du sikker?")) return;
-
     try {
         const standardRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
         const standardSnap = await getDoc(standardRef);
-
         if (standardSnap.exists()) {
-            const standardData = standardSnap.data();
-            await saveToDb(standardData);
+            await saveToDb(standardSnap.data());
         } else {
             alert("Du har ikke oprettet en standarduge endnu. Gå til 'Rediger Standarduge' først.");
         }
     } catch (error) {
-        console.error("Fejl ved import:", error);
-        alert("Der skete en fejl ved hentning af standarduge.");
+        console.error("Fejl:", error);
     }
   };
 
-  // --- NAVIGATION ---
   const changeWeek = (delta) => {
     const nextWeek = currentWeek + delta;
-    if (nextWeek < 1) return; 
-    if (nextWeek > systemWeek + 1) return; 
+    if (nextWeek < 1 || nextWeek > systemWeek + 1) return; 
     setCurrentWeek(nextWeek);
     setIsStandardMode(false);
   };
+
+  // --- RENDER ---
+  if (authLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loader...</div>;
+  if (!user) return <LoginScreen onLogin={handleLogin} />;
+  if (accessDenied) return <AccessDenied email={user.email} onLogout={handleLogout} />;
 
   const isReadOnly = !isStandardMode && currentWeek < systemWeek;
 
   return (
     <div className="bg-slate-950 text-slate-200 min-h-screen pb-24 font-sans selection:bg-blue-500/30">
-      <Header activeFighter={activeFighter} isLocked={isLocked} onSwitchFighter={setActiveFighter} />
+      <Header 
+        activeFighter={activeFighter} 
+        isLocked={isLocked} 
+        onSwitchFighter={setActiveFighter} 
+        currentUser={user}
+        onLogout={handleLogout}
+      />
 
       <div className="max-w-md mx-auto relative pt-4 min-h-[85vh]">
-        
         {/* Banner: Standard Mode */}
         {isStandardMode && (
           <div className="mx-4 mb-4 bg-yellow-900/30 border border-yellow-700/50 rounded-xl p-3 flex items-start space-x-3 fade-in">
@@ -368,10 +418,7 @@ const App = () => {
         {/* Controls */}
         <div className="mx-4 mb-4 space-y-3">
           <div className="flex items-center justify-between bg-slate-800 p-2 rounded-xl border border-slate-700 shadow-md">
-            <button 
-                onClick={() => changeWeek(-1)} 
-                className={`p-2 hover:bg-slate-700 rounded-lg text-slate-400 active:scale-95 transition-all ${currentWeek <= 1 ? 'invisible' : ''}`}
-            >
+            <button onClick={() => changeWeek(-1)} className={`p-2 hover:bg-slate-700 rounded-lg text-slate-400 active:scale-95 transition-all ${currentWeek <= 1 ? 'invisible' : ''}`}>
                 <ChevronLeft className="w-6 h-6" />
             </button>
             <div className="text-center">
@@ -380,10 +427,7 @@ const App = () => {
               </span>
               <div className="text-white font-bold text-xl">Uge {currentWeek}</div>
             </div>
-            <button 
-                onClick={() => changeWeek(1)} 
-                className={`p-2 hover:bg-slate-700 rounded-lg text-slate-400 active:scale-95 transition-all ${currentWeek >= systemWeek + 1 ? 'invisible' : ''}`}
-            >
+            <button onClick={() => changeWeek(1)} className={`p-2 hover:bg-slate-700 rounded-lg text-slate-400 active:scale-95 transition-all ${currentWeek >= systemWeek + 1 ? 'invisible' : ''}`}>
                 <ChevronRight className="w-6 h-6" />
             </button>
           </div>
@@ -391,10 +435,7 @@ const App = () => {
           <div className="flex justify-between items-center px-1">
             <div className="flex items-center space-x-1 text-[10px] text-slate-500 font-medium">
                 {!isStandardMode && lastUpdated && (
-                    <>
-                        <Clock className="w-3 h-3" />
-                        <span>Opdateret: {lastUpdated}</span>
-                    </>
+                    <><Clock className="w-3 h-3" /><span>Opdateret: {lastUpdated}</span></>
                 )}
                 {isReadOnly && <span className="flex items-center text-slate-400 ml-2"><History className="w-3 h-3 mr-1"/> Historik</span>}
             </div>
@@ -409,7 +450,6 @@ const App = () => {
                             <button onClick={() => setIsStandardMode(true)} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-slate-800 text-slate-300 border-slate-700 transition-colors flex items-center">
                                 <Globe className="w-3 h-3 mr-1.5"/> Rediger Standarduge
                             </button>
-                            {/* Viser altid Hent Standard hvis vi er i fremtiden eller aktuel uge (og data er tom ELLER brugeren vil overskrive) */}
                             <button onClick={handleImportStandard} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-blue-900/20 text-blue-400 border-blue-800/50 hover:bg-blue-900/40 transition-colors flex items-center">
                                 <ChevronDown className="w-3 h-3 mr-1.5"/> Hent Standard
                             </button>
@@ -435,7 +475,6 @@ const App = () => {
         )}
       </div>
 
-      {/* Bottom Nav */}
       <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 pb-safe z-50">
         <div className="max-w-md mx-auto flex justify-around p-2">
             <NavButton icon={Calendar} label="Min Plan" active={view === 'personal'} onClick={() => setView('personal')} />
@@ -443,7 +482,6 @@ const App = () => {
         </div>
       </div>
 
-      {/* MODAL */}
       {modalOpen && (
           <SessionModal 
             day={editingDay}
@@ -454,7 +492,6 @@ const App = () => {
             isStandardMode={isStandardMode}
           />
       )}
-
     </div>
   );
 };
@@ -473,8 +510,6 @@ const PersonalSchedule = ({ days, data, isReadOnly, onToggleRest, onAdd, onEdit 
         {days.map(day => {
             const sessions = data[day] || [];
             const isRestDay = sessions.some(s => s.isRestDay);
-            
-            // Vi filtrerer ikke cancelled væk, men viser dem hvis hviledag
             const visibleSessions = sessions.filter(s => !s.isRestDay);
 
             return (
@@ -526,13 +561,10 @@ const PersonalSchedule = ({ days, data, isReadOnly, onToggleRest, onAdd, onEdit 
 
 const TeamSchedule = ({ days, teamData }) => {
     const [selectedDay, setSelectedDay] = useState('Mandag');
-    
-    // Aggregate Data
     const timeSlots = {};
     Object.keys(teamData).forEach(fighter => {
         const data = teamData[fighter];
         if (!data) return; 
-        
         const sessions = data[selectedDay] || [];
         sessions.forEach(s => {
             if (s.isRestDay) return;
@@ -541,7 +573,6 @@ const TeamSchedule = ({ days, teamData }) => {
             timeSlots[timeKey].push({ ...s, fighter });
         });
     });
-    
     const sortedTimes = Object.keys(timeSlots).sort();
 
     return (
@@ -601,9 +632,8 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
         reason: initialData?.cancellationReason || ''
     });
 
-    const isExisting = !!initialData; // Are we editing?
+    const isExisting = !!initialData; 
 
-    // Pre-save formatter
     const submit = () => {
         onSave({
             id: initialData?.id,
@@ -615,6 +645,7 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
     };
 
     return (
+        // FJERNEDE onClick={onClose} fra den yderste div for at forhindre lukning ved klik udenfor
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 fade-in">
              <div className="bg-slate-900 w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50 shrink-0">
@@ -647,7 +678,6 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {/* Hvis det er et eksisterende pas, kan man ikke redigere detaljer */}
                             {isExisting && <div className="p-3 bg-yellow-900/20 border border-yellow-700/50 rounded-lg text-xs text-yellow-200 mb-2">Du kan kun slette eller aflyse dette pas. For at ændre tid/sted, slet og opret på ny.</div>}
                             
                             <div>
@@ -656,7 +686,7 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
                                     {CATEGORIES.map(cat => (
                                         <button 
                                             key={cat.label} 
-                                            disabled={isExisting} // Låst hvis edit
+                                            disabled={isExisting} 
                                             onClick={() => setForm({...form, category: cat.label})} 
                                             className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${form.category === cat.label ? `${cat.color} text-white border-transparent` : 'bg-slate-900 border-slate-700 text-slate-400'} ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         >
@@ -680,7 +710,6 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
                                 </div>
                             </div>
                             
-                            {/* Aflysning vises kun hvis vi redigerer et eksisterende pas (isExisting) OG ikke er i standard mode */}
                             {isExisting && !isStandardMode && (
                                 <div className="pt-4 border-t border-slate-800">
                                     <label className="flex items-center space-x-2 cursor-pointer mb-3">
@@ -698,7 +727,6 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
 
                 <div className="p-4 border-t border-slate-800 bg-slate-800/50 flex space-x-3 shrink-0">
                     {initialData && <button onClick={() => onDelete(initialData.id)} className="py-3.5 px-4 rounded-xl font-bold text-slate-400 bg-slate-800 hover:bg-slate-700 transition-colors"><Trash2 className="w-5 h-5"/></button>}
-                    {/* Knappen er kun aktiv hvis det er 'Opret' ELLER 'Gem & Aflys' ELLER 'Gem Standard'. Hvis det er alm edit uden aflysning, giver knappen ikke mening medmindre vi tillader at gemme uændret, men lad os holde den */}
                     <button onClick={submit} className={`flex-1 py-3.5 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex justify-center items-center ${form.cancel ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>{form.cancel ? 'Gem & Aflys' : 'Gem'}</button>
                 </div>
              </div>
