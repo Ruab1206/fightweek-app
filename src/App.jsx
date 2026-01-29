@@ -30,19 +30,51 @@ const CATEGORIES = [
   { label: 'Andet', color: 'bg-slate-500', border: 'border-slate-500' }
 ];
 
-// Stamdata (Kataloget)
+// Stamdata (Kataloget) - OPDATERET V12
 const GLOBAL_TEMPLATES = [
-  { id: 'g1', day: 'Mandag', name: 'Wall Wrestling', category: 'Brydning', start: '15:00', end: '16:00', location: 'Burnell' },
-  { id: 'g2', day: 'Mandag', name: 'Kickboxing Adv', category: 'Kickboxing', start: '17:00', end: '18:15', location: 'Rumble' },
-  { id: 'g3', day: 'Mandag', name: 'MMA Grappling', category: 'MMA', start: '18:00', end: '19:30', location: 'Rumble' },
-  { id: 'g4', day: 'Mandag', name: 'Frodi Wall', category: 'Brydning', start: '19:30', end: '21:00', location: 'Rumble' },
-  { id: 'g5', day: 'Tirsdag', name: 'Nogi All', category: 'Grappling', start: '07:00', end: '08:00', location: 'Rumble' },
-  { id: 'g9', day: 'Tirsdag', name: 'Brydning', category: 'Brydning', start: '19:00', end: '20:30', location: 'Roskilde' },
-  { id: 'g10', day: 'Onsdag', name: 'MMA Sparring', category: 'MMA', start: '15:00', end: '16:00', location: 'Burnell' },
-  { id: 'g12', day: 'Onsdag', name: 'MMA Adv', category: 'MMA', start: '16:30', end: '18:00', location: 'Rumble' },
-  { id: 'g14', day: 'Torsdag', name: 'Kickboxing Adv', category: 'Kickboxing', start: '17:00', end: '18:15', location: 'Rumble' },
-  { id: 'g17', day: 'Fredag', name: 'MMA Sparring', category: 'MMA', start: '18:00', end: '19:30', location: 'Rumble' },
-  { id: 'g22', day: 'Lørdag', name: 'Brydning', category: 'Brydning', start: '14:00', end: '16:00', location: 'Roskilde' }
+  // Mandag
+  { id: 'm1', day: 'Mandag', name: 'Wall Wrestling', category: 'Brydning', start: '15:00', end: '16:00', location: 'Burnell' },
+  { id: 'm2', day: 'Mandag', name: 'Kickboxing Adv', category: 'Kickboxing', start: '17:00', end: '19:00', location: 'Rumble' },
+  { id: 'm3', day: 'Mandag', name: 'MMA Grappling', category: 'MMA', start: '18:00', end: '19:30', location: 'Rumble' },
+  
+  // Tirsdag
+  { id: 't1', day: 'Tirsdag', name: 'Nogi All', category: 'Grappling', start: '07:00', end: '08:00', location: 'Rumble' },
+  { id: 't2', day: 'Tirsdag', name: 'Grappling', category: 'Grappling', start: '17:00', end: '18:00', location: 'Burnell' },
+  { id: 't3', day: 'Tirsdag', name: 'Nogi All', category: 'Grappling', start: '17:00', end: '18:00', location: 'Rumble' },
+  { id: 't4', day: 'Tirsdag', name: 'Kickboxing Adv', category: 'Kickboxing', start: '17:00', end: '19:00', location: 'Rumble' },
+  { id: 't5', day: 'Tirsdag', name: 'Boksning', category: 'Boksning', start: '17:30', end: '19:00', location: 'Rødovre' },
+  { id: 't6', day: 'Tirsdag', name: 'Nogi Adv', category: 'Grappling', start: '18:00', end: '19:00', location: 'Rumble' },
+  { id: 't7', day: 'Tirsdag', name: 'Brydning', category: 'Brydning', start: '19:00', end: '21:00', location: 'Roskilde' },
+
+  // Onsdag
+  { id: 'o1', day: 'Onsdag', name: 'MMA Sparring', category: 'MMA', start: '15:00', end: '16:00', location: 'Burnell' },
+  { id: 'o2', day: 'Onsdag', name: 'Grappling', category: 'Grappling', start: '17:00', end: '18:00', location: 'Burnell' },
+  { id: 'o3', day: 'Onsdag', name: 'MMA Adv', category: 'MMA', start: '16:30', end: '18:00', location: 'Rumble' },
+  { id: 'o4', day: 'Onsdag', name: 'Kickboxing Adv', category: 'Kickboxing', start: '17:00', end: '18:30', location: 'Rumble' },
+  { id: 'o5', day: 'Onsdag', name: 'Nogi All', category: 'Grappling', start: '18:00', end: '19:30', location: 'Rumble' },
+
+  // Torsdag
+  { id: 'th1', day: 'Torsdag', name: 'Nogi All', category: 'Grappling', start: '07:00', end: '08:00', location: 'Rumble' },
+  { id: 'th2', day: 'Torsdag', name: 'Nogi All', category: 'Grappling', start: '17:00', end: '18:00', location: 'Rumble' },
+  { id: 'th3', day: 'Torsdag', name: 'Kickboxing Adv', category: 'Kickboxing', start: '17:00', end: '18:30', location: 'Rumble' },
+  { id: 'th4', day: 'Torsdag', name: 'Boksning', category: 'Boksning', start: '17:30', end: '19:00', location: 'Rødovre' },
+  { id: 'th5', day: 'Torsdag', name: 'Nogi Adv', category: 'Grappling', start: '18:00', end: '19:00', location: 'Rumble' },
+  { id: 'th6', day: 'Torsdag', name: 'Brydning', category: 'Brydning', start: '19:00', end: '21:00', location: 'Roskilde' },
+
+  // Fredag
+  { id: 'f1', day: 'Fredag', name: 'MMA', category: 'MMA', start: '17:00', end: '18:00', location: 'Rumble' },
+  { id: 'f2', day: 'Fredag', name: 'MMA Sparring', category: 'MMA', start: '18:00', end: '19:00', location: 'Rumble' },
+
+  // Lørdag
+  { id: 'sa1', day: 'Lørdag', name: 'Nogi All', category: 'Grappling', start: '10:00', end: '11:00', location: 'Rumble' },
+  { id: 'sa2', day: 'Lørdag', name: 'Boksning', category: 'Boksning', start: '10:00', end: '11:30', location: 'Rødovre' },
+  { id: 'sa3', day: 'Lørdag', name: 'Boxing All', category: 'Boksning', start: '10:30', end: '12:00', location: 'Rumble' },
+  { id: 'sa4', day: 'Lørdag', name: 'Nogi Adv', category: 'Grappling', start: '11:00', end: '12:00', location: 'Rumble' },
+  { id: 'sa5', day: 'Lørdag', name: 'Brydning', category: 'Brydning', start: '14:00', end: '16:00', location: 'Roskilde' },
+
+  // Søndag
+  { id: 'su1', day: 'Søndag', name: 'Nogi All', category: 'Grappling', start: '12:00', end: '13:30', location: 'Rumble' },
+  { id: 'su2', day: 'Søndag', name: 'Kickboxing All', category: 'Kickboxing', start: '13:30', end: '15:00', location: 'Rumble' },
 ];
 
 // USER MAPPING & CONFIGURATION
@@ -57,7 +89,6 @@ const USER_MAPPING = {
   'rune.abrahamsson@gmail.com': { name: 'Rune', role: 'admin' } // Admin ser alt
 };
 
-// Listen over dem, man kan planlægge for (Fjernet coaches/admin fra selve listen over atleter)
 const FIGHTERS = ['Caroline', 'San', 'Enea', 'Anton', 'Jonas', 'Karl'];
 
 // --- FIREBASE SETUP ---
@@ -92,7 +123,7 @@ const formatCancellationTime = (isoString) => {
 
 // --- COMPONENTS ---
 
-const LoginScreen = ({ onLogin }) => (
+const LoginScreen = ({ onLogin, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center">
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
@@ -101,6 +132,13 @@ const LoginScreen = ({ onLogin }) => (
       <h1 className="text-2xl font-bold text-white mb-2">FightWeek</h1>
       <p className="text-slate-400 mb-8 text-sm">Log ind for at se din træningsplan</p>
       
+      {error && (
+        <div className="bg-red-900/50 border border-red-800 rounded-lg p-3 mb-6 text-xs text-red-200 text-left">
+            <p className="font-bold mb-1 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Login Fejl:</p>
+            <p>{error}</p>
+        </div>
+      )}
+
       <button 
         onClick={onLogin}
         className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2"
@@ -169,6 +207,7 @@ const App = () => {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [loginError, setLoginError] = useState(null);
 
   // App State
   const [activeFighter, setActiveFighter] = useState('Karl');
@@ -200,16 +239,13 @@ const App = () => {
             
             // Konfigurer rettigheder baseret på rolle
             if (userProfile.role === 'coach' || userProfile.role === 'admin') {
-                // Coach/Admin må skifte bruger. Start med Karl som default eller første på listen.
                 setIsLocked(false);
                 setActiveFighter('Karl'); 
             } else {
-                // Fighter låses til sit eget navn
                 setActiveFighter(userProfile.name);
                 setIsLocked(true);
             }
         } else {
-            // Ukendt email
             setAccessDenied(true);
             setUser(u);
         }
@@ -221,17 +257,28 @@ const App = () => {
   }, []);
 
   const handleLogin = async () => {
+    setLoginError(null);
     const provider = new GoogleAuthProvider();
     try {
         await signInWithPopup(auth, provider);
     } catch (error) {
         console.error("Login failed", error);
+        let msg = error.message;
+        if (error.code === 'auth/unauthorized-domain') {
+            msg = "Domænet er ikke godkendt. Husk at tilføje dit Vercel-link i Firebase Console -> Authentication -> Settings -> Authorized Domains.";
+        } else if (error.code === 'auth/popup-closed-by-user') {
+            msg = "Login blev afbrudt (vinduet lukkede).";
+        } else if (error.code === 'auth/popup-blocked') {
+            msg = "Popup blev blokeret af browseren. Tillad popups for at logge ind.";
+        }
+        setLoginError(msg);
     }
   };
 
   const handleLogout = () => {
       signOut(auth);
       setAccessDenied(false);
+      setLoginError(null);
   };
 
   // --- DATA SYNC ---
@@ -388,7 +435,7 @@ const App = () => {
 
   // --- RENDER ---
   if (authLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loader...</div>;
-  if (!user) return <LoginScreen onLogin={handleLogin} />;
+  if (!user) return <LoginScreen onLogin={handleLogin} error={loginError} />;
   if (accessDenied) return <AccessDenied email={user.email} onLogout={handleLogout} />;
 
   const isReadOnly = !isStandardMode && currentWeek < systemWeek;
@@ -645,7 +692,6 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
     };
 
     return (
-        // FJERNEDE onClick={onClose} fra den yderste div for at forhindre lukning ved klik udenfor
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 fade-in">
              <div className="bg-slate-900 w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50 shrink-0">
@@ -707,6 +753,28 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
                                 <div>
                                     <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Slut</label>
                                     <input disabled={isExisting} type="time" value={form.end} onChange={e => setForm({...form, end: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
+                                </div>
+                            </div>
+
+                            {/* Lokation Dropdown */}
+                            <div>
+                                <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Lokation</label>
+                                <div className="relative">
+                                    <MapPin className="absolute left-3 top-3.5 w-4 h-4 text-slate-500" />
+                                    <select 
+                                        disabled={isExisting}
+                                        value={form.location} 
+                                        onChange={e => setForm({...form, location: e.target.value})}
+                                        className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:ring-2 focus:ring-blue-600 outline-none appearance-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    >
+                                        <option value="Rumble">Rumble</option>
+                                        <option value="Burnell">Burnell</option>
+                                        <option value="Roskilde">Roskilde</option>
+                                        <option value="Andet">Andet</option>
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500">
+                                        <ChevronDown className="w-4 h-4" />
+                                    </div>
                                 </div>
                             </div>
                             
