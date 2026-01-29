@@ -1,23 +1,27 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { createRoot } from 'react-dom/client';
-import { Calendar, User, Clock, MapPin, Plus, Trash2, X, Globe, Info, ShieldCheck, ChevronLeft, ChevronRight, ChevronDown, Bed, AlertCircle, History } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
+  Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
+  History, Globe 
+} from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
-// Når du deployer selv: kør 'npm install firebase'
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, doc, setDoc, onSnapshot, query, where } from "firebase/firestore";
+import { 
+  getFirestore, doc, setDoc, getDoc, onSnapshot 
+} from "firebase/firestore";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 
 // --- CONFIG & CONSTANTS ---
 const DAYS = ['Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag', 'Søndag'];
 const CATEGORIES = [
-  { label: 'MMA', color: 'bg-red-600' },
-  { label: 'Brydning', color: 'bg-emerald-600' },
-  { label: 'Grappling', color: 'bg-purple-600' },
-  { label: 'Boksning', color: 'bg-yellow-600' },
-  { label: 'Kickboxing', color: 'bg-orange-500' },
-  { label: 'Fysisk træning', color: 'bg-stone-600' },
-  { label: 'Andet', color: 'bg-slate-500' }
+  { label: 'MMA', color: 'bg-red-600', border: 'border-red-600' },
+  { label: 'Brydning', color: 'bg-emerald-600', border: 'border-emerald-600' },
+  { label: 'Grappling', color: 'bg-purple-600', border: 'border-purple-600' },
+  { label: 'Boksning', color: 'bg-yellow-600', border: 'border-yellow-600' },
+  { label: 'Kickboxing', color: 'bg-orange-500', border: 'border-orange-500' },
+  { label: 'Fysisk træning', color: 'bg-stone-600', border: 'border-stone-600' },
+  { label: 'Andet', color: 'bg-slate-500', border: 'border-slate-500' }
 ];
 
 // Stamdata (Kataloget)
@@ -38,10 +42,7 @@ const GLOBAL_TEMPLATES = [
 const FIGHTERS = ['Karl', 'Frode', 'Anton'];
 
 // --- FIREBASE SETUP ---
-// VIGTIGT: Dette er din "Deployment Config". 
-// Når du hoster selv, skal du indsætte din rigtige config fra Firebase Console her.
-// I dette preview miljø bruger vi environment variables, men du skal erstatte det.
-
+// Her er din rigtige konfiguration indsat:
 const firebaseConfig = {
   apiKey: "AIzaSyDdOsNxPtlvWBP3SmNOxo1JfVXV9KeGUVA",
   authDomain: "fightweek-app.firebaseapp.com",
@@ -50,22 +51,30 @@ const firebaseConfig = {
   messagingSenderId: "141030861103",
   appId: "1:141030861103:web:962fd2747623b171f159da"
 };
-// const firebaseConfig = {
-//   apiKey: "AIzaSy...",
-//   authDomain: "fightweek-app.firebaseapp.com",
-//   projectId: "fightweek-app",
-//   storageBucket: "fightweek-app.firebasestorage.app",
-//   messagingSenderId: "...",
-//   appId: "..."
-// };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Data Path Helper (Sikrer vi skriver det rigtige sted i DB)
-// Når du deployer til PROD, kan du ændre dette til bare at være 'schedules'
-const ROOT_COLLECTION = `artifacts/${typeof __app_id !== 'undefined' ? __app_id : 'default'}/users`; 
+// Data Path Helper - Bruger 'production' som ID hvis ikke andet er sat
+const ROOT_COLLECTION = `artifacts/production/users`; 
+
+// --- UTILS ---
+const formatCancellationTime = (isoString) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    const now = new Date();
+    
+    // Hvis samme dag: Vis tidspunkt
+    if (date.toDateString() === now.toDateString()) {
+        return `Kl. ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+    }
+    
+    // Ellers vis ugedag
+    const dayIndex = date.getDay(); // 0 = Søndag
+    const dayName = dayIndex === 0 ? 'Søndag' : DAYS[dayIndex - 1];
+    return dayName;
+};
 
 // --- COMPONENTS ---
 
@@ -109,22 +118,22 @@ const App = () => {
   // State
   const [activeFighter, setActiveFighter] = useState('Karl');
   const [isLocked, setIsLocked] = useState(false);
-  const [currentWeek, setCurrentWeek] = useState(6);
-  const [systemWeek] = useState(6); // Den "rigtige" uge
-  const [view, setView] = useState('personal'); // 'personal' | 'team'
+  const [currentWeek, setCurrentWeek] = useState(5); // Startede på 6 før, rettet til 5 jf. bug
+  const [systemWeek] = useState(5); 
+  const [view, setView] = useState('personal'); 
   const [isStandardMode, setIsStandardMode] = useState(false);
-  const [scheduleData, setScheduleData] = useState({}); // Stores the current view's data
-  const [teamData, setTeamData] = useState({}); // Stores all fighters data for team view
+  const [scheduleData, setScheduleData] = useState({}); 
+  const [teamData, setTeamData] = useState({}); 
   const [user, setUser] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
   
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDay, setEditingDay] = useState(null);
-  const [editingSession, setEditingSession] = useState(null); // null = new, obj = edit
+  const [editingSession, setEditingSession] = useState(null); 
 
   // --- AUTH & INIT ---
   useEffect(() => {
-    // 1. Tjek URL for ?fighter=Navn
     const params = new URLSearchParams(window.location.search);
     const fighterParam = params.get('fighter');
     if (fighterParam && FIGHTERS.includes(fighterParam)) {
@@ -132,55 +141,59 @@ const App = () => {
       setIsLocked(true);
     }
 
-    // 2. Log ind anonymt for at få adgang til DB
     const initAuth = async () => {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInAnonymously(auth); // Fallback logic handled by environment usually, simplified here
-        } else {
-            await signInAnonymously(auth);
-        }
+        // Bruger anonymt login til MVP
+        await signInAnonymously(auth); 
     };
     initAuth();
     const unsubAuth = onAuthStateChanged(auth, (u) => setUser(u));
     return () => unsubAuth();
   }, []);
 
-  // --- DATA SYNC (The "Real Database" part) ---
+  // --- DATA SYNC ---
   useEffect(() => {
     if (!user) return;
 
-    // Path Logic: users/{fighter}/weeks/{week} OR users/{fighter}/standard/template
     const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
     const collectionPath = isStandardMode ? 'templates' : 'weeks';
     
-    // A. Listen to Active Fighter's Plan (Personal View)
+    // A. Listen to Active Fighter's Plan
     const docRef = doc(db, ROOT_COLLECTION, activeFighter, collectionPath, docId);
     
     const unsubPersonal = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
-        setScheduleData(docSnap.data());
+        const data = docSnap.data();
+        setScheduleData(data);
+        if (data.lastUpdated) {
+             const date = new Date(data.lastUpdated);
+             setLastUpdated(date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+        } else {
+             setLastUpdated(null);
+        }
       } else {
-        setScheduleData({}); // Init empty if new week
+        setScheduleData({});
+        setLastUpdated('Aldrig');
       }
     });
 
-    // B. Listen to TEAM data (All fighters for this week) - Only needed if we look at Team View or want updates
-    // For MVP efficiency, we set up listeners for all fighters for the CURRENT week regardless of view
-    // so badges update immediately.
+    // B. Listen to TEAM data (Dynamisk baseret på Standard/Uge)
+    const teamDocId = isStandardMode ? 'standard' : `week_${currentWeek}`;
+    const teamColPath = isStandardMode ? 'templates' : 'weeks';
+    
     const unsubsTeam = [];
-    if (!isStandardMode) {
-       FIGHTERS.forEach(fighter => {
-         const fRef = doc(db, ROOT_COLLECTION, fighter, 'weeks', `week_${currentWeek}`);
-         const unsub = onSnapshot(fRef, (snap) => {
-            if (snap.exists()) {
-                setTeamData(prev => ({...prev, [fighter]: snap.data()}));
-            } else {
-                setTeamData(prev => ({...prev, [fighter]: {}}));
-            }
-         });
-         unsubsTeam.push(unsub);
-       });
-    }
+    
+    // Vi lytter altid på teamet, så viewet er klar hvis man skifter
+    FIGHTERS.forEach(fighter => {
+        const fRef = doc(db, ROOT_COLLECTION, fighter, teamColPath, teamDocId);
+        const unsub = onSnapshot(fRef, (snap) => {
+        if (snap.exists()) {
+            setTeamData(prev => ({...prev, [fighter]: snap.data()}));
+        } else {
+            setTeamData(prev => ({...prev, [fighter]: {}}));
+        }
+        });
+        unsubsTeam.push(unsub);
+    });
 
     return () => {
       unsubPersonal();
@@ -188,102 +201,151 @@ const App = () => {
     };
   }, [user, activeFighter, currentWeek, isStandardMode]);
 
+  // --- HELPERS ---
+  const saveToDb = async (newData) => {
+      const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
+      const collectionPath = isStandardMode ? 'templates' : 'weeks';
+      const docRef = doc(db, ROOT_COLLECTION, activeFighter, collectionPath, docId);
+      
+      // Add Timestamp
+      newData.lastUpdated = new Date().toISOString();
+      
+      await setDoc(docRef, newData);
+  };
+
   // --- ACTIONS ---
 
   const handleSaveSession = async (session) => {
     if (!user) return;
     
-    const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
-    const collectionPath = isStandardMode ? 'templates' : 'weeks';
-    const docRef = doc(db, ROOT_COLLECTION, activeFighter, collectionPath, docId);
-
-    // Deep copy current data
+    // Deep copy
     const newData = JSON.parse(JSON.stringify(scheduleData));
     if (!newData[editingDay]) newData[editingDay] = [];
 
     if (session.id) {
-        // Edit existing
         const idx = newData[editingDay].findIndex(s => s.id === session.id);
         if (idx > -1) {
             newData[editingDay][idx] = session;
         } else {
-            newData[editingDay].push(session); // Should not happen but safe fallback
+            newData[editingDay].push(session); 
         }
     } else {
-        // Create new
         session.id = Date.now();
         newData[editingDay].push(session);
     }
     
-    // Sort by start time
-    newData[editingDay].sort((a,b) => a.start.localeCompare(b.start));
+    // Sort logic
+    newData[editingDay].sort((a,b) => {
+        if (!a.start) return 1;
+        if (!b.start) return -1;
+        return a.start.localeCompare(b.start);
+    });
 
-    // Optimistic Update & DB Save
-    setScheduleData(newData); // Fast UI update
-    await setDoc(docRef, newData); // Sync to Cloud
+    setScheduleData(newData); // Optimistic UI
+    await saveToDb(newData); // Sync DB
     setModalOpen(false);
   };
 
   const handleDeleteSession = async (sessionId) => {
     if (!user) return;
-    const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
-    const collectionPath = isStandardMode ? 'templates' : 'weeks';
-    const docRef = doc(db, ROOT_COLLECTION, activeFighter, collectionPath, docId);
-
     const newData = JSON.parse(JSON.stringify(scheduleData));
     if (newData[editingDay]) {
         newData[editingDay] = newData[editingDay].filter(s => s.id !== sessionId);
-        await setDoc(docRef, newData);
+        await saveToDb(newData);
     }
     setModalOpen(false);
   };
 
   const handleToggleRestDay = async (day) => {
-    if (!user || (currentWeek < systemWeek && !isStandardMode)) return; // Read only check
+    if (!user || (currentWeek < systemWeek && !isStandardMode)) return; 
 
     const newData = JSON.parse(JSON.stringify(scheduleData));
-    const currentSessions = newData[day] || [];
+    let currentSessions = newData[day] || [];
     const isRest = currentSessions.some(s => s.isRestDay);
 
     if (isRest) {
-        newData[day] = []; // Clear rest day
+        // Fjern hviledag -> Behold sessions, men fjern 'isRestDay' flaget
+        // Hvis der var gamle sessions, vil de stadig ligge der som cancelled.
+        // For simpelhedens skyld fjerner vi bare selve hviledags-objektet.
+        newData[day] = currentSessions.filter(s => !s.isRestDay);
     } else {
-        if (currentSessions.length > 0 && !confirm("Slet planlagte pas for at holde hviledag?")) return;
-        newData[day] = [{ isRestDay: true, id: Date.now() }];
+        // Sæt hviledag
+        const activeSessions = currentSessions.filter(s => s.status !== 'cancelled' && !s.isRestDay);
+        
+        if (activeSessions.length > 0) {
+            if (!confirm(`Du har ${activeSessions.length} planlagte pas. Vil du aflyse dem og holde hviledag?`)) return;
+            
+            // Marker alle aktive som aflyst
+            currentSessions = currentSessions.map(s => {
+                if (s.status !== 'cancelled' && !s.isRestDay) {
+                    return {
+                        ...s,
+                        status: 'cancelled',
+                        cancellationReason: 'Hviledag',
+                        cancellationTime: new Date().toISOString()
+                    };
+                }
+                return s;
+            });
+        }
+        // Tilføj hviledags markør
+        currentSessions.push({ isRestDay: true, id: Date.now() });
+        newData[day] = currentSessions;
     }
 
-    const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
-    const collectionPath = isStandardMode ? 'templates' : 'weeks';
-    await setDoc(doc(db, ROOT_COLLECTION, activeFighter, collectionPath, docId), newData);
+    await saveToDb(newData);
+  };
+
+  const handleAddClick = (day) => {
+      const sessions = scheduleData[day] || [];
+      const isRest = sessions.some(s => s.isRestDay);
+      
+      if (isRest) {
+          if(!confirm("Dette er en hviledag. Vil du fjerne hviledagen og oprette et pas?")) return;
+          handleToggleRestDay(day); // Fjerner hviledag
+          // Vent lidt med at åbne modal til state er opdateret, eller bare åbn den nu
+          setTimeout(() => {
+             setEditingDay(day);
+             setEditingSession(null);
+             setModalOpen(true);
+          }, 100);
+          return;
+      }
+      
+      setEditingDay(day);
+      setEditingSession(null);
+      setModalOpen(true);
   };
 
   const handleImportStandard = async () => {
     if (!user) return;
-    if (!confirm("Overskriv ugen med din standarduge?")) return;
+    if (!confirm("Dette vil overskrive hele ugen med din Standarduge. Er du sikker?")) return;
 
-    // Fetch standard
-    // (In a real app, we might already have this in memory, but let's fetch to be safe)
-    // Here we assume standard is stored in 'templates/standard'
-    // ...implementation omitted for brevity, assuming standard fetch logic...
-    // For now, let's just clear the week as a placeholder or implement fully if requested.
-    // Simpler: Just allow the user to build their week. 
-    // *Self-correction*: The user specifically asked for this.
-    // We need to fetch the 'templates/standard' doc first.
-    // Since we don't have a listener for it when not in standard mode, we would need getDoc.
-    // For MVP, let's assume the user builds their week manually or we add the fetch logic later.
-    alert("Funktionen 'Hent Standard' kræver lige, at vi henter skabelonen fra databasen. (Kommer i næste sprint!)");
+    try {
+        const standardRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
+        const standardSnap = await getDoc(standardRef);
+
+        if (standardSnap.exists()) {
+            const standardData = standardSnap.data();
+            await saveToDb(standardData);
+        } else {
+            alert("Du har ikke oprettet en standarduge endnu. Gå til 'Rediger Standarduge' først.");
+        }
+    } catch (error) {
+        console.error("Fejl ved import:", error);
+        alert("Der skete en fejl ved hentning af standarduge.");
+    }
   };
 
   // --- NAVIGATION ---
   const changeWeek = (delta) => {
     const nextWeek = currentWeek + delta;
-    if (nextWeek < 1) return; // Min week
-    if (nextWeek > systemWeek + 1) return; // Max 1 week ahead
+    if (nextWeek < 1) return; 
+    if (nextWeek > systemWeek + 1) return; 
     setCurrentWeek(nextWeek);
     setIsStandardMode(false);
   };
 
-  // --- RENDER HELPERS ---
   const isReadOnly = !isStandardMode && currentWeek < systemWeek;
 
   return (
@@ -298,7 +360,7 @@ const App = () => {
             <Info className="w-5 h-5 text-yellow-500 mt-0.5" />
             <div>
               <p className="text-sm text-yellow-200 font-bold">Redigerer Standarduge</p>
-              <p className="text-xs text-yellow-400/80 mt-1">Din faste skabelon.</p>
+              <p className="text-xs text-yellow-400/80 mt-1">Dette er din skabelon. Klik "Gem" når du er færdig.</p>
             </div>
           </div>
         )}
@@ -328,13 +390,31 @@ const App = () => {
 
           <div className="flex justify-between items-center px-1">
             <div className="flex items-center space-x-1 text-[10px] text-slate-500 font-medium">
-                {isReadOnly ? <span className="flex items-center text-slate-400"><History className="w-3 h-3 mr-1"/> Historik</span> : null}
+                {!isStandardMode && lastUpdated && (
+                    <>
+                        <Clock className="w-3 h-3" />
+                        <span>Opdateret: {lastUpdated}</span>
+                    </>
+                )}
+                {isReadOnly && <span className="flex items-center text-slate-400 ml-2"><History className="w-3 h-3 mr-1"/> Historik</span>}
             </div>
             {!isReadOnly && (
                 <div className="flex space-x-2">
-                    <button onClick={() => setIsStandardMode(!isStandardMode)} className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors flex items-center ${isStandardMode ? 'bg-yellow-900/50 text-yellow-100 border-yellow-700' : 'bg-slate-800 text-slate-300 border-slate-700'}`}>
-                        {isStandardMode ? <><X className="w-3 h-3 mr-1.5"/> Luk Standard</> : <><Globe className="w-3 h-3 mr-1.5"/> Standard</>}
-                    </button>
+                    {isStandardMode ? (
+                        <button onClick={() => setIsStandardMode(false)} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-yellow-900/50 text-yellow-100 border-yellow-700 transition-colors flex items-center">
+                           <X className="w-3 h-3 mr-1.5"/> Luk Standard
+                        </button>
+                    ) : (
+                        <>
+                            <button onClick={() => setIsStandardMode(true)} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-slate-800 text-slate-300 border-slate-700 transition-colors flex items-center">
+                                <Globe className="w-3 h-3 mr-1.5"/> Rediger Standarduge
+                            </button>
+                            {/* Viser altid Hent Standard hvis vi er i fremtiden eller aktuel uge (og data er tom ELLER brugeren vil overskrive) */}
+                            <button onClick={handleImportStandard} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-blue-900/20 text-blue-400 border-blue-800/50 hover:bg-blue-900/40 transition-colors flex items-center">
+                                <ChevronDown className="w-3 h-3 mr-1.5"/> Hent Standard
+                            </button>
+                        </>
+                    )}
                 </div>
             )}
           </div>
@@ -347,7 +427,7 @@ const App = () => {
             data={scheduleData} 
             isReadOnly={isReadOnly}
             onToggleRest={handleToggleRestDay}
-            onAdd={(day) => { setEditingDay(day); setEditingSession(null); setModalOpen(true); }}
+            onAdd={handleAddClick}
             onEdit={(day, session) => { setEditingDay(day); setEditingSession(session); setModalOpen(true); }}
           />
         ) : (
@@ -394,6 +474,9 @@ const PersonalSchedule = ({ days, data, isReadOnly, onToggleRest, onAdd, onEdit 
             const sessions = data[day] || [];
             const isRestDay = sessions.some(s => s.isRestDay);
             
+            // Vi filtrerer ikke cancelled væk, men viser dem hvis hviledag
+            const visibleSessions = sessions.filter(s => !s.isRestDay);
+
             return (
                 <div key={day} className={`mb-3 rounded-2xl p-4 border transition-all shadow-md ${isRestDay ? 'bg-slate-900/30 border-slate-800' : 'bg-slate-900 border-slate-800'}`}>
                     <div className="flex justify-between items-center mb-3">
@@ -407,13 +490,15 @@ const PersonalSchedule = ({ days, data, isReadOnly, onToggleRest, onAdd, onEdit 
                         </div>
                     </div>
 
-                    {sessions.length === 0 && !isRestDay && (
+                    {visibleSessions.length === 0 && !isRestDay && (
                         <div className="text-slate-600 text-sm font-medium py-3 text-center border-2 border-dashed border-slate-800/50 rounded-xl">Ingen pas planlagt</div>
                     )}
 
-                    {!isRestDay && sessions.map(s => {
+                    {visibleSessions.map(s => {
                         const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
                         const isCancelled = s.status === 'cancelled';
+                        const cancelInfo = isCancelled ? formatCancellationTime(s.cancellationTime) : '';
+
                         return (
                             <div key={s.id} onClick={() => !isReadOnly && onEdit(day, s)} className={`relative flex items-center justify-between p-3 rounded-xl mb-2 border shadow-sm transition-all ${isCancelled ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-slate-800 border-slate-700/50'} ${!isReadOnly ? 'cursor-pointer active:scale-[0.98]' : ''}`}>
                                 <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl ${isCancelled ? 'bg-red-900' : cat.color}`}></div>
@@ -427,7 +512,7 @@ const PersonalSchedule = ({ days, data, isReadOnly, onToggleRest, onAdd, onEdit 
                                             <span className="flex items-center"><Clock className="w-3 h-3 mr-1"/> {s.start} - {s.end}</span>
                                             <span className="flex items-center"><MapPin className="w-3 h-3 mr-1"/> {s.location}</span>
                                         </div>
-                                        {isCancelled && <div className="mt-1 text-[10px] text-red-400 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Aflyst: {s.cancellationReason}</div>}
+                                        {isCancelled && <div className="mt-1 text-[10px] text-red-400 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Aflyst {cancelInfo}: {s.cancellationReason}</div>}
                                     </div>
                                 </div>
                             </div>
@@ -445,7 +530,10 @@ const TeamSchedule = ({ days, teamData }) => {
     // Aggregate Data
     const timeSlots = {};
     Object.keys(teamData).forEach(fighter => {
-        const sessions = teamData[fighter]?.[selectedDay] || [];
+        const data = teamData[fighter];
+        if (!data) return; 
+        
+        const sessions = data[selectedDay] || [];
         sessions.forEach(s => {
             if (s.isRestDay) return;
             const timeKey = s.start || 'TBA';
@@ -513,6 +601,8 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
         reason: initialData?.cancellationReason || ''
     });
 
+    const isExisting = !!initialData; // Are we editing?
+
     // Pre-save formatter
     const submit = () => {
         onSave({
@@ -544,40 +634,54 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
                 <div className="p-5 space-y-6 overflow-y-auto">
                     {tab === 'favorites' && !initialData ? (
                         <div className="space-y-2">
-                             {GLOBAL_TEMPLATES.filter(t => t.day === day).map(t => (
-                                 <button key={t.id} onClick={() => onSave({...t, id: null})} className="w-full text-left bg-slate-950 p-3 rounded-xl border border-blue-900/30 hover:border-blue-500 transition-colors">
-                                     <div className="font-bold text-sm text-white">{t.name}</div>
-                                     <div className="text-xs text-slate-500">{t.start}-{t.end} • {t.location}</div>
-                                 </button>
-                             ))}
+                             {GLOBAL_TEMPLATES.filter(t => t.day === day).map(t => {
+                                 const cat = CATEGORIES.find(c => c.label === t.category) || CATEGORIES[6];
+                                 return (
+                                     <button key={t.id} onClick={() => onSave({...t, id: null})} className={`w-full text-left bg-slate-950 p-3 rounded-xl border ${cat.border} border-l-4 hover:bg-slate-900 transition-colors`}>
+                                         <div className="font-bold text-sm text-white">{t.name}</div>
+                                         <div className="text-xs text-slate-500">{t.start}-{t.end} • {t.location}</div>
+                                     </button>
+                                 );
+                             })}
                              {GLOBAL_TEMPLATES.filter(t => t.day === day).length === 0 && <p className="text-slate-500 text-xs italic text-center">Ingen faste pas denne dag.</p>}
                         </div>
                     ) : (
                         <div className="space-y-4">
+                            {/* Hvis det er et eksisterende pas, kan man ikke redigere detaljer */}
+                            {isExisting && <div className="p-3 bg-yellow-900/20 border border-yellow-700/50 rounded-lg text-xs text-yellow-200 mb-2">Du kan kun slette eller aflyse dette pas. For at ændre tid/sted, slet og opret på ny.</div>}
+                            
                             <div>
                                 <label className="block text-slate-400 text-xs uppercase font-bold mb-3">Kategori</label>
                                 <div className="flex flex-wrap gap-2">
                                     {CATEGORIES.map(cat => (
-                                        <button key={cat.label} onClick={() => setForm({...form, category: cat.label})} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${form.category === cat.label ? `${cat.color} text-white border-transparent` : 'bg-slate-900 border-slate-700 text-slate-400'}`}>{cat.label}</button>
+                                        <button 
+                                            key={cat.label} 
+                                            disabled={isExisting} // Låst hvis edit
+                                            onClick={() => setForm({...form, category: cat.label})} 
+                                            className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${form.category === cat.label ? `${cat.color} text-white border-transparent` : 'bg-slate-900 border-slate-700 text-slate-400'} ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                        >
+                                            {cat.label}
+                                        </button>
                                     ))}
                                 </div>
                             </div>
                             <div>
                                 <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Navn</label>
-                                <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-600 outline-none"/>
+                                <input disabled={isExisting} type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Start</label>
-                                    <input type="time" value={form.start} onChange={e => setForm({...form, start: e.target.value})} className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none"/>
+                                    <input disabled={isExisting} type="time" value={form.start} onChange={e => setForm({...form, start: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
                                 </div>
                                 <div>
                                     <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Slut</label>
-                                    <input type="time" value={form.end} onChange={e => setForm({...form, end: e.target.value})} className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none"/>
+                                    <input disabled={isExisting} type="time" value={form.end} onChange={e => setForm({...form, end: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
                                 </div>
                             </div>
                             
-                            {!isStandardMode && (
+                            {/* Aflysning vises kun hvis vi redigerer et eksisterende pas (isExisting) OG ikke er i standard mode */}
+                            {isExisting && !isStandardMode && (
                                 <div className="pt-4 border-t border-slate-800">
                                     <label className="flex items-center space-x-2 cursor-pointer mb-3">
                                         <input type="checkbox" checked={form.cancel} onChange={e => setForm({...form, cancel: e.target.checked})} className="w-5 h-5 rounded border-slate-600 text-red-600 bg-slate-800"/>
@@ -594,6 +698,7 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
 
                 <div className="p-4 border-t border-slate-800 bg-slate-800/50 flex space-x-3 shrink-0">
                     {initialData && <button onClick={() => onDelete(initialData.id)} className="py-3.5 px-4 rounded-xl font-bold text-slate-400 bg-slate-800 hover:bg-slate-700 transition-colors"><Trash2 className="w-5 h-5"/></button>}
+                    {/* Knappen er kun aktiv hvis det er 'Opret' ELLER 'Gem & Aflys' ELLER 'Gem Standard'. Hvis det er alm edit uden aflysning, giver knappen ikke mening medmindre vi tillader at gemme uændret, men lad os holde den */}
                     <button onClick={submit} className={`flex-1 py-3.5 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex justify-center items-center ${form.cancel ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>{form.cancel ? 'Gem & Aflys' : 'Gem'}</button>
                 </div>
              </div>
