@@ -505,7 +505,7 @@ const App = () => {
                     ) : (
                         <>
                             <button onClick={() => setIsStandardMode(true)} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-slate-800 text-slate-300 border-slate-700 transition-colors flex items-center">
-                                <Globe className="w-3 h-3 mr-1.5"/> Se standarduger
+                                <Globe className="w-3 h-3 mr-1.5"/> {view === 'personal' ? 'Rediger standarduge' : 'Se standarduger'}
                             </button>
                             {/* Kun vis 'Hent Standard' hvis vi er på personlig visning */}
                             {view === 'personal' && (
