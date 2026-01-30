@@ -7,7 +7,7 @@ test.describe('Login Skærm UI', () => {
   });
 
   test('Skal vise korrekt overskrift og velkomsttekst', async ({ page }) => {
-    // Tjek at titlen er korrekt
+    // Tjek at titlen er korrekt (Browser tab titel)
     await expect(page).toHaveTitle(/FightWeek/);
     
     // Tjek at H1 overskriften er der
@@ -24,22 +24,28 @@ test.describe('Login Skærm UI', () => {
     await expect(loginBtn).toBeEnabled();
     
     // Tjek at knappen har den rigtige styling (hvid baggrund)
-    // Dette fanger hvis nogen kommer til at gøre knappen sort eller usynlig
     await expect(loginBtn).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+
+    // Tjek at Google ikonet er indlæst (vigtigt for troværdighed)
+    const googleIcon = loginBtn.locator('img[alt="Google"]');
+    await expect(googleIcon).toBeVisible();
+    // Tjek at src peger på et billede (ikke broken link)
+    await expect(googleIcon).toHaveAttribute('src', /gstatic.*google\.svg/);
   });
 
 });
 
 test.describe('Mobil Responsiveness', () => {
-  // Playwright bruger indstillinger fra config til at simulere mobil
-  // Denne test kører specifikt for at sikre, at layoutet ikke "sprænger" på små skærme
   
+  test('Skal have korrekt viewport meta tag til mobil', async ({ page }) => {
+    // Dette er kritisk for at appen ligner en app og ikke en desktop-side på mobilen
+    const viewportMeta = page.locator('meta[name="viewport"]');
+    await expect(viewportMeta).toHaveAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+  });
+
   test('Logo skal være centreret', async ({ page }) => {
     await page.goto('/');
     const logoContainer = page.locator('.bg-blue-600.rounded-2xl').first();
     await expect(logoContainer).toBeVisible();
-    
-    // Vi tjekker bare at det findes, da visuel placering er svær at validere uden visual snapshots
-    // Men at elementet er 'visible' på en lille skærm er en god start.
   });
 });

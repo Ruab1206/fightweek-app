@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
-  History, Globe, LogOut, Lock 
+  History, Globe, LogOut, Lock, HelpCircle 
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -30,7 +30,7 @@ const CATEGORIES = [
   { label: 'Andet', color: 'bg-slate-500', border: 'border-slate-500' }
 ];
 
-// Stamdata (Kataloget) - OPDATERET V12
+// Stamdata (Kataloget) - V12 Liste
 const GLOBAL_TEMPLATES = [
   // Mandag
   { id: 'm1', day: 'Mandag', name: 'Wall Wrestling', category: 'Brydning', start: '15:00', end: '16:00', location: 'Burnell' },
@@ -122,6 +122,27 @@ const formatCancellationTime = (isoString) => {
 };
 
 // --- COMPONENTS ---
+
+// -- NEW CONFIRM MODAL --
+const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
+  <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4 fade-in">
+    <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-700 shadow-2xl overflow-hidden p-6 text-center">
+      <div className="mx-auto w-12 h-12 bg-blue-900/30 rounded-full flex items-center justify-center mb-4">
+        <HelpCircle className="w-6 h-6 text-blue-500" />
+      </div>
+      <h3 className="text-white font-bold text-lg mb-2">{title}</h3>
+      <p className="text-slate-400 text-sm mb-6">{message}</p>
+      <div className="flex space-x-3">
+        <button onClick={onCancel} className="flex-1 py-3 rounded-xl font-bold text-slate-400 bg-slate-800 hover:bg-slate-700 transition-colors">
+          Annuller
+        </button>
+        <button onClick={onConfirm} className="flex-1 py-3 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-500 transition-colors shadow-lg">
+          Bekræft
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 const LoginScreen = ({ onLogin, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
@@ -220,10 +241,13 @@ const App = () => {
   const [teamData, setTeamData] = useState({}); 
   const [lastUpdated, setLastUpdated] = useState(null);
   
-  // Modal State
+  // Modal States
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDay, setEditingDay] = useState(null);
   const [editingSession, setEditingSession] = useState(null); 
+  
+  // Confirm Dialog State
+  const [confirmDialog, setConfirmDialog] = useState(null); // { title, message, onConfirm }
 
   // --- AUTH LOGIC ---
   useEffect(() => {
@@ -236,8 +260,6 @@ const App = () => {
         if (userProfile) {
             setUser(u);
             setAccessDenied(false);
-            
-            // Konfigurer rettigheder baseret på rolle
             if (userProfile.role === 'coach' || userProfile.role === 'admin') {
                 setIsLocked(false);
                 setActiveFighter('Karl'); 
@@ -265,11 +287,9 @@ const App = () => {
         console.error("Login failed", error);
         let msg = error.message;
         if (error.code === 'auth/unauthorized-domain') {
-            msg = "Domænet er ikke godkendt. Husk at tilføje dit Vercel-link i Firebase Console -> Authentication -> Settings -> Authorized Domains.";
+            msg = "Domænet er ikke godkendt. Husk at tilføje dit Vercel-link i Firebase Console.";
         } else if (error.code === 'auth/popup-closed-by-user') {
-            msg = "Login blev afbrudt (vinduet lukkede).";
-        } else if (error.code === 'auth/popup-blocked') {
-            msg = "Popup blev blokeret af browseren. Tillad popups for at logge ind.";
+            msg = "Login blev afbrudt.";
         }
         setLoginError(msg);
     }
@@ -284,13 +304,11 @@ const App = () => {
   // --- DATA SYNC ---
   useEffect(() => {
     if (!user || accessDenied) return;
-
     const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
     const collectionPath = isStandardMode ? 'templates' : 'weeks';
     
-    // A. Listen to Active Fighter's Plan
+    // Personal Sync
     const docRef = doc(db, ROOT_COLLECTION, activeFighter, collectionPath, docId);
-    
     const unsubPersonal = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -307,13 +325,10 @@ const App = () => {
       }
     });
 
-    // B. Listen to TEAM data
-    const teamDocId = isStandardMode ? 'standard' : `week_${currentWeek}`;
-    const teamColPath = isStandardMode ? 'templates' : 'weeks';
+    // Team Sync
     const unsubsTeam = [];
-    
     FIGHTERS.forEach(fighter => {
-        const fRef = doc(db, ROOT_COLLECTION, fighter, teamColPath, teamDocId);
+        const fRef = doc(db, ROOT_COLLECTION, fighter, collectionPath, docId);
         const unsub = onSnapshot(fRef, (snap) => {
         if (snap.exists()) {
             setTeamData(prev => ({...prev, [fighter]: snap.data()}));
@@ -330,7 +345,8 @@ const App = () => {
     };
   }, [user, activeFighter, currentWeek, isStandardMode, accessDenied]);
 
-  // --- HELPERS ---
+  // --- ACTIONS & CONFIRMATIONS ---
+
   const saveToDb = async (newData) => {
       const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
       const collectionPath = isStandardMode ? 'templates' : 'weeks';
@@ -338,8 +354,6 @@ const App = () => {
       newData.lastUpdated = new Date().toISOString();
       await setDoc(docRef, newData);
   };
-
-  // --- ACTIONS ---
 
   const handleSaveSession = async (session) => {
     if (!user) return;
@@ -371,38 +385,77 @@ const App = () => {
     setModalOpen(false);
   };
 
-  const handleToggleRestDay = async (day) => {
+  // -- Refactored to use Custom Modal --
+  const handleToggleRestDay = (day) => {
     if (!user || (currentWeek < systemWeek && !isStandardMode)) return; 
-    const newData = JSON.parse(JSON.stringify(scheduleData));
-    let currentSessions = newData[day] || [];
-    const isRest = currentSessions.some(s => s.isRestDay);
+    
+    const executeToggle = async () => {
+        const newData = JSON.parse(JSON.stringify(scheduleData));
+        let currentSessions = newData[day] || [];
+        const isRest = currentSessions.some(s => s.isRestDay);
 
-    if (isRest) {
-        newData[day] = currentSessions.filter(s => !s.isRestDay);
-    } else {
-        const activeSessions = currentSessions.filter(s => s.status !== 'cancelled' && !s.isRestDay);
-        if (activeSessions.length > 0) {
-            if (!confirm(`Du har ${activeSessions.length} planlagte pas. Vil du aflyse dem og holde hviledag?`)) return;
+        if (isRest) {
+            newData[day] = currentSessions.filter(s => !s.isRestDay);
+        } else {
+            // Logic for setting rest day (and cancelling active sessions)
+            const activeSessions = currentSessions.filter(s => s.status !== 'cancelled' && !s.isRestDay);
+            if (activeSessions.length > 0) {
+                 // We need to handle this inside the check now
+                 // Since we moved confirm out, we check if we need confirm
+            }
+            // See implementation below in wrapper
             currentSessions = currentSessions.map(s => {
                 if (s.status !== 'cancelled' && !s.isRestDay) {
                     return { ...s, status: 'cancelled', cancellationReason: 'Hviledag', cancellationTime: new Date().toISOString() };
                 }
                 return s;
             });
+            currentSessions.push({ isRestDay: true, id: Date.now() });
+            newData[day] = currentSessions;
         }
-        currentSessions.push({ isRestDay: true, id: Date.now() });
-        newData[day] = currentSessions;
+        await saveToDb(newData);
+        setConfirmDialog(null);
+    };
+
+    // Check logic for confirmation
+    const currentSessions = scheduleData[day] || [];
+    const isRest = currentSessions.some(s => s.isRestDay);
+    
+    if (!isRest) {
+        const activeSessions = currentSessions.filter(s => s.status !== 'cancelled' && !s.isRestDay);
+        if (activeSessions.length > 0) {
+            setConfirmDialog({
+                title: "Bekræft Hviledag",
+                message: `Du har ${activeSessions.length} planlagte pas. Vil du aflyse dem og holde hviledag?`,
+                onConfirm: executeToggle
+            });
+            return;
+        }
     }
-    await saveToDb(newData);
+    // No confirm needed (removing rest day or no sessions)
+    executeToggle();
   };
 
+  // -- Refactored Add Click --
   const handleAddClick = (day) => {
       const sessions = scheduleData[day] || [];
       const isRest = sessions.some(s => s.isRestDay);
+      
       if (isRest) {
-          if(!confirm("Dette er en hviledag. Vil du fjerne hviledagen og oprette et pas?")) return;
-          handleToggleRestDay(day); 
-          setTimeout(() => { setEditingDay(day); setEditingSession(null); setModalOpen(true); }, 100);
+          setConfirmDialog({
+              title: "Fjern Hviledag?",
+              message: "Dette er en hviledag. Vil du fjerne hviledagen og oprette et pas?",
+              onConfirm: async () => {
+                  // Remove rest day logic directly
+                  const newData = JSON.parse(JSON.stringify(scheduleData));
+                  const currentSessions = newData[day] || [];
+                  newData[day] = currentSessions.filter(s => !s.isRestDay);
+                  await saveToDb(newData);
+                  
+                  setConfirmDialog(null);
+                  setTimeout(() => { setEditingDay(day); setEditingSession(null); setModalOpen(true); }, 100);
+              }
+          });
           return;
       }
       setEditingDay(day);
@@ -410,20 +463,28 @@ const App = () => {
       setModalOpen(true);
   };
 
-  const handleImportStandard = async () => {
+  // -- Refactored Import --
+  const handleImportStandard = () => {
     if (!user) return;
-    if (!confirm("Dette vil overskrive hele ugen med din Standarduge. Er du sikker?")) return;
-    try {
-        const standardRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
-        const standardSnap = await getDoc(standardRef);
-        if (standardSnap.exists()) {
-            await saveToDb(standardSnap.data());
-        } else {
-            alert("Du har ikke oprettet en standarduge endnu. Gå til 'Rediger Standarduge' først.");
+    
+    setConfirmDialog({
+        title: "Hent Standarduge",
+        message: "Dette vil overskrive hele ugen med din Standarduge. Er du sikker?",
+        onConfirm: async () => {
+            try {
+                const standardRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
+                const standardSnap = await getDoc(standardRef);
+                if (standardSnap.exists()) {
+                    await saveToDb(standardSnap.data());
+                } else {
+                    alert("Du har ikke oprettet en standarduge endnu.");
+                }
+            } catch (error) {
+                console.error("Fejl:", error);
+            }
+            setConfirmDialog(null);
         }
-    } catch (error) {
-        console.error("Fejl:", error);
-    }
+    });
   };
 
   const changeWeek = (delta) => {
@@ -451,15 +512,26 @@ const App = () => {
       />
 
       <div className="max-w-md mx-auto relative pt-4 min-h-[85vh]">
+        
         {/* Banner: Standard Mode */}
         {isStandardMode && (
-          <div className="mx-4 mb-4 bg-yellow-900/30 border border-yellow-700/50 rounded-xl p-3 flex items-start space-x-3 fade-in">
-            <Info className="w-5 h-5 text-yellow-500 mt-0.5" />
-            <div>
-              <p className="text-sm text-yellow-200 font-bold">Redigerer Standarduge</p>
-              <p className="text-xs text-yellow-400/80 mt-1">Dette er din skabelon. Klik "Gem" når du er færdig.</p>
+          view === 'team' ? (
+            <div className="mx-4 mb-4 bg-indigo-900/30 border border-indigo-700/50 rounded-xl p-3 flex items-start space-x-3 fade-in">
+              <Globe className="w-5 h-5 text-indigo-400 mt-0.5" />
+              <div>
+                <p className="text-sm text-indigo-200 font-bold">Teamets Standarduger</p>
+                <p className="text-xs text-indigo-300/80 mt-1">Her ser du teamets faste grundplan.</p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="mx-4 mb-4 bg-yellow-900/30 border border-yellow-700/50 rounded-xl p-3 flex items-start space-x-3 fade-in">
+              <Info className="w-5 h-5 text-yellow-500 mt-0.5" />
+              <div>
+                <p className="text-sm text-yellow-200 font-bold">Redigerer Standarduge</p>
+                <p className="text-xs text-yellow-400/80 mt-1">Dette er din skabelon. Klik "Gem" når du er færdig.</p>
+              </div>
+            </div>
+          )
         )}
 
         {/* Controls */}
@@ -495,11 +567,14 @@ const App = () => {
                     ) : (
                         <>
                             <button onClick={() => setIsStandardMode(true)} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-slate-800 text-slate-300 border-slate-700 transition-colors flex items-center">
-                                <Globe className="w-3 h-3 mr-1.5"/> Rediger Standarduge
+                                <Globe className="w-3 h-3 mr-1.5"/> {view === 'personal' ? 'Rediger standarduge' : 'Se standarduger'}
                             </button>
-                            <button onClick={handleImportStandard} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-blue-900/20 text-blue-400 border-blue-800/50 hover:bg-blue-900/40 transition-colors flex items-center">
-                                <ChevronDown className="w-3 h-3 mr-1.5"/> Hent Standard
-                            </button>
+                            {/* Kun vis 'Hent Standard' hvis vi er på personlig visning */}
+                            {view === 'personal' && (
+                                <button onClick={handleImportStandard} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-blue-900/20 text-blue-400 border-blue-800/50 hover:bg-blue-900/40 transition-colors flex items-center">
+                                    <ChevronDown className="w-3 h-3 mr-1.5"/> Hent Standard
+                                </button>
+                            )}
                         </>
                     )}
                 </div>
@@ -537,6 +612,16 @@ const App = () => {
             onSave={handleSaveSession}
             onDelete={handleDeleteSession}
             isStandardMode={isStandardMode}
+          />
+      )}
+      
+      {/* GLOBAL CONFIRM DIALOG */}
+      {confirmDialog && (
+          <ConfirmModal 
+              title={confirmDialog.title}
+              message={confirmDialog.message}
+              onConfirm={confirmDialog.onConfirm}
+              onCancel={() => setConfirmDialog(null)}
           />
       )}
     </div>
