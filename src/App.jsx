@@ -30,7 +30,7 @@ const CATEGORIES = [
   { label: 'Andet', color: 'bg-slate-500', border: 'border-slate-500' }
 ];
 
-// Stamdata (Kataloget) - OPDATERET V12
+// Stamdata (Kataloget) - V12 Liste
 const GLOBAL_TEMPLATES = [
   // Mandag
   { id: 'm1', day: 'Mandag', name: 'Wall Wrestling', category: 'Brydning', start: '15:00', end: '16:00', location: 'Burnell' },
@@ -453,13 +453,23 @@ const App = () => {
       <div className="max-w-md mx-auto relative pt-4 min-h-[85vh]">
         {/* Banner: Standard Mode */}
         {isStandardMode && (
-          <div className="mx-4 mb-4 bg-yellow-900/30 border border-yellow-700/50 rounded-xl p-3 flex items-start space-x-3 fade-in">
-            <Info className="w-5 h-5 text-yellow-500 mt-0.5" />
-            <div>
-              <p className="text-sm text-yellow-200 font-bold">Redigerer Standarduge</p>
-              <p className="text-xs text-yellow-400/80 mt-1">Dette er din skabelon. Klik "Gem" når du er færdig.</p>
+          view === 'team' ? (
+            <div className="mx-4 mb-4 bg-indigo-900/30 border border-indigo-700/50 rounded-xl p-3 flex items-start space-x-3 fade-in">
+              <Globe className="w-5 h-5 text-indigo-400 mt-0.5" />
+              <div>
+                <p className="text-sm text-indigo-200 font-bold">Teamets Standarduger</p>
+                <p className="text-xs text-indigo-300/80 mt-1">Her ser du teamets faste grundplan.</p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="mx-4 mb-4 bg-yellow-900/30 border border-yellow-700/50 rounded-xl p-3 flex items-start space-x-3 fade-in">
+              <Info className="w-5 h-5 text-yellow-500 mt-0.5" />
+              <div>
+                <p className="text-sm text-yellow-200 font-bold">Redigerer Standarduge</p>
+                <p className="text-xs text-yellow-400/80 mt-1">Dette er din skabelon. Klik "Gem" når du er færdig.</p>
+              </div>
+            </div>
+          )
         )}
 
         {/* Controls */}
@@ -495,11 +505,14 @@ const App = () => {
                     ) : (
                         <>
                             <button onClick={() => setIsStandardMode(true)} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-slate-800 text-slate-300 border-slate-700 transition-colors flex items-center">
-                                <Globe className="w-3 h-3 mr-1.5"/> Rediger Standarduge
+                                <Globe className="w-3 h-3 mr-1.5"/> Se standarduger
                             </button>
-                            <button onClick={handleImportStandard} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-blue-900/20 text-blue-400 border-blue-800/50 hover:bg-blue-900/40 transition-colors flex items-center">
-                                <ChevronDown className="w-3 h-3 mr-1.5"/> Hent Standard
-                            </button>
+                            {/* Kun vis 'Hent Standard' hvis vi er på personlig visning */}
+                            {view === 'personal' && (
+                                <button onClick={handleImportStandard} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-blue-900/20 text-blue-400 border-blue-800/50 hover:bg-blue-900/40 transition-colors flex items-center">
+                                    <ChevronDown className="w-3 h-3 mr-1.5"/> Hent Standard
+                                </button>
+                            )}
                         </>
                     )}
                 </div>
