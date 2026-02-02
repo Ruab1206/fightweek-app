@@ -121,6 +121,18 @@ const formatCancellationTime = (isoString) => {
     return dayName;
 };
 
+// Helper: Calculate ISO Week Number
+const getISOWeek = () => {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  // Thursday in current week decides the year.
+  date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+  // January 4 is always in week 1.
+  const week1 = new Date(date.getFullYear(), 0, 4);
+  // Adjust to Thursday in week 1 and count number of weeks from date to week1.
+  return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+};
+
 // --- COMPONENTS ---
 
 // -- NEW CONFIRM MODAL --
@@ -230,11 +242,11 @@ const App = () => {
   const [accessDenied, setAccessDenied] = useState(false);
   const [loginError, setLoginError] = useState(null);
 
-  // App State
+  // App State - NU MED DYNAMISK UGENUMMER
   const [activeFighter, setActiveFighter] = useState('Karl');
   const [isLocked, setIsLocked] = useState(true);
-  const [currentWeek, setCurrentWeek] = useState(5); 
-  const [systemWeek] = useState(5); 
+  const [systemWeek] = useState(getISOWeek()); 
+  const [currentWeek, setCurrentWeek] = useState(getISOWeek()); 
   const [view, setView] = useState('personal'); 
   const [isStandardMode, setIsStandardMode] = useState(false);
   const [scheduleData, setScheduleData] = useState({}); 
@@ -247,7 +259,7 @@ const App = () => {
   const [editingSession, setEditingSession] = useState(null); 
   
   // Confirm Dialog State
-  const [confirmDialog, setConfirmDialog] = useState(null); // { title, message, onConfirm }
+  const [confirmDialog, setConfirmDialog] = useState(null); 
 
   // --- AUTH LOGIC ---
   useEffect(() => {
