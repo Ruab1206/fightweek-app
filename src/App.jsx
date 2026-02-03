@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
-  History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink 
+  History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check 
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -160,6 +160,7 @@ const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
 
 const LoginScreen = ({ onLogin, onLoginRedirect, error }) => {
     const [isInAppBrowser, setIsInAppBrowser] = useState(false);
+    const [copied, setCopied] = useState(false);
 
     useEffect(() => {
         // Detect Facebook, Messenger, Instagram in-app browsers
@@ -168,59 +169,82 @@ const LoginScreen = ({ onLogin, onLoginRedirect, error }) => {
         setIsInAppBrowser(isFB);
     }, []);
 
+    const copyLink = () => {
+        navigator.clipboard.writeText(window.location.href);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
         
-        {/* WARNING BANNER FOR MESSENGER USERS */}
-        {isInAppBrowser && (
-            <div className="w-full max-w-sm bg-orange-900/40 border border-orange-600/50 rounded-2xl p-4 mb-6 shadow-xl animate-pulse">
-                <div className="flex items-start space-x-3">
-                    <AlertCircle className="w-6 h-6 text-orange-500 shrink-0 mt-0.5" />
-                    <div>
-                        <h3 className="text-orange-200 font-bold text-sm mb-1">Du er i Messenger Browseren!</h3>
-                        <p className="text-orange-200/70 text-xs mb-3">Google tillader ikke login herfra pga. sikkerhed.</p>
-                        <div className="bg-slate-900/50 rounded-lg p-3 border border-orange-500/20">
-                            <p className="text-white text-xs font-bold flex items-center mb-1">
-                                <span className="bg-orange-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-[10px] mr-2">1</span>
-                                Tryk på de 3 prikker (•••)
-                            </p>
-                            <p className="text-white text-xs font-bold flex items-center">
-                                <span className="bg-orange-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-[10px] mr-2">2</span>
-                                Vælg "Åbn i Safari/Browser"
-                            </p>
+        {/* BLOCKING SCREEN FOR MESSENGER USERS */}
+        {isInAppBrowser ? (
+            <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl text-center">
+                <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Smartphone className="w-8 h-8 text-red-500" />
+                </div>
+                <h2 className="text-white font-bold text-xl mb-2">Messenger Browseren dur ikke</h2>
+                <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+                    Google tillader ikke login direkte i Messenger. Du skal åbne appen i din rigtige browser (Safari eller Chrome).
+                </p>
+
+                <div className="space-y-3">
+                    <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 text-left">
+                        <p className="text-white text-xs font-bold flex items-center mb-2">
+                            <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] mr-3">1</span>
+                            Tryk på de 3 prikker (•••) i hjørnet
+                        </p>
+                        <p className="text-white text-xs font-bold flex items-center">
+                            <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] mr-3">2</span>
+                            Vælg "Åbn i Safari / Browser"
+                        </p>
+                    </div>
+
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-slate-800" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-slate-900 px-2 text-slate-500 font-bold">Eller</span>
                         </div>
                     </div>
+
+                    <button 
+                        onClick={copyLink}
+                        className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
+                    >
+                        {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                        {copied ? "Link kopieret!" : "Kopier Link og åbn selv"}
+                    </button>
                 </div>
             </div>
-        )}
+        ) : (
+            <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
+              <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.20</div>
+              <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
+                <ShieldCheck className="w-8 h-8 text-white" />
+              </div>
+              <h1 className="text-2xl font-bold text-white mb-2">FightWeek</h1>
+              <p className="text-slate-400 mb-8 text-sm">Log ind for at se din træningsplan</p>
+              
+              {error && (
+                <div className="bg-red-900/50 border border-red-800 rounded-lg p-3 mb-6 text-xs text-red-200 text-left">
+                    <p className="font-bold mb-1 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Login Fejl:</p>
+                    <p>{error}</p>
+                </div>
+              )}
 
-        <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-          <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.19</div>
-          <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
-            <ShieldCheck className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-2">FightWeek</h1>
-          <p className="text-slate-400 mb-8 text-sm">Log ind for at se din træningsplan</p>
-          
-          {error && (
-            <div className="bg-red-900/50 border border-red-800 rounded-lg p-3 mb-6 text-xs text-red-200 text-left">
-                <p className="font-bold mb-1 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Login Fejl:</p>
-                <p>{error}</p>
-            </div>
-          )}
+              {/* Primær Login (Popup) */}
+              <button 
+                onClick={onLogin}
+                className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mb-4"
+              >
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+                Log ind med Google
+              </button>
 
-          {/* Primær Login (Popup) */}
-          <button 
-            disabled={isInAppBrowser}
-            onClick={onLogin}
-            className={`w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 mb-4 ${isInAppBrowser ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-100'}`}
-          >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-            {isInAppBrowser ? 'Åbn i Safari for at logge ind' : 'Log ind med Google'}
-          </button>
-
-          {/* Alternativ Login (Redirect - til mobiler der driller) */}
-          {!isInAppBrowser && (
+              {/* Alternativ Login (Redirect - til mobiler der driller) */}
               <button 
                 onClick={onLoginRedirect}
                 className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2"
@@ -228,8 +252,8 @@ const LoginScreen = ({ onLogin, onLoginRedirect, error }) => {
                 <Smartphone className="w-3 h-3 mr-1" />
                 Problemer med login? Tryk her (Mobil/iPhone)
               </button>
-          )}
-        </div>
+            </div>
+        )}
       </div>
     );
 };
