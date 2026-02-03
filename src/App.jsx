@@ -135,6 +135,12 @@ const getISOWeek = () => {
   return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
 };
 
+// Helper: Detect In-App Browser
+const checkInAppBrowser = () => {
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    return (ua.indexOf("FBAN") > -1) || (ua.indexOf("FBAV") > -1) || (ua.indexOf("Instagram") > -1);
+};
+
 // --- COMPONENTS ---
 
 // -- NEW CONFIRM MODAL --
@@ -158,17 +164,9 @@ const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
   </div>
 );
 
-const LoginScreen = ({ onLogin, onLoginRedirect, error }) => {
-    const [isInAppBrowser, setIsInAppBrowser] = useState(false);
+// -- NEW BLOCKING SCREEN (Løftet ud som selvstændig komponent) --
+const BrowserBlockScreen = () => {
     const [copied, setCopied] = useState(false);
-
-    useEffect(() => {
-        // Detect Facebook, Messenger, Instagram in-app browsers
-        const ua = navigator.userAgent || navigator.vendor || window.opera;
-        const isFB = (ua.indexOf("FBAN") > -1) || (ua.indexOf("FBAV") > -1) || (ua.indexOf("Instagram") > -1);
-        setIsInAppBrowser(isFB);
-    }, []);
-
     const copyLink = () => {
         navigator.clipboard.writeText(window.location.href);
         setCopied(true);
@@ -176,10 +174,7 @@ const LoginScreen = ({ onLogin, onLoginRedirect, error }) => {
     };
 
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
-        
-        {/* BLOCKING SCREEN FOR MESSENGER USERS */}
-        {isInAppBrowser ? (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
             <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl text-center">
                 <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Smartphone className="w-8 h-8 text-red-500" />
@@ -219,44 +214,47 @@ const LoginScreen = ({ onLogin, onLoginRedirect, error }) => {
                     </button>
                 </div>
             </div>
-        ) : (
-            <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-              <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.20</div>
-              <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
-                <ShieldCheck className="w-8 h-8 text-white" />
-              </div>
-              <h1 className="text-2xl font-bold text-white mb-2">FightWeek</h1>
-              <p className="text-slate-400 mb-8 text-sm">Log ind for at se din træningsplan</p>
-              
-              {error && (
-                <div className="bg-red-900/50 border border-red-800 rounded-lg p-3 mb-6 text-xs text-red-200 text-left">
-                    <p className="font-bold mb-1 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Login Fejl:</p>
-                    <p>{error}</p>
-                </div>
-              )}
-
-              {/* Primær Login (Popup) */}
-              <button 
-                onClick={onLogin}
-                className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mb-4"
-              >
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-                Log ind med Google
-              </button>
-
-              {/* Alternativ Login (Redirect - til mobiler der driller) */}
-              <button 
-                onClick={onLoginRedirect}
-                className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2"
-              >
-                <Smartphone className="w-3 h-3 mr-1" />
-                Problemer med login? Tryk her (Mobil/iPhone)
-              </button>
-            </div>
-        )}
-      </div>
+        </div>
     );
-};
+}
+
+const LoginScreen = ({ onLogin, onLoginRedirect, error }) => (
+  <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+    <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.21</div>
+      <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
+        <ShieldCheck className="w-8 h-8 text-white" />
+      </div>
+      <h1 className="text-2xl font-bold text-white mb-2">FightWeek</h1>
+      <p className="text-slate-400 mb-8 text-sm">Log ind for at se din træningsplan</p>
+      
+      {error && (
+        <div className="bg-red-900/50 border border-red-800 rounded-lg p-3 mb-6 text-xs text-red-200 text-left">
+            <p className="font-bold mb-1 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Login Fejl:</p>
+            <p>{error}</p>
+        </div>
+      )}
+
+      {/* Primær Login (Popup) */}
+      <button 
+        onClick={onLogin}
+        className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mb-4"
+      >
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+        Log ind med Google
+      </button>
+
+      {/* Alternativ Login (Redirect - til mobiler der driller) */}
+      <button 
+        onClick={onLoginRedirect}
+        className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2"
+      >
+        <Smartphone className="w-3 h-3 mr-1" />
+        Problemer med login? Tryk her (Mobil/iPhone)
+      </button>
+    </div>
+  </div>
+);
 
 const AccessDenied = ({ email, onLogout }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-center">
@@ -316,6 +314,7 @@ const App = () => {
   const [authLoading, setAuthLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [loginError, setLoginError] = useState(null);
+  const [isBrowserBlocked, setIsBrowserBlocked] = useState(false);
 
   // App State
   const [activeFighter, setActiveFighter] = useState('Karl');
@@ -336,9 +335,16 @@ const App = () => {
   // Confirm Dialog State
   const [confirmDialog, setConfirmDialog] = useState(null); 
 
-  // --- AUTH LOGIC (Hybrid: Popup + Redirect) ---
+  // --- AUTH LOGIC (Updated v21: Safe Guards) ---
   useEffect(() => {
-    // 1. Tjek om vi er kommet retur fra et Google Redirect (iPhone metode)
+    // 0. SIKKERHEDS-TJEK: Er vi i Messenger?
+    if (checkInAppBrowser()) {
+        setIsBrowserBlocked(true);
+        setAuthLoading(false); 
+        return; // STOP! Kør ikke auth logik i denne browser.
+    }
+
+    // 1. Tjek om vi er kommet retur fra et Google Redirect
     getRedirectResult(auth)
       .then((result) => {
         if (result) {
@@ -347,7 +353,6 @@ const App = () => {
       })
       .catch((error) => {
         console.error("Redirect login fejl:", error);
-        // Kun vis fejl hvis det er relevant
         if (error.code !== 'auth/popup-closed-by-user') {
             let msg = error.message;
             if (error.code === 'auth/unauthorized-domain') {
@@ -385,26 +390,24 @@ const App = () => {
     return () => unsubAuth();
   }, []);
 
-  // Standard Login (Virker bedst på Desktop/Android)
+  // Standard Login
   const handleLogin = async () => {
     setLoginError(null);
     const provider = new GoogleAuthProvider();
     try {
         await signInWithPopup(auth, provider);
     } catch (error) {
-        console.error("Popup Login failed", error);
         setLoginError(error.message);
     }
   };
 
-  // Alternativ Login (Virker bedst på iPhone med stram sikkerhed)
+  // Alternativ Login
   const handleLoginRedirect = async () => {
     setLoginError(null);
     const provider = new GoogleAuthProvider();
     try {
         await signInWithRedirect(auth, provider);
     } catch (error) {
-        console.error("Redirect Login initiation failed", error);
         setLoginError(error.message);
     }
   };
@@ -417,7 +420,7 @@ const App = () => {
 
   // --- DATA SYNC ---
   useEffect(() => {
-    if (!user || accessDenied) return;
+    if (!user || accessDenied || isBrowserBlocked) return;
     const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
     const collectionPath = isStandardMode ? 'templates' : 'weeks';
     
@@ -457,7 +460,7 @@ const App = () => {
       unsubPersonal();
       unsubsTeam.forEach(u => u());
     };
-  }, [user, activeFighter, currentWeek, isStandardMode, accessDenied]);
+  }, [user, activeFighter, currentWeek, isStandardMode, accessDenied, isBrowserBlocked]);
 
   // --- ACTIONS & CONFIRMATIONS ---
 
@@ -609,6 +612,9 @@ const App = () => {
   };
 
   // --- RENDER ---
+  // 0. SIKKERHEDS-CHECK: Hvis browser er blokeret, vis KUN blokeringsskærm
+  if (isBrowserBlocked) return <BrowserBlockScreen />;
+
   if (authLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loader...</div>;
   if (!user) return <LoginScreen onLogin={handleLogin} onLoginRedirect={handleLoginRedirect} error={loginError} />;
   if (accessDenied) return <AccessDenied email={user.email} onLogout={handleLogout} />;
