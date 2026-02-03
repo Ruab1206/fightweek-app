@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
-  History, Globe, LogOut, Lock, HelpCircle 
+  History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check 
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -13,6 +13,8 @@ import {
 import { 
   getAuth, 
   signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult,  
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged 
@@ -133,6 +135,16 @@ const getISOWeek = () => {
   return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
 };
 
+// Helper: Detect In-App Browser & Mobile
+const checkInAppBrowser = () => {
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    return (ua.indexOf("FBAN") > -1) || (ua.indexOf("FBAV") > -1) || (ua.indexOf("Instagram") > -1);
+};
+
+const isMobileDevice = () => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
 // --- COMPONENTS ---
 
 // -- NEW CONFIRM MODAL --
@@ -156,9 +168,64 @@ const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
   </div>
 );
 
-const LoginScreen = ({ onLogin, error }) => (
+// -- NEW BLOCKING SCREEN (Løftet ud som selvstændig komponent) --
+const BrowserBlockScreen = () => {
+    const [copied, setCopied] = useState(false);
+    const copyLink = () => {
+        navigator.clipboard.writeText(window.location.href);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl text-center">
+                <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Smartphone className="w-8 h-8 text-red-500" />
+                </div>
+                <h2 className="text-white font-bold text-xl mb-2">Messenger Browseren dur ikke</h2>
+                <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+                    Google tillader ikke login direkte i Messenger. Du skal åbne appen i din rigtige browser (Safari eller Chrome).
+                </p>
+
+                <div className="space-y-3">
+                    <div className="bg-slate-950 rounded-xl p-4 border border-slate-800 text-left">
+                        <p className="text-white text-xs font-bold flex items-center mb-2">
+                            <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] mr-3">1</span>
+                            Tryk på de 3 prikker (•••) i hjørnet
+                        </p>
+                        <p className="text-white text-xs font-bold flex items-center">
+                            <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] mr-3">2</span>
+                            Vælg "Åbn i Safari / Browser"
+                        </p>
+                    </div>
+
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-slate-800" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-slate-900 px-2 text-slate-500 font-bold">Eller</span>
+                        </div>
+                    </div>
+
+                    <button 
+                        onClick={copyLink}
+                        className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
+                    >
+                        {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                        {copied ? "Link kopieret!" : "Kopier Link og åbn selv"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+const LoginScreen = ({ onLogin, error, isMobile }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
-    <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center">
+    <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.22</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -172,13 +239,19 @@ const LoginScreen = ({ onLogin, error }) => (
         </div>
       )}
 
+      {/* Primær Login Knap (Skifter funktion baseret på enhed) */}
       <button 
         onClick={onLogin}
-        className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2"
+        className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mb-2"
       >
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
         Log ind med Google
       </button>
+
+      {/* Info tekst om metode */}
+      <p className="text-slate-600 text-[10px] mt-2">
+         {isMobile ? "Mobil detekteret: Bruger Redirect login" : "Computer detekteret: Bruger Popup login"}
+      </p>
     </div>
   </div>
 );
@@ -241,8 +314,10 @@ const App = () => {
   const [authLoading, setAuthLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [loginError, setLoginError] = useState(null);
+  const [isBrowserBlocked, setIsBrowserBlocked] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // App State - NU MED DYNAMISK UGENUMMER
+  // App State
   const [activeFighter, setActiveFighter] = useState('Karl');
   const [isLocked, setIsLocked] = useState(true);
   const [systemWeek] = useState(getISOWeek()); 
@@ -261,8 +336,37 @@ const App = () => {
   // Confirm Dialog State
   const [confirmDialog, setConfirmDialog] = useState(null); 
 
-  // --- AUTH LOGIC ---
+  // --- AUTH LOGIC (v22: Auto-detect Mobile for Redirect) ---
   useEffect(() => {
+    // 0. DETECT DEVICE & BROWSER
+    const mobile = isMobileDevice();
+    setIsMobile(mobile);
+
+    if (checkInAppBrowser()) {
+        setIsBrowserBlocked(true);
+        setAuthLoading(false); 
+        return; // STOP!
+    }
+
+    // 1. Tjek om vi er kommet retur fra et Google Redirect
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          console.log("Redirect login success");
+        }
+      })
+      .catch((error) => {
+        console.error("Redirect login fejl:", error);
+        if (error.code !== 'auth/popup-closed-by-user') {
+            let msg = error.message;
+            if (error.code === 'auth/unauthorized-domain') {
+                msg = `Domænet ${window.location.hostname} er ikke godkendt i Firebase.`;
+            }
+            setLoginError(msg);
+        }
+      });
+
+    // 2. Lyt efter login status ændringer
     const unsubAuth = onAuthStateChanged(auth, (u) => {
       setAuthLoading(false);
       if (u) {
@@ -290,21 +394,22 @@ const App = () => {
     return () => unsubAuth();
   }, []);
 
-  const handleLogin = async () => {
-    setLoginError(null);
-    const provider = new GoogleAuthProvider();
-    try {
-        await signInWithPopup(auth, provider);
-    } catch (error) {
-        console.error("Login failed", error);
-        let msg = error.message;
-        if (error.code === 'auth/unauthorized-domain') {
-            msg = "Domænet er ikke godkendt. Husk at tilføje dit Vercel-link i Firebase Console.";
-        } else if (error.code === 'auth/popup-closed-by-user') {
-            msg = "Login blev afbrudt.";
-        }
-        setLoginError(msg);
-    }
+  // SMART LOGIN HANDLER
+  const handleSmartLogin = async () => {
+      setLoginError(null);
+      const provider = new GoogleAuthProvider();
+      try {
+          if (isMobile) {
+              // Redirect på mobil (iPhone/Android) for at undgå popup-blokering
+              await signInWithRedirect(auth, provider);
+          } else {
+              // Popup på desktop (Bedre UX)
+              await signInWithPopup(auth, provider);
+          }
+      } catch (error) {
+          console.error("Login failed", error);
+          setLoginError(error.message);
+      }
   };
 
   const handleLogout = () => {
@@ -315,7 +420,7 @@ const App = () => {
 
   // --- DATA SYNC ---
   useEffect(() => {
-    if (!user || accessDenied) return;
+    if (!user || accessDenied || isBrowserBlocked) return;
     const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
     const collectionPath = isStandardMode ? 'templates' : 'weeks';
     
@@ -355,7 +460,7 @@ const App = () => {
       unsubPersonal();
       unsubsTeam.forEach(u => u());
     };
-  }, [user, activeFighter, currentWeek, isStandardMode, accessDenied]);
+  }, [user, activeFighter, currentWeek, isStandardMode, accessDenied, isBrowserBlocked]);
 
   // --- ACTIONS & CONFIRMATIONS ---
 
@@ -507,8 +612,14 @@ const App = () => {
   };
 
   // --- RENDER ---
+  // 0. SIKKERHEDS-CHECK: Hvis browser er blokeret, vis KUN blokeringsskærm
+  if (isBrowserBlocked) return <BrowserBlockScreen />;
+
   if (authLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loader...</div>;
-  if (!user) return <LoginScreen onLogin={handleLogin} error={loginError} />;
+  
+  // 1. LOGIN SKÆRM - Nu med smart logik
+  if (!user) return <LoginScreen onLogin={handleSmartLogin} error={loginError} isMobile={isMobile} />;
+  
   if (accessDenied) return <AccessDenied email={user.email} onLogout={handleLogout} />;
 
   const isReadOnly = !isStandardMode && currentWeek < systemWeek;
