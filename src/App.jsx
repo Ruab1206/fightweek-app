@@ -13,6 +13,8 @@ import {
 import { 
   getAuth, 
   signInWithPopup, 
+  signInWithRedirect, // Ny import til iPhone fix
+  getRedirectResult,  // Ny import til at fange resultatet efter redirect
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged 
@@ -261,8 +263,26 @@ const App = () => {
   // Confirm Dialog State
   const [confirmDialog, setConfirmDialog] = useState(null); 
 
-  // --- AUTH LOGIC ---
+  // --- AUTH LOGIC (iPhone Fix: Redirect) ---
   useEffect(() => {
+    // 1. Tjek om vi er kommet retur fra et Google Redirect (iPhone metode)
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result) {
+          console.log("Redirect login success");
+          // Brugeren er logget ind, resten håndteres af onAuthStateChanged
+        }
+      })
+      .catch((error) => {
+        console.error("Redirect login fejl:", error);
+        let msg = error.message;
+        if (error.code === 'auth/unauthorized-domain') {
+            msg = `Domænet ${window.location.hostname} er ikke godkendt i Firebase. Husk at tilføje det under "Authentication" -> "Settings" -> "Authorized Domains".`;
+        }
+        setLoginError(msg);
+      });
+
+    // 2. Lyt efter login status ændringer
     const unsubAuth = onAuthStateChanged(auth, (u) => {
       setAuthLoading(false);
       if (u) {
@@ -294,16 +314,11 @@ const App = () => {
     setLoginError(null);
     const provider = new GoogleAuthProvider();
     try {
-        await signInWithPopup(auth, provider);
+        // Vi bruger nu Redirect i stedet for Popup. Det er mere stabilt på mobil (Safari/iOS).
+        await signInWithRedirect(auth, provider);
     } catch (error) {
-        console.error("Login failed", error);
-        let msg = error.message;
-        if (error.code === 'auth/unauthorized-domain') {
-            msg = "Domænet er ikke godkendt. Husk at tilføje dit Vercel-link i Firebase Console.";
-        } else if (error.code === 'auth/popup-closed-by-user') {
-            msg = "Login blev afbrudt.";
-        }
-        setLoginError(msg);
+        console.error("Login initiation failed", error);
+        setLoginError(error.message);
     }
   };
 
