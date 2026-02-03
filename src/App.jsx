@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
-  History, Globe, LogOut, Lock, HelpCircle 
+  History, Globe, LogOut, Lock, HelpCircle, Smartphone 
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -13,8 +13,8 @@ import {
 import { 
   getAuth, 
   signInWithPopup, 
-  signInWithRedirect, // Ny import til iPhone fix
-  getRedirectResult,  // Ny import til at fange resultatet efter redirect
+  signInWithRedirect, 
+  getRedirectResult,  
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged 
@@ -158,9 +158,10 @@ const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
   </div>
 );
 
-const LoginScreen = ({ onLogin, error }) => (
+const LoginScreen = ({ onLogin, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
-    <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center">
+    <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.18</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -174,12 +175,22 @@ const LoginScreen = ({ onLogin, error }) => (
         </div>
       )}
 
+      {/* Primær Login (Popup) */}
       <button 
         onClick={onLogin}
-        className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2"
+        className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mb-4"
       >
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
         Log ind med Google
+      </button>
+
+      {/* Alternativ Login (Redirect - til mobiler der driller) */}
+      <button 
+        onClick={onLoginRedirect}
+        className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2"
+      >
+        <Smartphone className="w-3 h-3 mr-1" />
+        Problemer med login? Tryk her (Mobil/iPhone)
       </button>
     </div>
   </div>
@@ -244,7 +255,7 @@ const App = () => {
   const [accessDenied, setAccessDenied] = useState(false);
   const [loginError, setLoginError] = useState(null);
 
-  // App State - NU MED DYNAMISK UGENUMMER
+  // App State
   const [activeFighter, setActiveFighter] = useState('Karl');
   const [isLocked, setIsLocked] = useState(true);
   const [systemWeek] = useState(getISOWeek()); 
@@ -263,23 +274,25 @@ const App = () => {
   // Confirm Dialog State
   const [confirmDialog, setConfirmDialog] = useState(null); 
 
-  // --- AUTH LOGIC (iPhone Fix: Redirect) ---
+  // --- AUTH LOGIC (Hybrid: Popup + Redirect) ---
   useEffect(() => {
     // 1. Tjek om vi er kommet retur fra et Google Redirect (iPhone metode)
     getRedirectResult(auth)
       .then((result) => {
         if (result) {
           console.log("Redirect login success");
-          // Brugeren er logget ind, resten håndteres af onAuthStateChanged
         }
       })
       .catch((error) => {
         console.error("Redirect login fejl:", error);
-        let msg = error.message;
-        if (error.code === 'auth/unauthorized-domain') {
-            msg = `Domænet ${window.location.hostname} er ikke godkendt i Firebase. Husk at tilføje det under "Authentication" -> "Settings" -> "Authorized Domains".`;
+        // Kun vis fejl hvis det er relevant
+        if (error.code !== 'auth/popup-closed-by-user') {
+            let msg = error.message;
+            if (error.code === 'auth/unauthorized-domain') {
+                msg = `Domænet ${window.location.hostname} er ikke godkendt i Firebase.`;
+            }
+            setLoginError(msg);
         }
-        setLoginError(msg);
       });
 
     // 2. Lyt efter login status ændringer
@@ -310,14 +323,26 @@ const App = () => {
     return () => unsubAuth();
   }, []);
 
+  // Standard Login (Virker bedst på Desktop/Android)
   const handleLogin = async () => {
     setLoginError(null);
     const provider = new GoogleAuthProvider();
     try {
-        // Vi bruger nu Redirect i stedet for Popup. Det er mere stabilt på mobil (Safari/iOS).
+        await signInWithPopup(auth, provider);
+    } catch (error) {
+        console.error("Popup Login failed", error);
+        setLoginError(error.message);
+    }
+  };
+
+  // Alternativ Login (Virker bedst på iPhone med stram sikkerhed)
+  const handleLoginRedirect = async () => {
+    setLoginError(null);
+    const provider = new GoogleAuthProvider();
+    try {
         await signInWithRedirect(auth, provider);
     } catch (error) {
-        console.error("Login initiation failed", error);
+        console.error("Redirect Login initiation failed", error);
         setLoginError(error.message);
     }
   };
@@ -523,7 +548,7 @@ const App = () => {
 
   // --- RENDER ---
   if (authLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loader...</div>;
-  if (!user) return <LoginScreen onLogin={handleLogin} error={loginError} />;
+  if (!user) return <LoginScreen onLogin={handleLogin} onLoginRedirect={handleLoginRedirect} error={loginError} />;
   if (accessDenied) return <AccessDenied email={user.email} onLogout={handleLogout} />;
 
   const isReadOnly = !isStandardMode && currentWeek < systemWeek;
