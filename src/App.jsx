@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
-  History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check 
+  History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick 
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -141,10 +141,6 @@ const checkInAppBrowser = () => {
     return (ua.indexOf("FBAN") > -1) || (ua.indexOf("FBAV") > -1) || (ua.indexOf("Instagram") > -1);
 };
 
-const isMobileDevice = () => {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-};
-
 // --- COMPONENTS ---
 
 // -- NEW CONFIRM MODAL --
@@ -222,10 +218,10 @@ const BrowserBlockScreen = () => {
     );
 }
 
-const LoginScreen = ({ onLogin, error, isMobile }) => (
+const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.22</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.23</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -239,19 +235,23 @@ const LoginScreen = ({ onLogin, error, isMobile }) => (
         </div>
       )}
 
-      {/* Primær Login Knap (Skifter funktion baseret på enhed) */}
+      {/* Primær Login Knap (Popup - Standard) */}
       <button 
-        onClick={onLogin}
-        className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mb-2"
+        onClick={onLoginPopup}
+        className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mb-4"
       >
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
         Log ind med Google
       </button>
 
-      {/* Info tekst om metode */}
-      <p className="text-slate-600 text-[10px] mt-2">
-         {isMobile ? "Mobil detekteret: Bruger Redirect login" : "Computer detekteret: Bruger Popup login"}
-      </p>
+      {/* Sekundær Login (Redirect - Fallback) */}
+      <button 
+        onClick={onLoginRedirect}
+        className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2"
+      >
+        <MousePointerClick className="w-3 h-3 mr-1" />
+        Virker knappen ikke? Tryk her (Redirect)
+      </button>
     </div>
   </div>
 );
@@ -315,7 +315,6 @@ const App = () => {
   const [accessDenied, setAccessDenied] = useState(false);
   const [loginError, setLoginError] = useState(null);
   const [isBrowserBlocked, setIsBrowserBlocked] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
 
   // App State
   const [activeFighter, setActiveFighter] = useState('Karl');
@@ -336,12 +335,9 @@ const App = () => {
   // Confirm Dialog State
   const [confirmDialog, setConfirmDialog] = useState(null); 
 
-  // --- AUTH LOGIC (v22: Auto-detect Mobile for Redirect) ---
+  // --- AUTH LOGIC (v23: Manual Choice) ---
   useEffect(() => {
-    // 0. DETECT DEVICE & BROWSER
-    const mobile = isMobileDevice();
-    setIsMobile(mobile);
-
+    // 0. DETECT MESSENGER BROWSER
     if (checkInAppBrowser()) {
         setIsBrowserBlocked(true);
         setAuthLoading(false); 
@@ -394,20 +390,25 @@ const App = () => {
     return () => unsubAuth();
   }, []);
 
-  // SMART LOGIN HANDLER
-  const handleSmartLogin = async () => {
+  // Login Handlers
+  const handleLoginPopup = async () => {
       setLoginError(null);
       const provider = new GoogleAuthProvider();
       try {
-          if (isMobile) {
-              // Redirect på mobil (iPhone/Android) for at undgå popup-blokering
-              await signInWithRedirect(auth, provider);
-          } else {
-              // Popup på desktop (Bedre UX)
-              await signInWithPopup(auth, provider);
-          }
+          await signInWithPopup(auth, provider);
       } catch (error) {
-          console.error("Login failed", error);
+          console.error("Popup Login failed", error);
+          setLoginError(error.message);
+      }
+  };
+
+  const handleLoginRedirect = async () => {
+      setLoginError(null);
+      const provider = new GoogleAuthProvider();
+      try {
+          await signInWithRedirect(auth, provider);
+      } catch (error) {
+          console.error("Redirect Login initiation failed", error);
           setLoginError(error.message);
       }
   };
@@ -617,8 +618,8 @@ const App = () => {
 
   if (authLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loader...</div>;
   
-  // 1. LOGIN SKÆRM - Nu med smart logik
-  if (!user) return <LoginScreen onLogin={handleSmartLogin} error={loginError} isMobile={isMobile} />;
+  // 1. LOGIN SKÆRM - Nu med manuelt valg
+  if (!user) return <LoginScreen onLoginPopup={handleLoginPopup} onLoginRedirect={handleLoginRedirect} error={loginError} />;
   
   if (accessDenied) return <AccessDenied email={user.email} onLogout={handleLogout} />;
 
