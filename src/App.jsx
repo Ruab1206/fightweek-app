@@ -50,7 +50,7 @@ const GLOBAL_TEMPLATES = [
 ];
 
 const USER_MAPPING = {
-  'carolinemillerh@gmail.com': { name: 'Caroline', role: 'fighter' },
+  'carolinemollerh@gmail.com': { name: 'Caroline', role: 'fighter' },
   'sankarem00@gmail.com': { name: 'San', role: 'fighter' },
   'eneasopa354@gmail.com': { name: 'Enea', role: 'fighter' },
   'anton.emil.bang@gmail.com': { name: 'Anton', role: 'fighter' },
@@ -172,11 +172,8 @@ const BrowserBlockScreen = () => (
             <h2 className="text-white font-bold text-xl mb-2">Brug Safari eller Chrome</h2>
             <p className="text-slate-400 text-sm mb-6 leading-relaxed">
                 Google tillader ikke login direkte i Messenger eller Instagram. 
-                Tryk på de tre prikker og vælg "Åbn i browser" for at fortsætte.
+                Åbn venligst linket i din rigtige browser for at logge ind.
             </p>
-            <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 text-xs text-slate-400 font-mono break-all">
-                {window.location.href}
-            </div>
         </div>
     </div>
 );
@@ -274,8 +271,8 @@ const AdminDashboard = ({ user, onClose }) => {
             });
             await batch.commit();
             setIsImportOpen(false);
-            alert("Backlog opdateret!");
-        } catch (e) { alert("Import fejl: " + e.message); }
+            alert("Import fuldført!");
+        } catch (e) { alert("Fejl ved import: " + e.message); }
     };
 
     return (
@@ -285,7 +282,7 @@ const AdminDashboard = ({ user, onClose }) => {
                     <button onClick={onClose} className="mr-3 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors"><ArrowLeft className="w-5 h-5"/></button>
                     <div>
                         <h2 className="text-white font-bold">Admin Dashboard</h2>
-                        <p className="text-[10px] text-slate-500 uppercase font-bold">Manage Backlog</p>
+                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">System Management</p>
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -313,7 +310,7 @@ const AdminDashboard = ({ user, onClose }) => {
                     <div className="space-y-3">
                         <button onClick={() => { setForm({ title: '', status: 'backlog', priority: 'Medium', tag: 'APP' }); setEditingTask(null); setIsFormOpen(true); }} className="w-full py-4 border-2 border-dashed border-slate-800 rounded-xl text-slate-500 font-bold hover:text-slate-300 transition-all flex justify-center items-center"><Plus className="w-5 h-5 mr-2"/> Tilføj ny opgave</button>
                         {filteredTasks.map(t => (
-                            <div key={t.id} onClick={() => { setEditingTask(t); setForm(t); setIsFormOpen(true); }} className="bg-slate-900 border border-slate-800 p-4 rounded-xl cursor-pointer hover:bg-slate-800/80 transition-all border-l-4 border-l-blue-600 shadow-sm">
+                            <div key={t.id} onClick={() => { setEditingTask(t); setForm(t); setIsFormOpen(true); }} className="bg-slate-900 border border-slate-800 p-4 rounded-xl cursor-pointer hover:bg-slate-800 transition-all border-l-4 border-l-blue-600 shadow-sm">
                                 <div className="flex justify-between items-start mb-2">
                                     <div className="flex gap-2">
                                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${t.status === 'done' ? 'bg-green-900/50 text-green-400' : 'bg-blue-900/30 text-blue-400'}`}>{t.status.toUpperCase()}</span>
@@ -335,7 +332,7 @@ const AdminDashboard = ({ user, onClose }) => {
                             if (status === 'done' && statusFilter === 'active') return null;
                             return (
                                 <div key={status} className="bg-slate-900/50 rounded-xl border border-slate-800 p-3 min-w-[280px] min-h-[500px]">
-                                    <h4 className="text-[10px] font-bold uppercase text-slate-500 mb-4 px-1 flex justify-between">{status} <span className="bg-slate-800 px-2 rounded-full">{tasks.filter(t => t.status === status).length}</span></h4>
+                                    <h4 className="text-[10px] font-bold uppercase text-slate-500 mb-4 px-1 flex justify-between">{status} <span className="bg-slate-800 px-2 rounded-full font-mono">{tasks.filter(t => t.status === status).length}</span></h4>
                                     <div className="space-y-2">
                                         {filteredTasks.filter(t => t.status === status).map(t => (
                                             <div key={t.id} onClick={() => { setEditingTask(t); setForm(t); setIsFormOpen(true); }} className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-sm hover:border-slate-500 transition-all cursor-pointer">
@@ -358,20 +355,20 @@ const AdminDashboard = ({ user, onClose }) => {
             {isFormOpen && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[110] fade-in">
                     <div className="bg-slate-900 w-full max-w-2xl rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+                        <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
                             <h3 className="text-white font-bold">{editingTask ? 'Rediger' : 'Ny'} Opgave</h3>
                             <button onClick={() => setIsFormOpen(false)} className="text-slate-400 hover:text-white transition-colors"><X className="w-5 h-5"/></button>
                         </div>
                         <div className="p-6 overflow-y-auto space-y-4">
                             <div>
                                 <label className="block text-slate-500 text-[10px] uppercase font-bold mb-1.5">Titel</label>
-                                <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="fx 'Opret Ugeplan'" className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-600 transition-all shadow-inner"/>
+                                <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="fx 'Opret Ugeplan'" className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-600 transition-all shadow-inner font-bold"/>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-slate-500 text-[10px] uppercase font-bold mb-1.5">Status</label>
                                     <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none">
-                                        <option value="backlog">Backlog</option>
+                                        <option value="backlog">Backlog / Ideer</option>
                                         <option value="todo">To Do</option>
                                         <option value="doing">Doing</option>
                                         <option value="done">Done</option>
@@ -379,7 +376,7 @@ const AdminDashboard = ({ user, onClose }) => {
                                 </div>
                                 <div>
                                     <label className="block text-slate-500 text-[10px] uppercase font-bold mb-1.5">Prioritet</label>
-                                    <select value={form.priority} onChange={e => setForm({...form, priority: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none">
+                                    <select value={form.priority} onChange={e => setForm({...form, priority: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none font-bold">
                                         <option>Critical</option>
                                         <option>High</option>
                                         <option>Medium</option>
@@ -388,19 +385,19 @@ const AdminDashboard = ({ user, onClose }) => {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-slate-500 text-[10px] uppercase font-bold mb-1.5">Beskrivelse (Som [rolle] vil jeg...)</label>
-                                <textarea value={form.desc} onChange={e => setForm({...form, desc: e.target.value})} rows="2" className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none"/>
+                                <label className="block text-slate-500 text-[10px] uppercase font-bold mb-1.5">Beskrivelse (User Story)</label>
+                                <textarea value={form.desc} onChange={e => setForm({...form, desc: e.target.value})} rows="2" className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none" placeholder="Som [rolle] vil jeg..."/>
                             </div>
                             <div>
                                 <label className="block text-slate-500 text-[10px] uppercase font-bold mb-1.5">Acceptkriterier</label>
-                                <textarea value={form.acceptance} onChange={e => setForm({...form, acceptance: e.target.value})} rows="8" className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none font-mono text-xs leading-relaxed"/>
+                                <textarea value={form.acceptance} onChange={e => setForm({...form, acceptance: e.target.value})} rows="8" className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none font-mono text-xs leading-relaxed" placeholder="- Punkt 1..."/>
                             </div>
                         </div>
                         <div className="p-4 border-t border-slate-800 bg-slate-800/30 flex justify-between items-center">
-                            {editingTask && <button onClick={async () => { if(confirm('Slet opgaven?')) { await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', editingTask.id)); setIsFormOpen(false); } }} className="text-red-500 text-xs font-bold px-4 py-2 hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4 mr-2 inline"/> Slet</button>}
+                            {editingTask && <button onClick={async () => { if(confirm('Slet opgaven permanent?')) { await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', editingTask.id)); setIsFormOpen(false); } }} className="text-red-500 text-xs font-bold px-4 py-2 hover:bg-red-900/20 rounded-lg transition-colors flex items-center"><Trash2 className="w-4 h-4 mr-2"/> Slet</button>}
                             <div className="flex gap-3 ml-auto">
                                 <button onClick={() => setIsFormOpen(false)} className="text-slate-400 px-4 py-2 font-bold text-sm">Annuller</button>
-                                <button onClick={handleSaveTask} className="bg-blue-600 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-900/30 active:scale-95 transition-all">Gem</button>
+                                <button onClick={handleSaveTask} className="bg-blue-600 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-900/30 active:scale-95 transition-all">Gem Opgave</button>
                             </div>
                         </div>
                     </div>
@@ -411,13 +408,13 @@ const AdminDashboard = ({ user, onClose }) => {
             {isImportOpen && (
                 <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-[120] fade-in">
                     <div className="bg-slate-900 w-full max-w-xl rounded-2xl border border-slate-700 p-6 shadow-2xl">
-                        <h3 className="text-white font-bold text-lg mb-2">Importer CSV</h3>
-                        <p className="text-slate-500 text-xs mb-4 italic leading-relaxed text-balance">Linjeskift i acceptkriterier indkapslet i " " håndteres nu korrekt.</p>
-                        <textarea id="importArea" placeholder="Titel;Status;Beskrivelse;Acceptkriterier..." rows="12" className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none font-mono text-[10px] mb-4"/>
+                        <h3 className="text-white font-bold text-lg mb-2">Importer CSV / Excel-data</h3>
+                        <p className="text-slate-500 text-xs mb-4 italic leading-relaxed text-balance">Vores parser håndterer linjeskift indkapslet i anførselstegn korrekt.</p>
+                        <textarea id="importArea" placeholder="Titel;Status;Beskrivelse;Acceptkriterier..." rows="12" className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none font-mono text-[10px] mb-4 shadow-inner"/>
                         <div className="flex justify-end gap-3">
-                            <button onClick={() => setIsImportOpen(false)} className="text-slate-400 font-bold px-4 py-2">Luk</button>
-                            <button onClick={() => handleImportCSV(document.getElementById('importArea').value, 'append')} className="bg-slate-800 text-blue-400 px-4 py-2 rounded-lg font-bold border border-slate-700">Tilføj</button>
-                            <button onClick={() => handleImportCSV(document.getElementById('importArea').value, 'replace')} className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold">Erstat alt</button>
+                            <button onClick={() => setIsImportOpen(false)} className="text-slate-400 font-bold px-4 py-2 hover:text-white transition-colors">Luk</button>
+                            <button onClick={() => handleImportCSV(document.getElementById('importArea').value, 'append')} className="bg-slate-800 text-blue-400 px-4 py-2 rounded-lg font-bold border border-slate-700 hover:bg-slate-700">Tilføj til liste</button>
+                            <button onClick={() => handleImportCSV(document.getElementById('importArea').value, 'replace')} className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-red-900/20">Erstat hele listen</button>
                         </div>
                     </div>
                 </div>
@@ -457,27 +454,44 @@ const App = () => {
             return;
         }
         
-        const handleAuthResult = async () => {
+        const initAuth = async () => {
             try {
+                // Check for existing redirect result first
                 const result = await getRedirectResult(auth);
                 if (result) {
                     const profile = USER_MAPPING[result.user.email.toLowerCase()];
                     if (profile) setActiveFighter(profile.name);
                 }
-            } catch (e) { console.error("Redirect Error", e); }
-        };
-        handleAuthResult();
 
-        const unsubAuth = onAuthStateChanged(auth, async (u) => {
-            if (u) {
-                const profile = USER_MAPPING[u.email.toLowerCase()];
-                if (profile) {
-                    setUser(u);
-                    setActiveFighter(profile.name);
-                } else { setUser(u); }
-            } else { setUser(null); }
-            setAuthLoading(false);
-        });
+                // Setup listener
+                const unsubAuth = onAuthStateChanged(auth, async (u) => {
+                    if (u) {
+                        const profile = USER_MAPPING[u.email.toLowerCase()];
+                        if (profile) {
+                            setUser(u);
+                            setActiveFighter(profile.name);
+                        } else {
+                            setUser(u); // Logged in but not mapped
+                        }
+                    } else {
+                        // If no user, try to sign in automatically based on environment
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            // Only sign in anonymously if we're not waiting for a manual login
+                            // await signInAnonymously(auth); 
+                        }
+                    }
+                    setAuthLoading(false);
+                });
+                return unsubAuth;
+            } catch (e) {
+                console.error("Auth init error", e);
+                setAuthLoading(false);
+            }
+        };
+        
+        const unsub = initAuth();
 
         const params = new URLSearchParams(window.location.search);
         const fParam = params.get('fighter');
@@ -486,7 +500,7 @@ const App = () => {
             setIsLocked(true);
         }
 
-        return () => unsubAuth();
+        return () => { if (unsub && typeof unsub === 'function') unsub(); };
     }, []);
 
     // Sync Data
@@ -501,14 +515,25 @@ const App = () => {
             if (snap.exists()) {
                 const data = snap.data();
                 setScheduleData(data);
-                if (data.lastUpdated) setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-            } else { setScheduleData({}); setLastUpdated(null); }
-        });
+                if (data.lastUpdated) {
+                    setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+                }
+            } else {
+                setScheduleData({});
+                setLastUpdated(null);
+            }
+        }, (err) => console.error("Snapshot error:", err));
 
-        const unsubsT = FIGHTERS.map(f => {
-            const fRef = doc(db, ROOT_COLLECTION, f, 'weeks', `week_${currentWeek}`);
-            return onSnapshot(fRef, (snap) => setTeamData(prev => ({...prev, [f]: snap.exists() ? snap.data() : {}})));
-        });
+        // Team Sync (Only if not in standard mode)
+        let unsubsT = [];
+        if (!isStandardMode) {
+            unsubsT = FIGHTERS.map(f => {
+                const fRef = doc(db, ROOT_COLLECTION, f, 'weeks', `week_${currentWeek}`);
+                return onSnapshot(fRef, (snap) => {
+                    setTeamData(prev => ({...prev, [f]: snap.exists() ? snap.data() : {}}));
+                });
+            });
+        }
 
         return () => { unsubP(); unsubsT.forEach(u => u()); };
     }, [user, activeFighter, currentWeek, isStandardMode]);
@@ -517,7 +542,9 @@ const App = () => {
         try {
             const provider = new GoogleAuthProvider();
             await signInWithPopup(auth, provider);
-        } catch (e) { setLoginError("Prøv Redirect metoden."); }
+        } catch (e) {
+            setLoginError("Popup blokeret. Prøv Redirect metoden nedenfor.");
+        }
     };
 
     const handleRedirectLogin = () => {
@@ -526,6 +553,7 @@ const App = () => {
     };
 
     const handleSaveSession = async (session) => {
+        if (!user) return;
         const newData = JSON.parse(JSON.stringify(scheduleData));
         if (!newData[editingDay]) newData[editingDay] = [];
         
@@ -547,6 +575,7 @@ const App = () => {
     };
 
     const handleToggleRest = async (day) => {
+        if (!user) return;
         const newData = JSON.parse(JSON.stringify(scheduleData));
         const sessions = newData[day] || [];
         const isRest = sessions.some(s => s.isRestDay);
@@ -554,7 +583,7 @@ const App = () => {
         if (isRest) {
             newData[day] = sessions.filter(s => !s.isRestDay);
         } else {
-            if (sessions.length > 0 && !confirm("Dette sletter dagens pas for at holde hviledag. Fortsæt?")) return;
+            if (sessions.length > 0 && !confirm("Dette fjerner dagens træning for at holde hviledag. Fortsæt?")) return;
             newData[day] = [{ id: Date.now(), isRestDay: true }];
         }
         
@@ -564,7 +593,13 @@ const App = () => {
     };
 
     if (checkInAppBrowser()) return <BrowserBlockScreen />;
-    if (authLoading) return <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-500 gap-4"><RefreshCw className="w-8 h-8 animate-spin text-blue-500"/> FIGHTWEEK INITIALIZING...</div>;
+    if (authLoading) return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-500 gap-4">
+            <RefreshCw className="w-8 h-8 animate-spin text-blue-500"/>
+            <p className="font-mono text-[10px] tracking-widest uppercase font-bold">FightWeek Initializing...</p>
+        </div>
+    );
+    
     if (!user) return <LoginScreen onLogin={handleLogin} onRedirectLogin={handleRedirectLogin} error={loginError} loading={authLoading} />;
 
     const isAdmin = ['coach', 'admin'].includes(USER_MAPPING[user.email.toLowerCase()]?.role);
@@ -575,20 +610,22 @@ const App = () => {
             {/* HEADER */}
             <header className="bg-slate-900 p-4 border-b border-slate-800 sticky top-0 z-50 flex justify-between items-center shadow-lg">
                 <div className="flex items-center gap-2.5">
-                    <div className="bg-blue-600 p-1.5 rounded-lg"><ShieldCheck className="w-6 h-6 text-white"/></div>
+                    <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-900/30">
+                        <ShieldCheck className="w-6 h-6 text-white"/>
+                    </div>
                     <div>
-                        <h1 className="font-bold text-lg leading-none">FightWeek</h1>
-                        <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider mt-1">v1.42</p>
+                        <h1 className="font-bold text-lg leading-none tracking-tight">FightWeek</h1>
+                        <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider mt-1">Version 1.43</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    {isAdmin && <button onClick={() => setAdminOpen(true)} className="p-2 bg-slate-800 rounded-lg text-yellow-500 hover:bg-slate-700 transition-colors"><ClipboardList className="w-5 h-5"/></button>}
+                    {isAdmin && <button onClick={() => setAdminOpen(true)} className="p-2 bg-slate-800 rounded-lg text-yellow-500 hover:bg-slate-700 transition-colors shadow-inner"><ClipboardList className="w-5 h-5"/></button>}
                     <div className="relative">
                         <select 
                             disabled={isLocked}
                             value={activeFighter} 
                             onChange={e => setActiveFighter(e.target.value)} 
-                            className="bg-slate-800 text-xs font-bold py-2 pl-3 pr-8 rounded-lg border border-slate-700 outline-none appearance-none disabled:opacity-80"
+                            className="bg-slate-800 text-xs font-bold py-2 pl-3 pr-8 rounded-lg border border-slate-700 outline-none appearance-none disabled:opacity-80 shadow-sm"
                         >
                             {FIGHTERS.map(f => <option key={f} value={f}>{f}</option>)}
                         </select>
@@ -602,53 +639,55 @@ const App = () => {
                 {/* NAVIGATION */}
                 <div className="mb-6 space-y-4">
                     <div className="bg-slate-800 border border-slate-700 p-2.5 rounded-2xl flex items-center justify-between shadow-xl">
-                        <button onClick={() => { setCurrentWeek(w => Math.max(1, w-1)); setIsStandardMode(false); }} className="p-2 text-slate-400 hover:bg-slate-700 rounded-xl"><ChevronLeft className="w-7 h-7"/></button>
+                        <button onClick={() => { setCurrentWeek(w => Math.max(1, w-1)); setIsStandardMode(false); }} className="p-2 text-slate-400 hover:bg-slate-700 rounded-xl transition-colors"><ChevronLeft className="w-7 h-7"/></button>
                         <div className="text-center">
-                            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest block mb-0.5">{currentWeek === systemWeek ? 'Aktuel Uge' : 'Oversigt'}</span>
+                            <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest block mb-0.5">{currentWeek === systemWeek ? 'Aktuel Uge' : currentWeek < systemWeek ? 'Historik' : 'Planlægning'}</span>
                             <h2 className="text-xl font-bold text-white">Uge {currentWeek}</h2>
                         </div>
-                        <button onClick={() => { setCurrentWeek(w => w+1); setIsStandardMode(false); }} className="p-2 text-slate-400 hover:bg-slate-700 rounded-xl"><ChevronRight className="w-7 h-7"/></button>
+                        <button onClick={() => { setCurrentWeek(w => w+1); setIsStandardMode(false); }} className="p-2 text-slate-400 hover:bg-slate-700 rounded-xl transition-colors"><ChevronRight className="w-7 h-7"/></button>
                     </div>
                     <div className="flex justify-between items-center px-1">
-                        <div className="text-[10px] text-slate-500 font-bold flex items-center gap-1.5">{lastUpdated ? <><Clock className="w-3 h-3"/> Opdateret {lastUpdated}</> : <><Info className="w-3 h-3"/> Ingen data</>}</div>
-                        <button onClick={() => setIsStandardMode(!isStandardMode)} className={`text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 ${isStandardMode ? 'bg-yellow-900/30 border-yellow-700 text-yellow-500' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                        <div className="text-[10px] text-slate-500 font-bold flex items-center gap-1.5 italic">
+                            {lastUpdated ? <><Clock className="w-3 h-3"/> Opdateret {lastUpdated}</> : <><Info className="w-3 h-3"/> Ingen data fundet</>}
+                        </div>
+                        <button onClick={() => setIsStandardMode(!isStandardMode)} className={`text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 ${isStandardMode ? 'bg-yellow-900/30 border-yellow-700 text-yellow-500 shadow-inner' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
                             {isStandardMode ? <><X className="w-3 h-3"/> Luk Skabelon</> : <><Globe className="w-3 h-3"/> Rediger Standard</>}
                         </button>
                     </div>
                 </div>
 
-                {/* VIEW RENDER */}
+                {/* VIEWS */}
                 {view === 'personal' ? (
                     <div className="space-y-4 pb-20 fade-in">
                         {DAYS.map(day => {
                             const sessions = scheduleData[day] || [];
                             const isRest = sessions.some(s => s.isRestDay);
                             return (
-                                <div key={day} className={`rounded-2xl border p-4 transition-all shadow-sm ${isRest ? 'bg-slate-900/40 border-slate-800/60' : 'bg-slate-900 border-slate-800'}`}>
+                                <div key={day} className={`rounded-2xl border p-4 transition-all shadow-md ${isRest ? 'bg-slate-900/40 border-slate-800/60' : 'bg-slate-900 border-slate-800'}`}>
                                     <div className="flex justify-between items-center mb-4">
-                                        <h3 className="font-bold text-lg text-white flex items-center gap-2">{day} {isRest && <span className="text-[9px] bg-blue-900/50 text-blue-400 px-2 py-0.5 rounded-full uppercase tracking-tighter">Hvile</span>}</h3>
+                                        <h3 className="font-bold text-lg text-white flex items-center gap-2">{day} {isRest && <span className="text-[9px] bg-blue-900/50 text-blue-400 px-2 py-0.5 rounded-full border border-blue-800/50 uppercase tracking-tighter font-bold">Hvile</span>}</h3>
                                         <div className="flex gap-2">
                                             <button disabled={isReadOnly} onClick={() => handleToggleRest(day)} className={`p-2 rounded-full border transition-all ${isRest ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-slate-800 border-slate-700 text-slate-500'} ${isReadOnly ? 'hidden' : ''}`}><Bed className="w-4 h-4"/></button>
-                                            <button disabled={isReadOnly} onClick={() => { setEditingDay(day); setEditingSession(null); setModalOpen(true); }} className={`p-2 bg-blue-600 rounded-full text-white shadow-lg active:scale-95 transition-all ${isReadOnly ? 'hidden' : ''}`}><Plus className="w-4 h-4"/></button>
+                                            <button disabled={isReadOnly} onClick={() => { setEditingDay(day); setEditingSession(null); setModalOpen(true); }} className={`p-2 bg-blue-600 rounded-full text-white shadow-lg active:scale-95 transition-all hover:bg-blue-500 ${isReadOnly ? 'hidden' : ''}`}><Plus className="w-4 h-4"/></button>
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        {sessions.filter(s => !s.isRestDay).length === 0 && !isRest && <p className="text-slate-700 text-[10px] font-bold text-center py-4 border-2 border-dashed border-slate-800/50 rounded-xl">INGEN PLANLAGTE PAS</p>}
+                                        {sessions.filter(s => !s.isRestDay).length === 0 && !isRest && <p className="text-slate-700 text-[10px] font-bold text-center py-6 border-2 border-dashed border-slate-800/50 rounded-xl">INGEN PLANLAGTE PAS</p>}
                                         {sessions.filter(s => !s.isRestDay).map(s => {
                                             const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
                                             return (
-                                                <div key={s.id} onClick={() => !isReadOnly && (setEditingDay(day), setEditingSession(s), setModalOpen(true))} className={`bg-slate-800 p-3.5 rounded-xl border border-slate-700/50 flex justify-between items-center group transition-all ${!isReadOnly ? 'cursor-pointer active:scale-[0.98]' : 'opacity-80'}`}>
+                                                <div key={s.id} onClick={() => !isReadOnly && (setEditingDay(day), setEditingSession(s), setModalOpen(true))} className={`bg-slate-800 p-3.5 rounded-xl border border-slate-700/50 flex justify-between items-center group transition-all ${!isReadOnly ? 'cursor-pointer active:scale-[0.98] hover:bg-slate-750' : 'opacity-80'}`}>
                                                     <div className="flex items-center gap-3">
                                                         <div className={`w-1.5 h-8 rounded-full ${cat.color} shadow-sm`}></div>
                                                         <div>
                                                             <div className="text-sm font-bold text-white leading-none mb-1.5">{s.name}</div>
-                                                            <div className="flex items-center text-[10px] text-slate-500 gap-3 font-bold">
+                                                            <div className="flex items-center text-[10px] text-slate-500 gap-3 font-bold uppercase tracking-tight">
                                                                 <span className="flex items-center gap-1"><Clock className="w-2.5 h-2.5"/> {s.start}-{s.end}</span>
                                                                 <span className="flex items-center gap-1"><MapPin className="w-2.5 h-2.5"/> {s.location}</span>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    {!isReadOnly && <ChevronRight className="w-4 h-4 text-slate-700 group-hover:text-slate-400"/>}
+                                                    {!isReadOnly && <ChevronRight className="w-4 h-4 text-slate-700 group-hover:text-slate-400 transition-colors"/>}
                                                 </div>
                                             );
                                         })}
@@ -664,11 +703,11 @@ const App = () => {
 
             {/* NAV */}
             <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-3 px-10 flex justify-between z-50 max-w-md mx-auto rounded-t-3xl shadow-2xl">
-                <button onClick={() => setView('personal')} className={`flex flex-col items-center gap-1 transition-all ${view === 'personal' ? 'text-blue-500 scale-110' : 'text-slate-600'}`}>
-                    <Calendar className="w-6 h-6"/><span className="text-[9px] font-bold uppercase tracking-widest">Plan</span>
+                <button onClick={() => setView('personal')} className={`flex flex-col items-center gap-1.5 transition-all ${view === 'personal' ? 'text-blue-500 scale-110' : 'text-slate-600'}`}>
+                    <Calendar className="w-6 h-6"/><span className="text-[9px] font-black uppercase tracking-widest">Plan</span>
                 </button>
-                <button onClick={() => setView('team')} className={`flex flex-col items-center gap-1 transition-all ${view === 'team' ? 'text-blue-500 scale-110' : 'text-slate-600'}`}>
-                    <User className="w-6 h-6"/><span className="text-[9px] font-bold uppercase tracking-widest">Team</span>
+                <button onClick={() => setView('team')} className={`flex flex-col items-center gap-1.5 transition-all ${view === 'team' ? 'text-blue-500 scale-110' : 'text-slate-600'}`}>
+                    <User className="w-6 h-6"/><span className="text-[9px] font-black uppercase tracking-widest">Team</span>
                 </button>
             </nav>
 
@@ -695,9 +734,9 @@ const App = () => {
     );
 };
 
-// --- TEAM VIEW SUB COMPONENT ---
 const TeamScheduleView = ({ days, teamData }) => {
     const [selectedDay, setSelectedDay] = useState(days[0]);
+    
     const aggregated = useMemo(() => {
         const slots = {};
         FIGHTERS.forEach(f => {
@@ -720,7 +759,7 @@ const TeamScheduleView = ({ days, teamData }) => {
                 ))}
             </div>
             <div className="space-y-4">
-                {aggregated.length === 0 && <div className="text-center py-20 text-slate-700 italic border-2 border-dashed border-slate-900 rounded-2xl"><User className="w-10 h-10 mx-auto mb-2 opacity-20"/>Ingen fælles pas denne dag</div>}
+                {aggregated.length === 0 && <div className="text-center py-24 text-slate-700 italic border-2 border-dashed border-slate-900 rounded-2xl"><User className="w-10 h-10 mx-auto mb-2 opacity-20"/>Ingen fælles pas planlagt</div>}
                 {aggregated.map(slot => (
                     <div key={slot.time} className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-sm">
                         <div className="bg-slate-800/60 p-3 px-4 flex justify-between items-center border-b border-slate-800">
@@ -734,7 +773,7 @@ const TeamScheduleView = ({ days, teamData }) => {
                                         <div className={`w-1 h-5 rounded-full ${CATEGORIES.find(c => c.label === s.category)?.color || 'bg-slate-600'}`}></div>
                                         <span className="text-sm font-bold text-white">{s.fighter}</span>
                                     </div>
-                                    <span className="text-[10px] text-slate-500 uppercase">{s.name}</span>
+                                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">{s.name}</span>
                                 </div>
                             ))}
                         </div>
@@ -745,7 +784,6 @@ const TeamScheduleView = ({ days, teamData }) => {
     );
 };
 
-// --- SESSION MODAL SUB COMPONENT ---
 const SessionModal = ({ day, initialData, onClose, onSave, onDelete }) => {
     const [tab, setTab] = useState(initialData ? 'adhoc' : 'favorites');
     const [form, setForm] = useState({
@@ -760,31 +798,33 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete }) => {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 fade-in">
             <div className="bg-slate-900 w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col">
                 <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
-                    <h3 className="text-white font-bold text-lg flex items-center gap-2"><span className="w-1.5 h-6 bg-blue-600 rounded-full"></span>{day} - {initialData ? 'Rediger' : 'Nyt pas'}</h3>
+                    <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                        <span className="w-1.5 h-6 bg-blue-600 rounded-full"></span>
+                        {day} - {initialData ? 'Rediger pas' : 'Nyt pas'}
+                    </h3>
                     <button onClick={onClose} className="p-2 text-slate-500 hover:text-white transition-colors"><X className="w-6 h-6"/></button>
                 </div>
                 {!initialData && (
                     <div className="flex p-2 gap-2 bg-slate-950/50 shrink-0">
-                        <button onClick={() => setTab('favorites')} className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all ${tab === 'favorites' ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-800 text-slate-500'}`}>Vælg fra Katalog</button>
-                        <button onClick={() => setTab('adhoc')} className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all ${tab === 'adhoc' ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-800 text-slate-500'}`}>Opret Adhoc</button>
+                        <button onClick={() => setTab('favorites')} className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all ${tab === 'favorites' ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-800 text-slate-500'}`}>Hent fra Katalog</button>
+                        <button onClick={() => setTab('adhoc')} className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all ${tab === 'adhoc' ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-800 text-slate-500'}`}>Adhoc</button>
                     </div>
                 )}
                 <div className="p-6 space-y-6">
                     {tab === 'favorites' && !initialData ? (
                         <div className="space-y-2 max-h-72 overflow-y-auto pr-1 hide-scroll">
                             {GLOBAL_TEMPLATES.filter(t => t.day === day).map(t => (
-                                <button key={t.id} onClick={() => onSave({...t, id: null})} className="w-full text-left bg-slate-800 p-4 rounded-2xl border border-slate-700 hover:border-blue-500 transition-all flex justify-between items-center group">
+                                <button key={t.id} onClick={() => onSave({...t, id: null})} className="w-full text-left bg-slate-800 p-4 rounded-2xl border border-slate-700 hover:border-blue-500 transition-all flex justify-between items-center group active:scale-[0.98]">
                                     <div>
                                         <div className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">{t.name}</div>
                                         <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">{t.start}-{t.end} • {t.location}</div>
                                     </div>
-                                    <Plus className="w-5 h-5 text-slate-700 group-hover:text-blue-500"/>
+                                    <Plus className="w-5 h-5 text-slate-700 group-hover:text-blue-500 transition-colors"/>
                                 </button>
                             ))}
-                            {GLOBAL_TEMPLATES.filter(t => t.day === day).length === 0 && <p className="text-center text-slate-600 text-xs py-10">Ingen faste pas denne ugedag.</p>}
                         </div>
                     ) : (
-                        <div className="space-y-5">
+                        <div className="space-y-5 font-bold">
                             <div>
                                 <label className="block text-[10px] uppercase font-black text-slate-600 mb-3 tracking-widest">Aktivitet</label>
                                 <div className="flex flex-wrap gap-2">
@@ -795,7 +835,7 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete }) => {
                             </div>
                             <div>
                                 <label className="block text-[10px] uppercase font-black text-slate-600 mb-2 tracking-widest">Navn</label>
-                                <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="fx 'Sparring'" className="w-full bg-slate-950 border border-slate-800 p-4 rounded-2xl text-white outline-none focus:ring-2 focus:ring-blue-600 transition-all"/>
+                                <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="fx 'Sparring'" className="w-full bg-slate-950 border border-slate-800 p-4 rounded-2xl text-white outline-none focus:ring-2 focus:ring-blue-600 transition-all shadow-inner"/>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
@@ -812,7 +852,7 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete }) => {
                 </div>
                 <div className="p-5 border-t border-slate-800 bg-slate-800/30 flex gap-3 shrink-0">
                     {initialData && <button onClick={() => onDelete(initialData.id)} className="p-4 bg-red-900/20 text-red-500 rounded-2xl hover:bg-red-900/40 transition-all"><Trash2 className="w-6 h-6"/></button>}
-                    <button onClick={() => onSave(form)} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all hover:bg-blue-500">Gem Pas</button>
+                    <button onClick={() => onSave(form)} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all hover:bg-blue-500">Gem Træning</button>
                 </div>
             </div>
         </div>
