@@ -3,7 +3,7 @@ import {
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -163,7 +163,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.27</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.28</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -236,7 +236,8 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80] flex items-center justify-center p-4 fade-in">
             <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-700 p-6">
                 <h3 className="text-white font-bold text-lg mb-2 flex items-center"><MessageSquarePlus className="w-5 h-5 mr-2 text-blue-500"/>Send Feedback</h3>
-                <p className="text-xs text-slate-500 mb-4">Kontekst: <span className="text-blue-400 font-mono">{currentContext}</span></p>
+                
+                {/* Context Hidden from UI but passed in background */}
                 
                 <div className="bg-slate-800/50 p-3 rounded-xl mb-4 text-xs text-slate-400 space-y-1">
                     <p className="font-bold text-slate-300">Hvad har du på hjerte?</p>
@@ -269,6 +270,7 @@ const AdminDashboard = ({ onClose }) => {
     const [tasks, setTasks] = useState([]);
     const [feedback, setFeedback] = useState([]);
     const [view, setView] = useState('board'); // 'board', 'list', 'feedback'
+    const [filterTag, setFilterTag] = useState('ALL'); // 'ALL', 'APP', 'TEAM'
     
     // Task Form State
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -307,6 +309,9 @@ const AdminDashboard = ({ onClose }) => {
 
         return () => { unsubBacklog(); unsubFeedback(); }
     }, []);
+
+    // Filter Logic
+    const filteredTasks = tasks.filter(t => filterTag === 'ALL' || t.tag === filterTag);
 
     const saveTask = async () => {
         if (!form.title) return;
@@ -379,10 +384,15 @@ const AdminDashboard = ({ onClose }) => {
         setView('board'); 
     }
 
-    const copyDataToClipboard = () => {
-        const data = { backlog: tasks, feedback: feedback, exportedAt: new Date().toISOString() };
-        navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-        alert("Data kopieret!");
+    const copyDataToClipboard = async () => {
+        try {
+            const data = { backlog: tasks, feedback: feedback, exportedAt: new Date().toISOString() };
+            await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+            alert("Data kopieret!");
+        } catch (e) {
+            console.error("Clipboard Error:", e);
+            alert("Kunne ikke kopiere. Fejl: " + e.message);
+        }
     };
 
     // --- DRAG & DROP HANDLERS ---
@@ -395,17 +405,29 @@ const AdminDashboard = ({ onClose }) => {
     };
  
     const drop = async () => {
-        const copyListItems = [...tasks];
+        const copyListItems = [...filteredTasks]; // Only reorder visible
         const dragItemContent = copyListItems[dragItem.current];
         copyListItems.splice(dragItem.current, 1);
         copyListItems.splice(dragOverItem.current, 0, dragItemContent);
         
         dragItem.current = null;
         dragOverItem.current = null;
-        setTasks(copyListItems); // Optimistic UI
+        
+        // Optimistic UI update on filtered set might be tricky if not careful, 
+        // but sufficient for MVP constraints
+        setTasks(prev => {
+             // This is complex for filtered list, so for now we just rely on visual update 
+             // and saving the order value. In a real app we'd map back to full list.
+             // For constraint simplicity: We only support full reorder when Filter is ALL.
+             if (filterTag !== 'ALL') return prev;
+             return copyListItems;
+        });
 
-        // Persist Order (Simpel implementering: Update alle der er ændret)
-        // For at undgå for mange writes, opdaterer vi bare alle 'order' felter i batch i denne version
+        if (filterTag !== 'ALL') {
+            alert("Sortering virker kun når filtret er 'Alle'");
+            return;
+        }
+
         try {
             const batch = writeBatch(db);
             copyListItems.forEach((item, index) => {
@@ -424,17 +446,32 @@ const AdminDashboard = ({ onClose }) => {
     return (
         <div className="fixed inset-0 bg-slate-950 z-[60] overflow-y-auto pb-safe">
             {/* HEADER */}
-            <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-10 flex justify-between items-center shadow-md">
-                <div className="flex items-center">
-                    <button onClick={onClose} className="mr-3 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"><ArrowLeft className="w-5 h-5"/></button>
-                    <div>
-                        <h2 className="text-white font-bold text-lg">Admin Center</h2>
-                        <p className="text-xs text-slate-500">RTE Dashboard</p>
+            <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-10 flex flex-col gap-4 shadow-md">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center">
+                        <button onClick={onClose} className="mr-3 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"><ArrowLeft className="w-5 h-5"/></button>
+                        <div>
+                            <h2 className="text-white font-bold text-lg">Admin Center</h2>
+                            <p className="text-xs text-slate-500">RTE Dashboard</p>
+                        </div>
                     </div>
+                    <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
+                        <Copy className="w-3 h-3 mr-2"/> Kopier til AI
+                    </button>
                 </div>
-                <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
-                    <Copy className="w-3 h-3 mr-2"/> Kopier til AI
-                </button>
+                
+                {/* GLOBAL FILTERS */}
+                <div className="flex gap-2 bg-slate-800/50 p-1 rounded-lg self-start">
+                    {['ALL', 'APP', 'TEAM'].map(tag => (
+                        <button 
+                            key={tag} 
+                            onClick={() => setFilterTag(tag)}
+                            className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${filterTag === tag ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
+                        >
+                            {tag === 'ALL' ? 'Alle' : tag}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             <div className="p-4 max-w-6xl mx-auto">
@@ -461,10 +498,10 @@ const AdminDashboard = ({ onClose }) => {
                             {['backlog', 'todo', 'doing', 'done'].map(status => (
                                 <div key={status} className="bg-slate-900/50 rounded-xl border border-slate-800 p-3 min-h-[300px]">
                                     <h3 className="text-slate-400 text-xs font-bold uppercase mb-3 flex justify-between items-center px-1">
-                                        {status} <span className="bg-slate-800 px-2 rounded-full border border-slate-700">{tasks.filter(t => t.status === status).length}</span>
+                                        {status} <span className="bg-slate-800 px-2 rounded-full border border-slate-700">{filteredTasks.filter(t => t.status === status).length}</span>
                                     </h3>
                                     <div className="space-y-2">
-                                        {tasks.filter(t => t.status === status).map(task => (
+                                        {filteredTasks.filter(t => t.status === status).map(task => (
                                             <div key={task.id} onClick={() => editTask(task)} className="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-sm cursor-pointer hover:border-blue-500 transition-all group hover:bg-slate-700">
                                                 <div className="flex justify-between items-start mb-2">
                                                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.tag === 'APP' ? 'bg-indigo-900 text-indigo-200' : 'bg-orange-900 text-orange-200'}`}>{task.tag}</span>
@@ -485,20 +522,20 @@ const AdminDashboard = ({ onClose }) => {
                 {view === 'list' && (
                     <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden fade-in">
                         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
-                            <h3 className="font-bold text-white">Prioriteret Liste (Træk for at sortere)</h3>
+                            <h3 className="font-bold text-white">Prioriteret Liste {filterTag !== 'ALL' && '(Sortering deaktiveret ved filtrering)'}</h3>
                             <button onClick={() => { setEditingTask(null); resetForm(); setIsFormOpen(true); }} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center"><Plus className="w-3 h-3 mr-1"/> Ny</button>
                         </div>
                         <div className="divide-y divide-slate-800">
-                            {tasks.map((task, index) => (
+                            {filteredTasks.map((task, index) => (
                                 <div 
                                     key={task.id} 
                                     className="p-3 flex items-center bg-slate-900 hover:bg-slate-800 transition-colors group"
                                     onDragStart={(e) => dragStart(e, index)}
                                     onDragEnter={(e) => dragEnter(e, index)}
                                     onDragEnd={drop}
-                                    draggable
+                                    draggable={filterTag === 'ALL'}
                                 >
-                                    <div className="mr-3 text-slate-600 cursor-grab active:cursor-grabbing hover:text-slate-400 p-2">
+                                    <div className={`mr-3 text-slate-600 p-2 ${filterTag === 'ALL' ? 'cursor-grab active:cursor-grabbing hover:text-slate-400' : 'opacity-30 cursor-not-allowed'}`}>
                                         <GripVertical className="w-5 h-5"/>
                                     </div>
                                     <div className="flex-1 cursor-pointer" onClick={() => editTask(task)}>
@@ -653,7 +690,7 @@ const App = () => {
   const [editingDay, setEditingDay] = useState(null);
   const [editingSession, setEditingSession] = useState(null); 
   const [confirmDialog, setConfirmDialog] = useState(null);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackContext, setFeedbackContext] = useState(null); // String or null
   const [adminOpen, setAdminOpen] = useState(false);
 
   // Auth & Init
@@ -835,9 +872,12 @@ const App = () => {
   // Helper for Context Name
   const getCurrentContextName = () => {
       if (view === 'team') return 'Team View';
-      if (isStandardMode) return 'Standarduge Edit';
+      if (isStandardMode) return `Standarduge (${view === 'team' ? 'Team' : 'Min'})`;
       return 'Min Plan';
   };
+
+  // Trigger feedback with explicit context
+  const openFeedback = (ctx) => setFeedbackContext(ctx || getCurrentContextName());
 
   return (
     <div className="bg-slate-950 text-slate-200 min-h-screen pb-24 font-sans selection:bg-blue-500/30">
@@ -978,18 +1018,18 @@ const App = () => {
       <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 pb-safe z-50">
         <div className="max-w-md mx-auto flex justify-between items-center p-2 px-6">
             <NavButton icon={Calendar} label="Min Plan" active={view === 'personal'} onClick={() => setView('personal')} />
-            <button onClick={() => setFeedbackOpen(true)} className="flex flex-col items-center justify-center p-2 text-slate-500 hover:text-blue-400">
+            <button onClick={() => openFeedback()} className="flex flex-col items-center justify-center p-2 text-slate-500 hover:text-blue-400">
                 <div className="bg-slate-800 p-2 rounded-full mb-1 border border-slate-700"><MessageSquarePlus className="w-5 h-5" /></div>
             </button>
             <NavButton icon={User} label="Teamet" active={view === 'team'} onClick={() => setView('team')} />
         </div>
       </div>
 
-      {modalOpen && <SessionModal day={editingDay} initialData={editingSession} onClose={() => setModalOpen(false)} onSave={handleSaveSession} onDelete={handleDeleteSession} isStandardMode={isStandardMode} />}
+      {modalOpen && <SessionModal day={editingDay} initialData={editingSession} onClose={() => setModalOpen(false)} onSave={handleSaveSession} onDelete={handleDeleteSession} isStandardMode={isStandardMode} onFeedback={(ctx) => openFeedback(ctx)} />}
       {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
       
       {/* NEW SYSTEM MODALS */}
-      {feedbackOpen && <FeedbackModal user={user} currentContext={getCurrentContextName()} onClose={() => setFeedbackOpen(false)} />}
+      {feedbackContext && <FeedbackModal user={user} currentContext={feedbackContext} onClose={() => setFeedbackContext(null)} />}
       {adminOpen && <AdminDashboard onClose={() => setAdminOpen(false)} />}
     </div>
   );
@@ -1062,7 +1102,7 @@ const TeamSchedule = ({ days, teamData }) => {
     );
 };
 
-const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardMode }) => {
+const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardMode, onFeedback }) => {
     const [tab, setTab] = useState(initialData ? 'adhoc' : 'favorites');
     const [form, setForm] = useState({
         name: initialData?.name || '',
@@ -1090,7 +1130,15 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
              <div className="bg-slate-900 w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50 shrink-0">
                     <h3 className="text-white font-bold text-lg flex items-center"><span className="w-1 h-6 bg-blue-500 rounded-full mr-3"></span> {day}</h3>
-                    <button onClick={onClose} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+                    <div className="flex gap-2">
+                        {/* FEEDBACK BUTTON IN MODAL */}
+                        {isExisting && (
+                            <button onClick={() => onFeedback(`Session: ${initialData.name} (${day})`)} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white border border-slate-700">
+                                <MessageSquarePlus className="w-5 h-5"/>
+                            </button>
+                        )}
+                        <button onClick={onClose} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+                    </div>
                 </div>
                 {!initialData && (
                     <div className="flex p-2 bg-slate-800/30 gap-2 shrink-0">
