@@ -118,6 +118,61 @@ const getISOWeek = () => {
   return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
 };
 
+// Calculate actual date for a given week number and day name
+const getDateForWeekDay = (weekNumber, dayName) => {
+    const dayIndex = DAYS.indexOf(dayName); // 0 = Mandag
+    if (dayIndex === -1) return null;
+
+    const simpleDate = new Date();
+    const currentYear = simpleDate.getFullYear();
+    const simple = new Date(currentYear, 0, 1 + (weekNumber - 1) * 7);
+    const dow = simple.getDay();
+    const ISOweekStart = simple;
+    if (dow <= 4)
+        ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+    else
+        ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+    
+    // ISOweekStart is now Monday of the given week
+    const targetDate = new Date(ISOweekStart);
+    targetDate.setDate(ISOweekStart.getDate() + dayIndex);
+    
+    return targetDate;
+};
+
+// Returns { "Mandag": "12. feb", "Tirsdag": ... }
+const getWeekDateMap = (weekNumber) => {
+    const map = {};
+    DAYS.forEach(day => {
+        const date = getDateForWeekDay(weekNumber, day);
+        if (date) {
+            map[day] = date.toLocaleDateString('da-DK', { day: 'numeric', month: 'short' }).replace('.', '');
+        }
+    });
+    return map;
+};
+
+// Returns { "Mandag": "12/2", ... } for compact view
+const getCompactWeekDateMap = (weekNumber) => {
+    const map = {};
+    DAYS.forEach(day => {
+        const date = getDateForWeekDay(weekNumber, day);
+        if (date) {
+            map[day] = `${date.getDate()}/${date.getMonth() + 1}`;
+        }
+    });
+    return map;
+};
+
+const addMinutes = (timeStr, minutes) => {
+    if (!timeStr) return '';
+    const [h, m] = timeStr.split(':').map(Number);
+    const date = new Date();
+    date.setHours(h, m);
+    date.setMinutes(date.getMinutes() + minutes);
+    return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+}
+
 const checkInAppBrowser = () => {
     const ua = navigator.userAgent || navigator.vendor || window.opera;
     return (ua.indexOf("FBAN") > -1) || (ua.indexOf("FBAV") > -1) || (ua.indexOf("Instagram") > -1);
@@ -299,7 +354,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.57</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.58</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -1023,6 +1078,9 @@ const App = () => {
   const [feedbackContext, setFeedbackContext] = useState(null); 
   const [adminOpen, setAdminOpen] = useState(false);
 
+  // Date Logic
+  const [weekDates, setWeekDates] = useState({});
+
   useEffect(() => {
     setIsMobile(isMobileDevice());
     if (checkInAppBrowser()) { setIsBrowserBlocked(true); setAuthLoading(false); return; }
@@ -1050,6 +1108,11 @@ const App = () => {
     });
     return () => unsubAuth();
   }, []);
+
+  // Update dates when week changes
+  useEffect(() => {
+    setWeekDates(getWeekDateMap(currentWeek));
+  }, [currentWeek]);
 
   // SEPARATE LOGIN HANDLERS
   const triggerLoginPopup = async () => {
@@ -1105,6 +1168,21 @@ const App = () => {
   const handleSaveSession = async (session) => {
     const newData = JSON.parse(JSON.stringify(scheduleData));
     if (!newData[editingDay]) newData[editingDay] = [];
+    
+    // ARCHITECTURAL CHANGE: Calculate and save session date
+    // This allows future calendar views to query by exact date without knowing the week number structure
+    if (!isStandardMode) {
+        const sessionDate = getDateForWeekDay(currentWeek, editingDay);
+        if (sessionDate) {
+            // Set time to session start time if available, otherwise noon
+            if (session.start) {
+                const [h, m] = session.start.split(':').map(Number);
+                sessionDate.setHours(h, m);
+            }
+            session.sessionDate = sessionDate.toISOString();
+        }
+    }
+
     if (session.id) {
         const idx = newData[editingDay].findIndex(s => s.id === session.id);
         if (idx > -1) newData[editingDay][idx] = session;
@@ -1297,7 +1375,10 @@ const App = () => {
                     <div key={day} className={`mb-3 rounded-2xl p-4 border transition-all shadow-md ${isRestDay ? 'bg-slate-900/30 border-slate-800' : 'bg-slate-900 border-slate-800'}`}>
                         <div className="flex justify-between items-center mb-3">
                             <div className="flex items-center space-x-2">
-                                <h3 className={`text-white font-bold text-lg ${isReadOnly ? 'text-slate-400' : ''}`}>{day}</h3>
+                                <h3 className={`text-white font-bold text-lg ${isReadOnly ? 'text-slate-400' : ''}`}>
+                                    {day} 
+                                    {!isStandardMode && weekDates[day] && <span className="text-slate-500 text-sm ml-2 font-medium">d. {weekDates[day]}</span>}
+                                </h3>
                                 {isRestDay && <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">HVILEDAG</span>}
                             </div>
                             <div className="flex space-x-1">
@@ -1333,7 +1414,7 @@ const App = () => {
              })}
           </div>
         ) : (
-             <TeamSchedule days={DAYS} teamData={teamData} />
+             <TeamSchedule days={DAYS} teamData={teamData} currentWeek={currentWeek} isStandardMode={isStandardMode} />
         )}
       </div>
 
@@ -1347,7 +1428,7 @@ const App = () => {
         </div>
       </div>
 
-      {modalOpen && <SessionModal day={editingDay} initialData={editingSession} onClose={() => setModalOpen(false)} onSave={handleSaveSession} onDelete={handleDeleteSession} isStandardMode={isStandardMode} onFeedback={(ctx) => openFeedback(ctx)} />}
+      {modalOpen && <SessionModal day={editingDay} initialData={editingSession} existingSessions={scheduleData[editingDay] || []} onClose={() => setModalOpen(false)} onSave={handleSaveSession} onDelete={handleDeleteSession} isStandardMode={isStandardMode} onFeedback={(ctx) => openFeedback(ctx)} />}
       {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
       {feedbackContext && <FeedbackModal user={user} currentContext={feedbackContext} onClose={() => setFeedbackContext(null)} />}
       {adminOpen && <AdminDashboard onClose={() => setAdminOpen(false)} />}
@@ -1362,8 +1443,21 @@ const NavButton = ({ icon: Icon, label, active, onClick }) => (
     </button>
 );
 
-const TeamSchedule = ({ days, teamData }) => {
-    const [selectedDay, setSelectedDay] = useState('Mandag');
+const TeamSchedule = ({ days, teamData, currentWeek, isStandardMode }) => {
+    // 2. FEATURE: DEFAULT TO CURRENT DAY
+    const getCurrentDayName = () => {
+        const dayIndex = new Date().getDay(); // 0 is Sunday
+        const day = dayIndex === 0 ? 'Søndag' : DAYS[dayIndex - 1];
+        return day;
+    };
+    
+    const [selectedDay, setSelectedDay] = useState(getCurrentDayName);
+    const [compactDates, setCompactDates] = useState({});
+
+    useEffect(() => {
+        setCompactDates(getCompactWeekDateMap(currentWeek));
+    }, [currentWeek]);
+
     const timeSlots = {};
     Object.keys(teamData).forEach(fighter => {
         const data = teamData[fighter];
@@ -1382,7 +1476,10 @@ const TeamSchedule = ({ days, teamData }) => {
         <div className="fade-in">
              <div className="bg-slate-900/50 mx-4 mb-4 rounded-xl p-2 flex space-x-2 overflow-x-auto hide-scroll">
                  {days.map(d => (
-                     <button key={d} onClick={() => setSelectedDay(d)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-bold transition-all border ${selectedDay === d ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>{d}</button>
+                     <button key={d} onClick={() => setSelectedDay(d)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-bold transition-all border flex flex-col items-center ${selectedDay === d ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                         <span>{d.slice(0, 3)}</span>
+                         {!isStandardMode && compactDates[d] && <span className="text-[10px] opacity-70">{compactDates[d]}</span>}
+                     </button>
                  ))}
              </div>
              <div className="px-4 space-y-4 pb-32">
@@ -1421,7 +1518,7 @@ const TeamSchedule = ({ days, teamData }) => {
     );
 };
 
-const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardMode, onFeedback }) => {
+const SessionModal = ({ day, initialData, existingSessions, onClose, onSave, onDelete, isStandardMode, onFeedback }) => {
     const [tab, setTab] = useState(initialData ? 'adhoc' : 'favorites');
     const [form, setForm] = useState({
         name: initialData?.name || '',
@@ -1433,7 +1530,15 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
         reason: initialData?.cancellationReason || ''
     });
 
-    const isExisting = !!initialData; 
+    const isExisting = !!initialData;
+    
+    // 3. FEATURE: AUTO-CALCULATE END TIME
+    const handleStartChange = (e) => {
+        const newStart = e.target.value;
+        const newEnd = addMinutes(newStart, 90);
+        setForm({ ...form, start: newStart, end: newEnd });
+    };
+
     const submit = () => {
         onSave({
             id: initialData?.id,
@@ -1443,6 +1548,10 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
             cancellationTime: form.cancel ? (initialData?.cancellationTime || new Date().toISOString()) : null
         });
     };
+    
+    // 4. FEATURE: HIDE CHOSEN SESSIONS
+    const existingNames = existingSessions.map(s => s.name);
+    const availableTemplates = GLOBAL_TEMPLATES.filter(t => t.day === day && !existingNames.includes(t.name));
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 fade-in">
@@ -1467,7 +1576,7 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
                 <div className="p-5 space-y-6 overflow-y-auto">
                     {tab === 'favorites' && !initialData ? (
                         <div className="space-y-2">
-                             {GLOBAL_TEMPLATES.filter(t => t.day === day).map(t => {
+                             {availableTemplates.map(t => {
                                  const cat = CATEGORIES.find(c => c.label === t.category) || CATEGORIES[6];
                                  return (
                                      <button key={t.id} onClick={() => onSave({...t, id: null})} className={`w-full text-left bg-slate-950 p-3 rounded-xl border ${cat.border} border-l-4 hover:bg-slate-900 transition-colors`}>
@@ -1476,7 +1585,7 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
                                      </button>
                                  );
                              })}
-                             {GLOBAL_TEMPLATES.filter(t => t.day === day).length === 0 && <p className="text-slate-500 text-xs italic text-center">Ingen faste pas denne dag.</p>}
+                             {availableTemplates.length === 0 && <p className="text-slate-500 text-xs italic text-center">Ingen flere faste pas at vælge.</p>}
                         </div>
                     ) : (
                         <div className="space-y-4">
@@ -1496,7 +1605,7 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Start</label>
-                                    <input disabled={isExisting} type="time" value={form.start} onChange={e => setForm({...form, start: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
+                                    <input disabled={isExisting} type="time" value={form.start} onChange={handleStartChange} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
                                 </div>
                                 <div>
                                     <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Slut</label>
