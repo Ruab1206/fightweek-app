@@ -3,7 +3,7 @@ import {
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw, MoreHorizontal, MoreVertical
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -33,7 +33,7 @@ const CATEGORIES = [
   { label: 'Andet', color: 'bg-slate-500', border: 'border-slate-500' }
 ];
 
-// Stamdata (Kataloget) - V12 Liste
+// Stamdata (Kataloget)
 const GLOBAL_TEMPLATES = [
   { id: 'm1', day: 'Mandag', name: 'Wall Wrestling', category: 'Brydning', start: '15:00', end: '16:00', location: 'Burnell' },
   { id: 'm2', day: 'Mandag', name: 'Kickboxing Adv', category: 'Kickboxing', start: '17:00', end: '19:00', location: 'Rumble' },
@@ -67,7 +67,6 @@ const GLOBAL_TEMPLATES = [
   { id: 'su2', day: 'Søndag', name: 'Kickboxing All', category: 'Kickboxing', start: '13:30', end: '15:00', location: 'Rumble' },
 ];
 
-// USER MAPPING & CONFIGURATION
 const USER_MAPPING = {
   'carolinemollerh@gmail.com': { name: 'Caroline', role: 'fighter' },
   'sankarem00@gmail.com': { name: 'San', role: 'fighter' },
@@ -95,7 +94,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Data Path Helper
 const ROOT_COLLECTION = `artifacts/production/users`; 
 const PUBLIC_DATA_PATH = `artifacts/production/public/data`; 
 
@@ -112,7 +110,6 @@ const formatCancellationTime = (isoString) => {
     return dayName;
 };
 
-// Helper: Calculate ISO Week Number
 const getISOWeek = () => {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
@@ -121,21 +118,15 @@ const getISOWeek = () => {
   return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
 };
 
-// Helper: Detect In-App Browser & Mobile
 const checkInAppBrowser = () => {
     const ua = navigator.userAgent || navigator.vendor || window.opera;
     return (ua.indexOf("FBAN") > -1) || (ua.indexOf("FBAV") > -1) || (ua.indexOf("Instagram") > -1);
 };
 
-const isMobileDevice = () => {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-};
+const isMobileDevice = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const getDeviceInfo = () => navigator.userAgent;
 
-const getDeviceInfo = () => {
-    return navigator.userAgent;
-};
-
-// --- ADVANCED CSV PARSER (Excel Copy-Paste Friendly) ---
+// --- CSV PARSER & GENERATOR (DK Excel Compatible) ---
 const parseCSV = (text) => {
     if (!text) return [];
     
@@ -145,14 +136,11 @@ const parseCSV = (text) => {
     if (firstLine.includes('\t')) delimiter = '\t';
     else if (firstLine.includes(',') && !firstLine.includes(';')) delimiter = ',';
 
-    console.log(`Detected delimiter: '${delimiter === '\t' ? 'TAB' : delimiter}'`);
-
     const result = [];
     let row = [];
     let current = "";
     let inQuotes = false;
     
-    // Normalize line endings
     const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     
     for (let i = 0; i < cleanText.length; i++) {
@@ -162,7 +150,7 @@ const parseCSV = (text) => {
         if (inQuotes) {
             if (char === '"' && nextChar === '"') {
                 current += '"';
-                i++; // Skip escape quote
+                i++; 
             } else if (char === '"') {
                 inQuotes = false;
             } else {
@@ -186,7 +174,6 @@ const parseCSV = (text) => {
             }
         }
     }
-    // Handle last item/row
     if (current || row.length > 0) {
         row.push(current);
         if (row.length > 1 || (row.length === 1 && row[0] !== '')) result.push(row);
@@ -194,7 +181,6 @@ const parseCSV = (text) => {
 
     if (result.length === 0) return [];
     
-    // Headers handling
     const headers = result[0].map(h => h.trim().replace(/^"|"$/g, ''));
     
     return result.slice(1).map(values => {
@@ -209,7 +195,8 @@ const parseCSV = (text) => {
 
 const generateCSV = (tasks) => {
     const headers = ['Titel', 'Status', 'Beskrivelse', 'Acceptkriterier', 'Noter', 'Datafelter', 'Release', 'Tag', 'Prioritet', 'ID', 'Order'];
-    const separator = ';';
+    // Forcing SEMICOLON for Danish Excel compatibility
+    const separator = ';'; 
     const csvRows = [headers.join(separator)];
 
     tasks.forEach(task => {
@@ -227,16 +214,19 @@ const generateCSV = (tasks) => {
             task.order || 0
         ];
 
-        // Safe CSV escaping: Convert to string, escape quotes, wrap in quotes
         const row = fields.map(field => {
-            const val = String(field || '').replace(/"/g, '""');
+            // Convert to string, replace null/undefined with empty string
+            let val = String(field || '');
+            // Escape existing double quotes by doubling them
+            val = val.replace(/"/g, '""');
+            // Wrap strictly in double quotes
             return `"${val}"`;
         });
 
         csvRows.push(row.join(separator));
     });
 
-    // Prepend BOM for Excel UTF-8 compatibility
+    // Add Byte Order Mark (BOM) for UTF-8 compatibility in Excel
     return '\uFEFF' + csvRows.join('\n');
 };
 
@@ -257,7 +247,7 @@ const generateFeedbackCSV = (feedbackItems) => {
         ];
 
         const row = fields.map(field => {
-            const val = String(field || '').replace(/"/g, '""');
+            let val = String(field || '').replace(/"/g, '""');
             return `"${val}"`;
         });
         csvRows.push(row.join(separator));
@@ -265,7 +255,6 @@ const generateFeedbackCSV = (feedbackItems) => {
     
     return '\uFEFF' + csvRows.join('\n');
 };
-
 
 // --- COMPONENTS ---
 
@@ -283,13 +272,13 @@ const BrowserBlockScreen = () => {
                 <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Smartphone className="w-8 h-8 text-red-500" />
                 </div>
-                <h2 className="text-white font-bold text-xl mb-2">Messenger Browseren dur ikke</h2>
+                <h2 className="text-white font-bold text-xl mb-2">Brug Chrome eller Safari</h2>
                 <p className="text-slate-400 text-sm mb-6 leading-relaxed">
-                    Google tillader ikke login direkte i Messenger. Du skal åbne appen i din rigtige browser (Safari eller Chrome).
+                    Google tillader ikke login direkte i Messenger.
                 </p>
                 <button onClick={copyLink} className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
                     {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                    {copied ? "Link kopieret!" : "Kopier Link og åbn selv"}
+                    {copied ? "Link kopieret!" : "Kopier Link"}
                 </button>
             </div>
         </div>
@@ -299,7 +288,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.45</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.50</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -320,7 +309,7 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
 
       <button onClick={onLoginRedirect} className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2">
         <MousePointerClick className="w-3 h-3 mr-1" />
-        Virker knappen ikke? Tryk her (Redirect)
+        Alternativ Login (Redirect)
       </button>
     </div>
   </div>
@@ -342,7 +331,6 @@ const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
   </div>
 );
 
-// --- FEEDBACK MODAL ---
 const FeedbackModal = ({ user, currentContext, onClose }) => {
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
@@ -362,10 +350,10 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
                 order: -Date.now() 
             });
             onClose();
-            alert("Tak for dit input! Det er sendt til teamet.");
+            alert("Tak for dit input!");
         } catch (e) {
-            console.error("Fejl ved afsendelse:", e);
-            alert("Der skete en fejl. Prøv igen.");
+            console.error("Fejl:", e);
+            alert("Fejl. Prøv igen.");
         }
         setSending(false);
     };
@@ -374,15 +362,6 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80] flex items-center justify-center p-4 fade-in">
             <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-700 p-6">
                 <h3 className="text-white font-bold text-lg mb-2 flex items-center"><MessageSquarePlus className="w-5 h-5 mr-2 text-blue-500"/>Send Feedback</h3>
-                
-                <div className="bg-slate-800/50 p-3 rounded-xl mb-4 text-xs text-slate-400 space-y-1">
-                    <p className="font-bold text-slate-300">Hvad har du på hjerte?</p>
-                    <ul className="list-disc pl-4 space-y-1">
-                        <li>Feedback til træningen eller teamet?</li>
-                        <li>Fandt du en fejl i appen?</li>
-                        <li>Har du en god idé til en ny funktion?</li>
-                    </ul>
-                </div>
                 <textarea 
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm focus:ring-2 focus:ring-blue-600 outline-none mb-4"
                     rows="4"
@@ -401,38 +380,25 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
     );
 };
 
-// --- IMPORT CSV MODAL ---
 const ImportModal = ({ onClose, onImport }) => {
     const [text, setText] = useState('');
-    const [mode, setMode] = useState('append'); // 'append' | 'replace'
+    const [mode, setMode] = useState('append'); 
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
             <div className="bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl p-6">
                  <h3 className="text-white font-bold text-lg mb-4">Importer Backlog (CSV)</h3>
-                 <p className="text-slate-500 text-xs mb-4">Understøtter nu både Excel (tabs) og semikolon-format.</p>
-                 
+                 <p className="text-slate-500 text-xs mb-4">Understøtter Excel (tabs) og semikolon-format.</p>
                  <div className="flex gap-4 mb-4">
                      <button onClick={() => setMode('append')} className={`flex-1 p-3 rounded-xl border flex flex-col items-center ${mode === 'append' ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
                          <Plus className="w-6 h-6 mb-2"/>
                          <span className="font-bold text-sm">Tilføj til liste</span>
-                         <span className="text-[10px] opacity-70">Bevarer eksisterende</span>
                      </button>
                      <button onClick={() => setMode('replace')} className={`flex-1 p-3 rounded-xl border flex flex-col items-center ${mode === 'replace' ? 'bg-red-900/30 border-red-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
                          <RefreshCw className="w-6 h-6 mb-2"/>
-                         <span className="font-bold text-sm">Erstat hele listen</span>
-                         <span className="text-[10px] opacity-70">Sletter alt før import</span>
+                         <span className="font-bold text-sm">Erstat liste</span>
                      </button>
                  </div>
-
-                 {mode === 'replace' && (
-                     <div className="bg-red-900/30 border border-red-800 p-3 rounded-lg mb-4 text-xs text-red-200 flex items-start">
-                         <AlertCircle className="w-4 h-4 mr-2 shrink-0 mt-0.5"/>
-                         <p>Advarsel: Dette vil slette ALLE nuværende opgaver i backloggen og erstatte dem med indholdet herunder. Feedback slettes ikke.</p>
-                     </div>
-                 )}
-
-                 <p className="text-slate-400 text-xs mb-2">Indsæt CSV data (inkl. overskrifter):</p>
                  <textarea 
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-300 text-xs font-mono h-32 focus:ring-2 focus:ring-blue-600 outline-none mb-4"
                     placeholder="Titel;Status;Beskrivelse..."
@@ -458,7 +424,7 @@ const AdminDashboard = ({ onClose }) => {
     
     // Filters
     const [filterTag, setFilterTag] = useState('ALL'); 
-    const [statusFilter, setStatusFilter] = useState('active'); // 'active', 'all', 'done'
+    const [statusFilter, setStatusFilter] = useState('active'); 
     
     // Task Form State
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -466,20 +432,14 @@ const AdminDashboard = ({ onClose }) => {
     const [editingTask, setEditingTask] = useState(null);
     const [linkedFeedbackId, setLinkedFeedbackId] = useState(null);
     const [adminConfirm, setAdminConfirm] = useState(null);
+    const [showMenu, setShowMenu] = useState(false); // Mobile Menu State
 
     const [form, setForm] = useState({
-        title: '',
-        status: 'backlog', 
-        priority: 'Medium',
-        tag: 'APP',
-        desc: '',
-        notes: '',
-        acceptance: '',
-        dataFields: '',
-        release: ''
+        title: '', status: 'backlog', priority: 'Medium', tag: 'APP',
+        desc: '', notes: '', acceptance: '', dataFields: '', release: ''
     });
 
-    // Drag and Drop State
+    const isMobile = isMobileDevice();
     const dragItem = useRef();
     const dragOverItem = useRef();
 
@@ -489,28 +449,23 @@ const AdminDashboard = ({ onClose }) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
             items.sort((a,b) => (a.order || 0) - (b.order || 0));
             setTasks(items);
-        }, (err) => console.error("Backlog Error:", err));
+        });
 
         const qFeedback = query(collection(db, PUBLIC_DATA_PATH, 'feedback'));
         const unsubFeedback = onSnapshot(qFeedback, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
             items.sort((a,b) => (a.order || 0) - (b.order || 0));
             setFeedback(items);
-        }, (err) => console.error("Feedback Error:", err));
+        });
 
         return () => { unsubBacklog(); unsubFeedback(); }
     }, []);
 
     const filteredTasks = tasks.filter(t => {
-        // Tag Filter
         const tagMatch = filterTag === 'ALL' || t.tag === filterTag;
-        
-        // Status Filter
         let statusMatch = true;
         if (statusFilter === 'active') statusMatch = t.status !== 'done';
         if (statusFilter === 'done') statusMatch = t.status === 'done';
-        // 'all' matches everything
-        
         return tagMatch && statusMatch;
     });
 
@@ -533,72 +488,49 @@ const AdminDashboard = ({ onClose }) => {
             setEditingTask(null);
             setLinkedFeedbackId(null);
             resetForm();
-        } catch (e) {
-            console.error("Save Error:", e);
-            alert("Fejl ved gemning: " + e.message);
-        }
+        } catch (e) { alert("Fejl: " + e.message); }
     };
 
     const handleExportCSV = async () => {
         try {
             const csv = generateCSV(tasks);
             await navigator.clipboard.writeText(csv);
-            alert("CSV (semikolon-separeret) kopieret til udklipsholder!");
-        } catch (e) {
-            alert("Kunne ikke eksportere: " + e.message);
-        }
+            alert("CSV kopieret til udklipsholder!");
+        } catch (e) { alert("Kunne ikke eksportere: " + e.message); }
     };
 
     const handleExportFeedbackCSV = async () => {
         try {
             const csv = generateFeedbackCSV(feedback);
             await navigator.clipboard.writeText(csv);
-            alert("Feedback CSV (semikolon-separeret) kopieret til udklipsholder!");
-        } catch (e) {
-            alert("Kunne ikke eksportere feedback: " + e.message);
-        }
+            alert("Feedback CSV kopieret!");
+        } catch (e) { alert("Fejl: " + e.message); }
     };
 
     const handleImportCSV = async (csvText, mode) => {
         try {
             const parsed = parseCSV(csvText);
-            
-            if (!parsed || parsed.length === 0) {
-                 alert("Ingen gyldige data fundet i CSV. Tjek formatet.");
-                 return;
-            }
-
+            if (!parsed || parsed.length === 0) { alert("Ingen gyldige data."); return; }
             const batch = writeBatch(db);
             let count = 0;
             const now = Date.now();
             
-            // If REPLACE mode, delete all existing docs first
             if (mode === 'replace') {
                 const snapshot = await getDocs(collection(db, PUBLIC_DATA_PATH, 'backlog'));
-                snapshot.forEach(doc => {
-                    batch.delete(doc.ref);
-                });
+                snapshot.forEach(doc => batch.delete(doc.ref));
             }
             
-            // Status Mapping Helper
             const mapStatus = (s) => {
                 s = (s || '').toLowerCase();
                 if (s.includes('done') || s === 'færdig') return 'done';
                 if (s.includes('doing') || s === 'igang') return 'doing';
                 if (s.includes('todo') || s === 'to do') return 'todo';
-                return 'backlog'; // Fallback for 'prototypet', 'backlog', empty etc.
+                return 'backlog';
             };
 
             parsed.forEach((row, idx) => {
                 if (!row.Titel) return;
-                
-                let ref;
-                if (row.ID && row.ID.length > 5) { // Simple check if valid ID
-                     ref = doc(db, PUBLIC_DATA_PATH, 'backlog', row.ID);
-                } else {
-                     ref = doc(collection(db, PUBLIC_DATA_PATH, 'backlog'));
-                }
-
+                let ref = (row.ID && row.ID.length > 5) ? doc(db, PUBLIC_DATA_PATH, 'backlog', row.ID) : doc(collection(db, PUBLIC_DATA_PATH, 'backlog'));
                 batch.set(ref, {
                     title: row.Titel || '',
                     desc: row.Beskrivelse || '',
@@ -616,10 +548,8 @@ const AdminDashboard = ({ onClose }) => {
             });
             await batch.commit();
             setIsImportOpen(false);
-            alert(`Succes! ${mode === 'replace' ? 'Backloggen er erstattet med' : 'Tilføjede'} ${count} opgaver.`);
-        } catch (e) {
-            alert("Fejl under import: " + e.message);
-        }
+            alert(`Importerede ${count} opgaver.`);
+        } catch (e) { alert("Fejl: " + e.message); }
     };
 
     const resetForm = () => {
@@ -648,14 +578,10 @@ const AdminDashboard = ({ onClose }) => {
     const deleteTask = (id) => {
         setAdminConfirm({
             title: "Slet Opgave?",
-            message: "Er du sikker på, at du vil slette denne opgave? Handlingen kan ikke fortrydes.",
+            message: "Er du sikker? Handlingen kan ikke fortrydes.",
             onConfirm: async () => {
-                try {
-                    await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
-                    if (isFormOpen) setIsFormOpen(false);
-                } catch (e) {
-                    console.error("Delete Error", e);
-                }
+                await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
+                if (isFormOpen) setIsFormOpen(false);
                 setAdminConfirm(null);
             }
         });
@@ -678,97 +604,99 @@ const AdminDashboard = ({ onClose }) => {
         let newIdx = currentIdx + direction;
         if (newIdx < 0) newIdx = 0;
         if (newIdx >= statuses.length) newIdx = statuses.length - 1;
-        
         if (newIdx !== currentIdx) {
-            await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', task.id), {
-                status: statuses[newIdx]
-            });
+            await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', task.id), { status: statuses[newIdx] });
         }
     };
 
     const moveItemOrder = async (index, direction, list, collectionName) => {
-        // Restriction: Reordering only works if filters are open (ALL/active) to avoid confusion, 
-        // but here we allow it if the user is seeing the list they expect.
-        // For simplicity, we warn if filters are active.
-        if (filterTag !== 'ALL') {
-             alert("Sortering virker bedst når Tag-filtret er 'Alle'");
-             return;
-        }
-
+        if (filterTag !== 'ALL') { alert("Sortering kræver 'Alle' tags"); return; }
         const targetIndex = index + direction;
         if (targetIndex < 0 || targetIndex >= list.length) return;
-
         const itemA = list[index];
         const itemB = list[targetIndex];
-        
-        const orderA = itemA.order || 0;
-        const orderB = itemB.order || 0;
-        
         const batch = writeBatch(db);
-        batch.update(doc(db, PUBLIC_DATA_PATH, collectionName, itemA.id), { order: orderB });
-        batch.update(doc(db, PUBLIC_DATA_PATH, collectionName, itemB.id), { order: orderA });
-        
+        batch.update(doc(db, PUBLIC_DATA_PATH, collectionName, itemA.id), { order: itemB.order || 0 });
+        batch.update(doc(db, PUBLIC_DATA_PATH, collectionName, itemB.id), { order: itemA.order || 0 });
         await batch.commit();
     };
 
-    const dragStart = (e, position) => {
-        dragItem.current = position;
+    // --- DRAG AND DROP HANDLERS (DESKTOP ONLY) ---
+    const handleDragStart = (e, index) => {
+        if (isMobile) return; 
+        dragItem.current = index;
         e.dataTransfer.effectAllowed = "move";
+        e.target.style.opacity = "0.5";
     };
 
-    const dragEnter = (e, position) => {
-        dragOverItem.current = position;
+    const handleDragEnter = (e, index) => {
+        if (isMobile) return;
+        dragOverItem.current = index;
         e.preventDefault();
     };
 
-    const dragEnd = async () => {
-        if (filterTag !== 'ALL' || statusFilter !== 'active') {
-             // We allow it, but logic is complex if list is partial. 
-             // Ideally we just reorder in the displayed list.
-        }
-        
-        const sourceIdx = dragItem.current;
+    const handleDragEnd = async (e) => {
+        if (isMobile) return;
+        e.target.style.opacity = "1";
+        const srcIdx = dragItem.current;
         const destIdx = dragOverItem.current;
 
-        if (sourceIdx === null || destIdx === null || sourceIdx === destIdx) return;
+        if (srcIdx === undefined || destIdx === undefined || srcIdx === destIdx) return;
+        if (filterTag !== 'ALL') { alert("Skift til 'Alle Tags' for at bruge Drag'n Drop sortering."); return; }
 
-        const copyList = [...filteredTasks]; // Use filtered list
-        const itemToMove = copyList[sourceIdx];
-        copyList.splice(sourceIdx, 1);
-        copyList.splice(destIdx, 0, itemToMove);
+        // Clone list and move item locally to avoid jitter
+        const newList = [...filteredTasks];
+        const itemToMove = newList[srcIdx];
         
-        // Optimistic update (requires local state if we want instant feedback, but we rely on firestore listener)
-        // Here we just update the DB
+        // Simple Swap Logic for Firestore (Robustness over complex re-indexing)
+        // We actually want to swap the ORDERS of the items between src and dest, and everything in between? 
+        // No, simple re-order logic:
+        // We take the order value of the destination, and we basically need to shift everything.
+        // For a "Sharp system that works": Swapping adjacent is safest, but D&D suggests jumping.
+        // Let's implement a "Batch Re-index" of the current view.
         
+        newList.splice(srcIdx, 1);
+        newList.splice(destIdx, 0, itemToMove);
+        
+        // Create batch to update orders based on new array positions
         const batch = writeBatch(db);
-        // We simply swap orders of impacted items or re-index the whole set?
-        // Simple swap logic for MVP:
-        // Actually, reordering a filtered list is hard. 
-        // Let's stick to: "Reorder only works on 'ALL' tags"
+        // We use the existing orders range to minimize disruption? 
+        // Or just re-assign orders based on array index (assuming we want strict ordering)
+        // Let's use a simple timestamp-based decrementing order or keep existing logic.
+        // The existing logic seems to use `order` field. 
+        // Let's just update the `order` field of ALL items in the filtered view to match their new index.
+        // To keep it performant, we only update if necessary, but for <100 items, a batch is fine.
         
-        if (filterTag !== 'ALL') {
-             alert("Skift til 'Alle' tags for at sortere via drag-drop.");
-             return;
-        }
+        // Strategy: Assign orders such that index 0 has highest order (or lowest, depending on sort).
+        // Current sort: `(a.order || 0) - (b.order || 0)` -> Ascending.
+        // So index 0 = lowest order value.
+        
+        // We can just grab the order values from the original list, sort them, and re-distribute them to the new list structure.
+        const orders = filteredTasks.map(t => t.order || 0).sort((a,b) => a-b);
+        
+        newList.forEach((task, i) => {
+            if (task.order !== orders[i]) {
+                const ref = doc(db, PUBLIC_DATA_PATH, 'backlog', task.id);
+                batch.update(ref, { order: orders[i] });
+            }
+        });
 
-        // Re-index logic based on the *full* task list in current view
-        // Ideally we grab the order of the item *before* and *after* at dest.
-        // But for this simple app, we just swap the order fields of the two items involved if adjacent,
-        // or re-assign orders for the whole chunk.
+        try {
+            await batch.commit();
+        } catch(err) {
+            console.error("Reorder failed", err);
+            alert("Kunne ikke gemme sortering.");
+        }
         
-        // SIMPLIFIED: Just swap the two items' order for now (if adjacent)
-        // Correct implementation requires a full re-index or linked list. 
-        // We will skip complex drag-drop logic for this specific update request 
-        // and rely on the arrows which are safer.
+        dragItem.current = null;
+        dragOverItem.current = null;
     };
+
 
     const startConvertFeedback = (fbItem) => {
         setForm({
-            title: fbItem.text,
-            status: 'todo',
-            priority: 'Medium',
-            tag: 'APP',
-            desc: `Feedback fra ${fbItem.userName} (${fbItem.context || 'App'}).\n\nOriginal: "${fbItem.text}"\n\nDevice: ${fbItem.device || 'Ikke oplyst'}`,
+            title: fbItem.text, status: 'todo', priority: 'Medium', tag: 'APP',
+            desc: `Feedback fra ${fbItem.userName} (${fbItem.context || 'App'}).\n\nOriginal: "${fbItem.text}"\n\nDevice: ${fbItem.device || '?' }`,
             notes: '', acceptance: '', dataFields: '', release: ''
         });
         setEditingTask(null);
@@ -782,29 +710,28 @@ const AdminDashboard = ({ onClose }) => {
             const data = { backlog: tasks, feedback: feedback, exportedAt: new Date().toISOString() };
             await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
             alert("Data kopieret!");
-        } catch (e) {
-            console.error("Clipboard Error:", e);
-            alert("Kunne ikke kopiere. Fejl: " + e.message);
-        }
+        } catch (e) { alert("Fejl: " + e.message); }
     };
     
     return (
         <div className="fixed inset-0 bg-slate-950 z-[60] overflow-y-auto pb-safe">
-            {/* HEADER */}
+            {/* HEADER - RESPONSIVE */}
             <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-10 flex flex-col gap-4 shadow-md">
                 <div className="flex justify-between items-center">
                     <div className="flex items-center">
                         <button onClick={onClose} className="mr-3 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"><ArrowLeft className="w-5 h-5"/></button>
                         <div>
                             <h2 className="text-white font-bold text-lg">Admin Center</h2>
-                            <p className="text-xs text-slate-500">RTE Dashboard</p>
+                            <p className="text-xs text-slate-500 hidden md:block">RTE Dashboard</p>
                         </div>
                     </div>
-                    <div className="flex gap-2">
-                        <button onClick={handleExportCSV} className="bg-slate-800 text-green-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700" title="Kopier Backlog CSV">
+                    
+                    {/* DESKTOP ACTIONS */}
+                    <div className="hidden md:flex gap-2">
+                        <button onClick={handleExportCSV} className="bg-slate-800 text-green-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
                             <FileDown className="w-3 h-3 mr-2"/> Backlog
                         </button>
-                        <button onClick={handleExportFeedbackCSV} className="bg-slate-800 text-purple-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700" title="Kopier Feedback CSV">
+                        <button onClick={handleExportFeedbackCSV} className="bg-slate-800 text-purple-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
                             <FileDown className="w-3 h-3 mr-2"/> Feedback
                         </button>
                         <button onClick={() => setIsImportOpen(true)} className="bg-slate-800 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
@@ -814,62 +741,49 @@ const AdminDashboard = ({ onClose }) => {
                             <Copy className="w-3 h-3 mr-2"/> Backup
                         </button>
                     </div>
+
+                    {/* MOBILE ACTIONS MENU */}
+                    <div className="md:hidden relative">
+                         <button onClick={() => setShowMenu(!showMenu)} className="p-2 bg-slate-800 rounded-lg text-white border border-slate-700">
+                             <MoreHorizontal className="w-6 h-6" />
+                         </button>
+                         {showMenu && (
+                             <div className="absolute right-0 top-12 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 flex flex-col gap-2 w-48 z-50">
+                                <button onClick={() => { handleExportCSV(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-green-400 text-xs font-bold flex items-center"><FileDown className="w-3 h-3 mr-2"/> Eksport Backlog</button>
+                                <button onClick={() => { handleExportFeedbackCSV(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-purple-400 text-xs font-bold flex items-center"><FileDown className="w-3 h-3 mr-2"/> Eksport Feedback</button>
+                                <button onClick={() => { setIsImportOpen(true); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center"><Upload className="w-3 h-3 mr-2"/> Import CSV</button>
+                                <button onClick={() => { copyDataToClipboard(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-blue-400 text-xs font-bold flex items-center"><Copy className="w-3 h-3 mr-2"/> Backup JSON</button>
+                             </div>
+                         )}
+                    </div>
                 </div>
                 
                 {/* GLOBAL FILTERS */}
                 <div className="flex flex-col gap-2 md:flex-row">
-                    {/* Tag Filters */}
                     <div className="flex gap-2 bg-slate-800/50 p-1 rounded-lg self-start">
                         {['ALL', 'APP', 'TEAM'].map(tag => (
-                            <button 
-                                key={tag} 
-                                onClick={() => setFilterTag(tag)}
-                                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${filterTag === tag ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
-                            >
+                            <button key={tag} onClick={() => setFilterTag(tag)} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${filterTag === tag ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>
                                 {tag === 'ALL' ? 'Alle Tags' : tag}
                             </button>
                         ))}
                     </div>
-
-                    {/* Status Filters (NYT) */}
                     <div className="flex gap-2 bg-slate-800/50 p-1 rounded-lg self-start">
-                        <button 
-                            onClick={() => setStatusFilter('active')} 
-                            className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${statusFilter === 'active' ? 'bg-blue-900 text-blue-100 shadow' : 'text-slate-500 hover:text-slate-300'}`}
-                        >
-                            Aktive
-                        </button>
-                        <button 
-                            onClick={() => setStatusFilter('all')} 
-                            className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${statusFilter === 'all' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
-                        >
-                            Alle
-                        </button>
-                        <button 
-                            onClick={() => setStatusFilter('done')} 
-                            className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${statusFilter === 'done' ? 'bg-green-900 text-green-100 shadow' : 'text-slate-500 hover:text-slate-300'}`}
-                        >
-                            Færdige
-                        </button>
+                        {['active', 'all', 'done'].map(status => (
+                            <button key={status} onClick={() => setStatusFilter(status)} className={`px-3 py-1 rounded-md text-xs font-bold capitalize transition-all ${statusFilter === status ? 'bg-blue-900 text-blue-100 shadow' : 'text-slate-500 hover:text-slate-300'}`}>
+                                {status === 'active' ? 'Aktive' : status === 'all' ? 'Alle' : 'Færdige'}
+                            </button>
+                        ))}
                     </div>
                 </div>
             </div>
 
             <div className="p-4 max-w-6xl mx-auto">
-                {/* TABS */}
                 <div className="flex space-x-2 mb-6 bg-slate-900 p-1 rounded-xl inline-flex">
-                    <button onClick={() => setView('board')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'board' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                        <Layout className="w-4 h-4 mr-2"/> Board
-                    </button>
-                    <button onClick={() => setView('list')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'list' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                        <List className="w-4 h-4 mr-2"/> Backlog Liste
-                    </button>
-                    <button onClick={() => setView('feedback')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                        <MessageSquarePlus className="w-4 h-4 mr-2"/> Inbox ({feedback.filter(f => f.status === 'new').length})
-                    </button>
+                    <button onClick={() => setView('board')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'board' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><Layout className="w-4 h-4 mr-2"/> Board</button>
+                    <button onClick={() => setView('list')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'list' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><List className="w-4 h-4 mr-2"/> Liste</button>
+                    <button onClick={() => setView('feedback')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><MessageSquarePlus className="w-4 h-4 mr-2"/> Inbox ({feedback.filter(f => f.status === 'new').length})</button>
                 </div>
 
-                {/* VIEW: BOARD (KANBAN) */}
                 {view === 'board' && (
                     <div className="space-y-6 fade-in">
                         <button onClick={() => { setEditingTask(null); resetForm(); setIsFormOpen(true); }} className="w-full py-3 bg-slate-800 border border-dashed border-slate-600 rounded-xl text-slate-400 hover:text-white hover:border-slate-400 flex justify-center items-center">
@@ -877,10 +791,7 @@ const AdminDashboard = ({ onClose }) => {
                         </button>
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             {['backlog', 'todo', 'doing', 'done'].map(status => {
-                                // If filtering for active, hide 'done' column entirely? Or just show empty?
-                                // Let's hide 'done' column if statusFilter is 'active' to save space
                                 if (statusFilter === 'active' && status === 'done') return null;
-
                                 return (
                                     <div key={status} className="bg-slate-900/50 rounded-xl border border-slate-800 p-3 min-h-[300px]">
                                         <h3 className="text-slate-400 text-xs font-bold uppercase mb-3 flex justify-between items-center px-1">
@@ -900,7 +811,6 @@ const AdminDashboard = ({ onClose }) => {
                                                         <p className="text-sm font-bold text-white mb-1 line-clamp-2">{task.title}</p>
                                                         <p className="text-xs text-slate-500 line-clamp-2">{task.desc}</p>
                                                     </div>
-                                                    {/* Kanban Arrows */}
                                                     <div className="flex justify-between mt-3 pt-2 border-t border-slate-700/50">
                                                         <button onClick={() => moveTaskStatus(task, -1)} disabled={status === 'backlog'} className={`p-1 rounded ${status === 'backlog' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowLeft className="w-3 h-3"/></button>
                                                         <button onClick={() => moveTaskStatus(task, 1)} disabled={status === 'done'} className={`p-1 rounded ${status === 'done' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowRight className="w-3 h-3"/></button>
@@ -915,11 +825,10 @@ const AdminDashboard = ({ onClose }) => {
                     </div>
                 )}
 
-                {/* VIEW: LIST (PRIORITY ARROWS) */}
                 {view === 'list' && (
                     <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden fade-in">
                         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
-                            <h3 className="font-bold text-white">Prioriteret Liste {filterTag !== 'ALL' && '(Sortering deaktiveret ved filtrering)'}</h3>
+                            <h3 className="font-bold text-white text-sm">Prioriteret Liste</h3>
                             <button onClick={() => { setEditingTask(null); resetForm(); setIsFormOpen(true); }} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center"><Plus className="w-3 h-3 mr-1"/> Ny</button>
                         </div>
                         <div className="divide-y divide-slate-800">
@@ -927,20 +836,22 @@ const AdminDashboard = ({ onClose }) => {
                                 <div 
                                     key={task.id} 
                                     className="p-3 flex items-center bg-slate-900 hover:bg-slate-800 transition-colors group"
-                                    // draggable={filterTag === 'ALL'} // Disabled generic drag for now to focus on arrows
+                                    draggable={!isMobile}
+                                    onDragStart={(e) => handleDragStart(e, index)}
+                                    onDragEnter={(e) => handleDragEnter(e, index)}
+                                    onDragEnd={handleDragEnd}
+                                    onDragOver={(e) => e.preventDefault()}
                                 >
-                                    {/* Mobile Friendly Reorder Arrows */}
-                                    <div className="flex flex-col gap-1 mr-3 text-slate-500">
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); moveItemOrder(index, -1, filteredTasks, 'backlog'); }} 
-                                            disabled={index === 0 || filterTag !== 'ALL'}
-                                            className="p-1 hover:text-white disabled:opacity-30"
-                                        ><ChevronUp className="w-4 h-4"/></button>
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); moveItemOrder(index, 1, filteredTasks, 'backlog'); }}
-                                            disabled={index === filteredTasks.length - 1 || filterTag !== 'ALL'}
-                                            className="p-1 hover:text-white disabled:opacity-30"
-                                        ><ChevronDown className="w-4 h-4"/></button>
+                                    {/* CONTROLS: Mobile=Arrows, Desktop=Grip */}
+                                    <div className="mr-3 text-slate-600 cursor-grab flex flex-col items-center">
+                                        {isMobile ? (
+                                            <div className="flex flex-col gap-1">
+                                                <button onClick={(e) => { e.stopPropagation(); moveItemOrder(index, -1, filteredTasks, 'backlog'); }} disabled={index === 0 || filterTag !== 'ALL'} className="p-1 hover:text-white disabled:opacity-30"><ChevronUp className="w-4 h-4"/></button>
+                                                <button onClick={(e) => { e.stopPropagation(); moveItemOrder(index, 1, filteredTasks, 'backlog'); }} disabled={index === filteredTasks.length - 1 || filterTag !== 'ALL'} className="p-1 hover:text-white disabled:opacity-30"><ChevronDown className="w-4 h-4"/></button>
+                                            </div>
+                                        ) : (
+                                            <GripVertical className="w-5 h-5 mt-1 hover:text-white" />
+                                        )}
                                     </div>
                                     
                                     <div className="flex-1 cursor-pointer" onClick={() => editTask(task)}>
@@ -963,7 +874,6 @@ const AdminDashboard = ({ onClose }) => {
                     </div>
                 )}
 
-                {/* VIEW: INBOX */}
                 {view === 'feedback' && (
                     <div className="space-y-3 fade-in">
                         {feedback.length === 0 && <p className="text-slate-500 text-center py-10">Ingen feedback endnu.</p>}
@@ -971,15 +881,11 @@ const AdminDashboard = ({ onClose }) => {
                             <div key={item.id} className={`p-4 rounded-xl border ${item.status === 'new' ? 'bg-slate-800 border-blue-900/50' : 'bg-slate-900 border-slate-800 opacity-60'}`}>
                                 <div className="flex justify-between items-start mb-3">
                                     <div className="flex items-center gap-3">
-                                        {/* FEEDBACK PRIORITY CONTROLS */}
                                         <div className="flex flex-col gap-0.5 mr-1 text-slate-600">
                                             <button onClick={() => moveItemOrder(index, -1, feedback, 'feedback')} disabled={index === 0} className="hover:text-white disabled:opacity-30"><ChevronUp className="w-3 h-3"/></button>
                                             <button onClick={() => moveItemOrder(index, 1, feedback, 'feedback')} disabled={index === feedback.length -1} className="hover:text-white disabled:opacity-30"><ChevronDown className="w-3 h-3"/></button>
                                         </div>
-
-                                        <div className="w-8 h-8 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center font-bold">
-                                            {item.userName.charAt(0)}
-                                        </div>
+                                        <div className="w-8 h-8 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center font-bold">{item.userName.charAt(0)}</div>
                                         <div>
                                             <p className="text-sm font-bold text-white">{item.userName}</p>
                                             <p className="text-[10px] text-slate-500 flex items-center gap-2">
@@ -990,18 +896,12 @@ const AdminDashboard = ({ onClose }) => {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         {item.status === 'new' && (
-                                            <button onClick={() => startConvertFeedback(item)} className="text-xs bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-lg border border-blue-600/30 hover:bg-blue-600/30 font-bold transition-colors">
-                                                Opret Opgave
-                                            </button>
+                                            <button onClick={() => startConvertFeedback(item)} className="text-xs bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-lg border border-blue-600/30 hover:bg-blue-600/30 font-bold transition-colors">Opret Opgave</button>
                                         )}
                                         <button onClick={() => deleteFeedback(item.id)} className="p-1.5 text-slate-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
                                     </div>
                                 </div>
-                                <div className="bg-slate-950 p-3 rounded-lg text-sm text-slate-300 border border-slate-800 mb-2">
-                                    {item.text}
-                                </div>
-                                
-                                {/* DEVICE INFO AT BOTTOM */}
+                                <div className="bg-slate-950 p-3 rounded-lg text-sm text-slate-300 border border-slate-800 mb-2">{item.text}</div>
                                 {item.device && (
                                     <div className="mt-2 pt-2 border-t border-slate-800/50">
                                         <div className="flex items-start text-[9px] text-slate-600 font-mono">
@@ -1016,7 +916,6 @@ const AdminDashboard = ({ onClose }) => {
                 )}
             </div>
 
-            {/* TASK FORM MODAL */}
             {isFormOpen && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
                     <div className="bg-slate-900 w-full max-w-2xl rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -1027,7 +926,7 @@ const AdminDashboard = ({ onClose }) => {
                         <div className="p-6 overflow-y-auto space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="col-span-2">
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Titel (Påkrævet)</label>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Titel</label>
                                     <input type="text" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.title} onChange={e => setForm({...form, title: e.target.value})} autoFocus/>
                                 </div>
                                 <div>
@@ -1040,26 +939,26 @@ const AdminDashboard = ({ onClose }) => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tag / Type</label>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tag</label>
                                     <select className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.tag} onChange={e => setForm({...form, tag: e.target.value})}>
                                         <option value="APP">App Feature</option>
                                         <option value="TEAM">Team Opgave</option>
                                     </select>
                                 </div>
                                 <div className="col-span-2">
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Beskrivelse (User Story)</label>
-                                    <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.desc} onChange={e => setForm({...form, desc: e.target.value})} placeholder="Som [Rolle] vil jeg..."/>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Beskrivelse</label>
+                                    <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.desc} onChange={e => setForm({...form, desc: e.target.value})}/>
                                 </div>
                                 <div className="col-span-2">
                                     <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Acceptkriterier</label>
-                                    <textarea rows="3" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.acceptance} onChange={e => setForm({...form, acceptance: e.target.value})} placeholder="- Skal kunne..."/>
+                                    <textarea rows="3" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.acceptance} onChange={e => setForm({...form, acceptance: e.target.value})}/>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Noter / Tech Specs</label>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Noter</label>
                                     <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})}/>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Datafelter (Udkast)</label>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Datafelter</label>
                                     <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.dataFields} onChange={e => setForm({...form, dataFields: e.target.value})}/>
                                 </div>
                                 <div>
@@ -1072,8 +971,8 @@ const AdminDashboard = ({ onClose }) => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Release / Sprint</label>
-                                    <input type="text" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.release} onChange={e => setForm({...form, release: e.target.value})} placeholder="fx MVP eller Sprint 1"/>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Release</label>
+                                    <input type="text" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.release} onChange={e => setForm({...form, release: e.target.value})}/>
                                 </div>
                             </div>
                         </div>
@@ -1088,27 +987,14 @@ const AdminDashboard = ({ onClose }) => {
                 </div>
             )}
             
-            {/* IMPORT MODAL */}
-            {isImportOpen && (
-                <ImportModal onClose={() => setIsImportOpen(false)} onImport={handleImportCSV} />
-            )}
-            
-            {/* ADMIN CONFIRM DIALOG */}
-            {adminConfirm && (
-                <ConfirmModal 
-                    title={adminConfirm.title}
-                    message={adminConfirm.message}
-                    onConfirm={adminConfirm.onConfirm}
-                    onCancel={() => setAdminConfirm(null)}
-                />
-            )}
+            {isImportOpen && <ImportModal onClose={() => setIsImportOpen(false)} onImport={handleImportCSV} />}
+            {adminConfirm && <ConfirmModal title={adminConfirm.title} message={adminConfirm.message} onConfirm={adminConfirm.onConfirm} onCancel={() => setAdminConfirm(null)} />}
         </div>
     );
 };
 
 // --- MAIN APP COMPONENT ---
 const App = () => {
-  // Auth State
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -1116,7 +1002,6 @@ const App = () => {
   const [isBrowserBlocked, setIsBrowserBlocked] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // App State
   const [activeFighter, setActiveFighter] = useState('Karl');
   const [isLocked, setIsLocked] = useState(true);
   const [systemWeek] = useState(getISOWeek()); 
@@ -1127,7 +1012,6 @@ const App = () => {
   const [teamData, setTeamData] = useState({}); 
   const [lastUpdated, setLastUpdated] = useState(null);
   
-  // UI States
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDay, setEditingDay] = useState(null);
   const [editingSession, setEditingSession] = useState(null); 
@@ -1135,15 +1019,9 @@ const App = () => {
   const [feedbackContext, setFeedbackContext] = useState(null); 
   const [adminOpen, setAdminOpen] = useState(false);
 
-  // Auth & Init
   useEffect(() => {
-    const mobile = isMobileDevice();
-    setIsMobile(mobile);
-    if (checkInAppBrowser()) {
-        setIsBrowserBlocked(true);
-        setAuthLoading(false); 
-        return; 
-    }
+    setIsMobile(isMobileDevice());
+    if (checkInAppBrowser()) { setIsBrowserBlocked(true); setAuthLoading(false); return; }
     getRedirectResult(auth).catch((error) => {
         if (error.code !== 'auth/popup-closed-by-user') setLoginError(error.message);
     });
@@ -1163,18 +1041,12 @@ const App = () => {
                 setActiveFighter(userProfile.name);
                 setIsLocked(true);
             }
-        } else {
-            setAccessDenied(true);
-            setUser(u);
-        }
-      } else {
-        setUser(null);
-      }
+        } else { setAccessDenied(true); setUser(u); }
+      } else { setUser(null); }
     });
     return () => unsubAuth();
   }, []);
 
-  // Handlers (Login, CRUD, Logic)
   const handleSmartLogin = async () => {
       setLoginError(null);
       const provider = new GoogleAuthProvider();
@@ -1184,7 +1056,6 @@ const App = () => {
 
   const handleLogout = () => { signOut(auth); setAccessDenied(false); setLoginError(null); };
 
-  // Data Sync Hooks (Personal & Team)
   useEffect(() => {
     if (!user || accessDenied || isBrowserBlocked) return;
     const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
@@ -1219,7 +1090,6 @@ const App = () => {
       await setDoc(docRef, newData);
   };
 
-  // Helper Wrappers for Modals
   const handleSaveSession = async (session) => {
     const newData = JSON.parse(JSON.stringify(scheduleData));
     if (!newData[editingDay]) newData[editingDay] = [];
@@ -1301,23 +1171,19 @@ const App = () => {
     });
   };
 
-  // --- RENDERING ---
   if (isBrowserBlocked) return <BrowserBlockScreen />;
   if (authLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loader...</div>;
   if (!user) return <LoginScreen onLoginPopup={() => handleSmartLogin()} onLoginRedirect={() => handleSmartLogin()} error={loginError} />;
   if (accessDenied) return <div className="text-white text-center p-10">Ingen adgang <button onClick={handleLogout}>Log ud</button></div>;
 
   const isReadOnly = !isStandardMode && currentWeek < systemWeek;
-  const userRole = USER_MAPPING[user.email.toLowerCase()]?.role;
-  const isAdmin = userRole === 'admin' || userRole === 'coach';
+  const isAdmin = ['admin', 'coach'].includes(USER_MAPPING[user.email.toLowerCase()]?.role);
 
-  // Helper for Context Name
   const getWeekLabel = () => {
         if (currentWeek === systemWeek) return `Uge ${currentWeek} (Aktuel)`;
         if (currentWeek > systemWeek) return `Uge ${currentWeek} (Næste)`;
         return `Uge ${currentWeek} (Tidligere)`;
     };
-
     const getCurrentContextName = () => {
         if (view === 'team') {
             if (isStandardMode) return 'Standarduge - Teamet';
@@ -1326,13 +1192,10 @@ const App = () => {
         if (isStandardMode) return 'Standarduge - Min';
         return `${getWeekLabel()} - Min Plan`;
     };
-
-  // Trigger feedback with explicit context
   const openFeedback = (ctx) => setFeedbackContext(ctx || getCurrentContextName());
 
   return (
     <div className="bg-slate-950 text-slate-200 min-h-screen pb-24 font-sans selection:bg-blue-500/30">
-      {/* HEADER */}
       <div className="bg-slate-900 p-4 shadow-lg border-b border-slate-800 sticky top-0 z-20">
         <div className="flex justify-between items-center max-w-md mx-auto">
           <div className="flex items-center space-x-2">
@@ -1372,7 +1235,6 @@ const App = () => {
       </div>
 
       <div className="max-w-md mx-auto relative pt-4 min-h-[85vh]">
-        {/* Banner: Standard Mode */}
         {isStandardMode && (
           <div className={`mx-4 mb-4 rounded-xl p-3 flex items-start space-x-3 fade-in ${view === 'team' ? 'bg-indigo-900/30 border-indigo-700/50' : 'bg-yellow-900/30 border-yellow-700/50'}`}>
               <Info className={`w-5 h-5 mt-0.5 ${view === 'team' ? 'text-indigo-400' : 'text-yellow-500'}`} />
@@ -1383,7 +1245,6 @@ const App = () => {
           </div>
         )}
 
-        {/* Controls (Week Selector) */}
         <div className="mx-4 mb-4 space-y-3">
           <div className="flex items-center justify-between bg-slate-800 p-2 rounded-xl border border-slate-700 shadow-md">
             <button onClick={() => { setCurrentWeek(currentWeek - 1); setIsStandardMode(false); }} className={`p-2 hover:bg-slate-700 rounded-lg text-slate-400 ${currentWeek <= 1 ? 'invisible' : ''}`}><ChevronLeft className="w-6 h-6" /></button>
@@ -1414,7 +1275,6 @@ const App = () => {
           </div>
         </div>
 
-        {/* VIEWS */}
         {view === 'personal' ? (
           <div className="px-4 space-y-3 pb-32 fade-in">
              {DAYS.map(day => {
@@ -1465,7 +1325,6 @@ const App = () => {
         )}
       </div>
 
-      {/* FOOTER & OVERLAYS */}
       <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 pb-safe z-50">
         <div className="max-w-md mx-auto flex justify-between items-center p-2 px-6">
             <NavButton icon={Calendar} label="Min Plan" active={view === 'personal'} onClick={() => setView('personal')} />
@@ -1478,15 +1337,12 @@ const App = () => {
 
       {modalOpen && <SessionModal day={editingDay} initialData={editingSession} onClose={() => setModalOpen(false)} onSave={handleSaveSession} onDelete={handleDeleteSession} isStandardMode={isStandardMode} onFeedback={(ctx) => openFeedback(ctx)} />}
       {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
-      
-      {/* NEW SYSTEM MODALS */}
       {feedbackContext && <FeedbackModal user={user} currentContext={feedbackContext} onClose={() => setFeedbackContext(null)} />}
       {adminOpen && <AdminDashboard onClose={() => setAdminOpen(false)} />}
     </div>
   );
 };
 
-// --- HELPER COMPONENTS ---
 const NavButton = ({ icon: Icon, label, active, onClick }) => (
     <button onClick={onClick} className={`flex flex-col items-center justify-center p-2 rounded-xl w-16 transition-colors ${active ? 'text-blue-500' : 'text-slate-500'}`}>
         <Icon className="w-6 h-6 mb-1" />
@@ -1582,7 +1438,6 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
                 <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50 shrink-0">
                     <h3 className="text-white font-bold text-lg flex items-center"><span className="w-1 h-6 bg-blue-500 rounded-full mr-3"></span> {day}</h3>
                     <div className="flex gap-2">
-                        {/* FEEDBACK BUTTON IN MODAL */}
                         {isExisting && (
                             <button onClick={() => onFeedback(`Session: ${initialData.name} (${day})`)} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white border border-slate-700">
                                 <MessageSquarePlus className="w-5 h-5"/>
