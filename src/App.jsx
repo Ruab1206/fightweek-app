@@ -299,7 +299,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.55</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.56</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -315,7 +315,7 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
 
       <button onClick={onLoginPopup} className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mb-4">
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-        Log ind med Google
+        Log ind med Google (Popup)
       </button>
 
       <button onClick={onLoginRedirect} className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2">
@@ -1051,10 +1051,18 @@ const App = () => {
     return () => unsubAuth();
   }, []);
 
-  const handleSmartLogin = async () => {
+  // SEPARATE LOGIN HANDLERS
+  const triggerLoginPopup = async () => {
       setLoginError(null);
       const provider = new GoogleAuthProvider();
-      try { isMobile ? await signInWithRedirect(auth, provider) : await signInWithPopup(auth, provider); } 
+      try { await signInWithPopup(auth, provider); } 
+      catch (error) { setLoginError(error.message); }
+  };
+
+  const triggerLoginRedirect = async () => {
+      setLoginError(null);
+      const provider = new GoogleAuthProvider();
+      try { await signInWithRedirect(auth, provider); } 
       catch (error) { setLoginError(error.message); }
   };
 
@@ -1177,7 +1185,7 @@ const App = () => {
 
   if (isBrowserBlocked) return <BrowserBlockScreen />;
   if (authLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loader...</div>;
-  if (!user) return <LoginScreen onLoginPopup={() => handleSmartLogin()} onLoginRedirect={() => handleSmartLogin()} error={loginError} />;
+  if (!user) return <LoginScreen onLoginPopup={triggerLoginPopup} onLoginRedirect={triggerLoginRedirect} error={loginError} />;
   if (accessDenied) return <div className="text-white text-center p-10">Ingen adgang <button onClick={handleLogout}>Log ud</button></div>;
 
   const isReadOnly = !isStandardMode && currentWeek < systemWeek;
