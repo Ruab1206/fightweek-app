@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw, Eye, EyeOff, Search, Settings
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -33,21 +33,41 @@ const CATEGORIES = [
   { label: 'Andet', color: 'bg-slate-500', border: 'border-slate-500' }
 ];
 
-// Stamdata (Kataloget)
+// Stamdata (Kataloget) - V12 Liste
 const GLOBAL_TEMPLATES = [
   { id: 'm1', day: 'Mandag', name: 'Wall Wrestling', category: 'Brydning', start: '15:00', end: '16:00', location: 'Burnell' },
   { id: 'm2', day: 'Mandag', name: 'Kickboxing Adv', category: 'Kickboxing', start: '17:00', end: '19:00', location: 'Rumble' },
   { id: 'm3', day: 'Mandag', name: 'MMA Grappling', category: 'MMA', start: '18:00', end: '19:30', location: 'Rumble' },
   { id: 't1', day: 'Tirsdag', name: 'Nogi All', category: 'Grappling', start: '07:00', end: '08:00', location: 'Rumble' },
   { id: 't2', day: 'Tirsdag', name: 'Grappling', category: 'Grappling', start: '17:00', end: '18:00', location: 'Burnell' },
+  { id: 't3', day: 'Tirsdag', name: 'Nogi All', category: 'Grappling', start: '17:00', end: '18:00', location: 'Rumble' },
+  { id: 't4', day: 'Tirsdag', name: 'Kickboxing Adv', category: 'Kickboxing', start: '17:00', end: '19:00', location: 'Rumble' },
+  { id: 't5', day: 'Tirsdag', name: 'Boksning', category: 'Boksning', start: '17:30', end: '19:00', location: 'Rødovre' },
+  { id: 't6', day: 'Tirsdag', name: 'Nogi Adv', category: 'Grappling', start: '18:00', end: '19:00', location: 'Rumble' },
   { id: 't7', day: 'Tirsdag', name: 'Brydning', category: 'Brydning', start: '19:00', end: '21:00', location: 'Roskilde' },
   { id: 'o1', day: 'Onsdag', name: 'MMA Sparring', category: 'MMA', start: '15:00', end: '16:00', location: 'Burnell' },
+  { id: 'o2', day: 'Onsdag', name: 'Grappling', category: 'Grappling', start: '17:00', end: '18:00', location: 'Burnell' },
   { id: 'o3', day: 'Onsdag', name: 'MMA Adv', category: 'MMA', start: '16:30', end: '18:00', location: 'Rumble' },
+  { id: 'o4', day: 'Onsdag', name: 'Kickboxing Adv', category: 'Kickboxing', start: '17:00', end: '18:30', location: 'Rumble' },
+  { id: 'o5', day: 'Onsdag', name: 'Nogi All', category: 'Grappling', start: '18:00', end: '19:30', location: 'Rumble' },
+  { id: 'th1', day: 'Torsdag', name: 'Nogi All', category: 'Grappling', start: '07:00', end: '08:00', location: 'Rumble' },
+  { id: 'th2', day: 'Torsdag', name: 'Nogi All', category: 'Grappling', start: '17:00', end: '18:00', location: 'Rumble' },
   { id: 'th3', day: 'Torsdag', name: 'Kickboxing Adv', category: 'Kickboxing', start: '17:00', end: '18:30', location: 'Rumble' },
+  { id: 'th4', day: 'Torsdag', name: 'Boksning', category: 'Boksning', start: '17:30', end: '19:00', location: 'Rødovre' },
+  { id: 'th5', day: 'Torsdag', name: 'Nogi Adv', category: 'Grappling', start: '18:00', end: '19:00', location: 'Rumble' },
+  { id: 'th6', day: 'Torsdag', name: 'Brydning', category: 'Brydning', start: '19:00', end: '21:00', location: 'Roskilde' },
+  { id: 'f1', day: 'Fredag', name: 'MMA', category: 'MMA', start: '17:00', end: '18:00', location: 'Rumble' },
   { id: 'f2', day: 'Fredag', name: 'MMA Sparring', category: 'MMA', start: '18:00', end: '19:00', location: 'Rumble' },
+  { id: 'sa1', day: 'Lørdag', name: 'Nogi All', category: 'Grappling', start: '10:00', end: '11:00', location: 'Rumble' },
+  { id: 'sa2', day: 'Lørdag', name: 'Boksning', category: 'Boksning', start: '10:00', end: '11:30', location: 'Rødovre' },
+  { id: 'sa3', day: 'Lørdag', name: 'Boxing All', category: 'Boksning', start: '10:30', end: '12:00', location: 'Rumble' },
+  { id: 'sa4', day: 'Lørdag', name: 'Nogi Adv', category: 'Grappling', start: '11:00', end: '12:00', location: 'Rumble' },
   { id: 'sa5', day: 'Lørdag', name: 'Brydning', category: 'Brydning', start: '14:00', end: '16:00', location: 'Roskilde' },
+  { id: 'su1', day: 'Søndag', name: 'Nogi All', category: 'Grappling', start: '12:00', end: '13:30', location: 'Rumble' },
+  { id: 'su2', day: 'Søndag', name: 'Kickboxing All', category: 'Kickboxing', start: '13:30', end: '15:00', location: 'Rumble' },
 ];
 
+// USER MAPPING & CONFIGURATION
 const USER_MAPPING = {
   'carolinemollerh@gmail.com': { name: 'Caroline', role: 'fighter' },
   'sankarem00@gmail.com': { name: 'San', role: 'fighter' },
@@ -75,6 +95,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// Data Path Helper
 const ROOT_COLLECTION = `artifacts/production/users`; 
 const PUBLIC_DATA_PATH = `artifacts/production/public/data`; 
 
@@ -91,6 +112,7 @@ const formatCancellationTime = (isoString) => {
     return dayName;
 };
 
+// Helper: Calculate ISO Week Number
 const getISOWeek = () => {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
@@ -99,27 +121,39 @@ const getISOWeek = () => {
   return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
 };
 
+// Helper: Detect In-App Browser & Mobile
 const checkInAppBrowser = () => {
     const ua = navigator.userAgent || navigator.vendor || window.opera;
     return (ua.indexOf("FBAN") > -1) || (ua.indexOf("FBAV") > -1) || (ua.indexOf("Instagram") > -1);
 };
 
-const isMobileDevice = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const isMobileDevice = () => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
 
-// --- POKA-YOKE CSV PARSER (v5) ---
+const getDeviceInfo = () => {
+    return navigator.userAgent;
+};
+
+// --- ADVANCED CSV PARSER (Excel Copy-Paste Friendly) ---
 const parseCSV = (text) => {
     if (!text) return [];
-    const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     
-    const firstLine = cleanText.split('\n')[0];
+    // Auto-detect delimiter: check first line for tabs, then semi-colons, then commas
+    const firstLine = text.split('\n')[0];
     let delimiter = ';';
     if (firstLine.includes('\t')) delimiter = '\t';
     else if (firstLine.includes(',') && !firstLine.includes(';')) delimiter = ',';
 
+    console.log(`Detected delimiter: '${delimiter === '\t' ? 'TAB' : delimiter}'`);
+
     const result = [];
     let row = [];
-    let currentField = "";
+    let current = "";
     let inQuotes = false;
+    
+    // Normalize line endings
+    const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     
     for (let i = 0; i < cleanText.length; i++) {
         const char = cleanText[i];
@@ -127,43 +161,47 @@ const parseCSV = (text) => {
         
         if (inQuotes) {
             if (char === '"' && nextChar === '"') {
-                currentField += '"';
-                i++; 
+                current += '"';
+                i++; // Skip escape quote
             } else if (char === '"') {
                 inQuotes = false;
             } else {
-                currentField += char;
+                current += char;
             }
         } else {
             if (char === '"') {
                 inQuotes = true;
             } else if (char === delimiter) {
-                row.push(currentField.trim());
-                currentField = "";
+                row.push(current);
+                current = "";
             } else if (char === '\n') {
-                row.push(currentField.trim());
-                if (row.length > 1 || (row.length === 1 && row[0] !== "")) {
-                    result.push(row);
+                row.push(current);
+                if (row.length > 1 || (row.length === 1 && row[0] !== '')) {
+                     result.push(row);
                 }
                 row = [];
-                currentField = "";
+                current = "";
             } else {
-                currentField += char;
+                current += char;
             }
         }
     }
-    if (currentField || row.length > 0) {
-        row.push(currentField.trim());
-        if (row.length > 1 || (row.length === 1 && row[0] !== "")) result.push(row);
+    // Handle last item/row
+    if (current || row.length > 0) {
+        row.push(current);
+        if (row.length > 1 || (row.length === 1 && row[0] !== '')) result.push(row);
     }
 
     if (result.length === 0) return [];
     
-    const headers = result[0].map(h => h.replace(/^"|"$/g, '').trim());
+    // Headers handling
+    const headers = result[0].map(h => h.trim().replace(/^"|"$/g, ''));
+    
     return result.slice(1).map(values => {
         const obj = {};
         headers.forEach((h, i) => {
-            obj[h] = (values[i] || "").replace(/^"|"$/g, '').trim();
+            let val = values[i] || '';
+            obj[h] = val.trim();
         });
         return obj;
     });
@@ -171,53 +209,103 @@ const parseCSV = (text) => {
 
 const generateCSV = (tasks) => {
     const headers = ['Titel', 'Status', 'Beskrivelse', 'Acceptkriterier', 'Noter', 'Datafelter', 'Release', 'Tag', 'Prioritet', 'ID', 'Order'];
-    const rows = [headers.join(';')];
-    tasks.forEach(t => {
-        const wrap = (v) => `"${(v || "").toString().replace(/"/g, '""')}"`;
-        rows.push([
-            wrap(t.title), wrap(t.status), wrap(t.desc), wrap(t.acceptance), 
-            wrap(t.notes), wrap(t.dataFields), wrap(t.release), wrap(t.tag), 
-            wrap(t.priority), wrap(t.id), wrap(t.order)
-        ].join(';'));
+    const separator = ';';
+    const csvRows = [headers.join(separator)];
+
+    tasks.forEach(task => {
+        const row = [
+            `"${(task.title || '').replace(/"/g, '""')}"`,
+            `"${(task.status || 'backlog')}"`,
+            `"${(task.desc || '').replace(/"/g, '""')}"`,
+            `"${(task.acceptance || '').replace(/"/g, '""')}"`,
+            `"${(task.notes || '').replace(/"/g, '""')}"`,
+            `"${(task.dataFields || '').replace(/"/g, '""')}"`,
+            `"${(task.release || '').replace(/"/g, '""')}"`,
+            `"${(task.tag || 'APP')}"`,
+            `"${(task.priority || 'Medium')}"`,
+            `"${task.id}"`,
+            `"${task.order || 0}"`
+        ];
+        csvRows.push(row.join(separator));
     });
-    return rows.join('\n');
+    return csvRows.join('\n');
 };
+
+const generateFeedbackCSV = (feedbackItems) => {
+    const headers = ['Bruger', 'Kontekst', 'Tekst', 'Device', 'Status', 'Dato', 'ID'];
+    const separator = ';';
+    const csvRows = [headers.join(separator)];
+
+    feedbackItems.forEach(item => {
+        const row = [
+            `"${(item.userName || '').replace(/"/g, '""')}"`,
+            `"${(item.context || '').replace(/"/g, '""')}"`,
+            `"${(item.text || '').replace(/"/g, '""')}"`,
+            `"${(item.device || '').replace(/"/g, '""')}"`,
+            `"${(item.status || 'new')}"`,
+            `"${item.timestamp}"`,
+            `"${item.id}"`
+        ];
+        csvRows.push(row.join(separator));
+    });
+    return csvRows.join('\n');
+};
+
 
 // --- COMPONENTS ---
 
-const BrowserBlockScreen = () => (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl text-center">
-            <Smartphone className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-white font-bold text-xl mb-2">Brug Safari eller Chrome</h2>
-            <p className="text-slate-400 text-sm mb-6 leading-relaxed">
-                Google tillader ikke login direkte i Messenger eller Instagram. 
-                Åbn venligst linket i din rigtige browser for at fortsætte.
-            </p>
-        </div>
-    </div>
-);
+const BrowserBlockScreen = () => {
+    const [copied, setCopied] = useState(false);
+    const copyLink = () => {
+        navigator.clipboard.writeText(window.location.href);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
 
-const LoginScreen = ({ onLoginPopup, onLoginRedirect, error, loading }) => (
+    return (
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl text-center">
+                <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Smartphone className="w-8 h-8 text-red-500" />
+                </div>
+                <h2 className="text-white font-bold text-xl mb-2">Messenger Browseren dur ikke</h2>
+                <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+                    Google tillader ikke login direkte i Messenger. Du skal åbne appen i din rigtige browser (Safari eller Chrome).
+                </p>
+                <button onClick={copyLink} className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2">
+                    {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                    {copied ? "Link kopieret!" : "Kopier Link og åbn selv"}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono italic tracking-tighter">v1.44 Stable</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.37</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
-      <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">FightWeek</h1>
-      <p className="text-slate-400 mb-8 text-sm">Log ind for at se din personlige ugeplan</p>
+      <h1 className="text-2xl font-bold text-white mb-2">FightWeek</h1>
+      <p className="text-slate-400 mb-8 text-sm">Log ind for at se din træningsplan</p>
       
-      {error && <div className="bg-red-900/50 border border-red-800 rounded-lg p-3 mb-6 text-xs text-red-200 text-left leading-relaxed">{error}</div>}
+      {error && (
+        <div className="bg-red-900/50 border border-red-800 rounded-lg p-3 mb-6 text-xs text-red-200 text-left">
+            <p className="font-bold mb-1 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Login Fejl:</p>
+            <p>{error}</p>
+        </div>
+      )}
 
-      <button onClick={onLoginPopup} disabled={loading} className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-all flex items-center justify-center gap-2 mb-4 active:scale-95 disabled:opacity-50">
+      <button onClick={onLoginPopup} className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mb-4">
         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-        {loading ? 'Initialiserer...' : 'Log ind med Google'}
+        Log ind med Google
       </button>
 
-      <button onClick={onLoginRedirect} className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2 transition-colors">
-        <ExternalLink className="w-3 h-3 mr-1" />
-        Virker knappen ikke? Brug Redirect
+      <button onClick={onLoginRedirect} className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2">
+        <MousePointerClick className="w-3 h-3 mr-1" />
+        Virker knappen ikke? Tryk her (Redirect)
       </button>
     </div>
   </div>
@@ -225,235 +313,735 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error, loading }) => (
 
 const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
   <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4 fade-in">
-    <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-700 shadow-2xl p-6 text-center">
-      <HelpCircle className="w-10 h-10 text-blue-500 mx-auto mb-4" />
+    <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-700 shadow-2xl overflow-hidden p-6 text-center">
+      <div className="mx-auto w-12 h-12 bg-blue-900/30 rounded-full flex items-center justify-center mb-4">
+        <HelpCircle className="w-6 h-6 text-blue-500" />
+      </div>
       <h3 className="text-white font-bold text-lg mb-2">{title}</h3>
-      <p className="text-slate-400 text-sm mb-6 leading-relaxed">{message}</p>
+      <p className="text-slate-400 text-sm mb-6">{message}</p>
       <div className="flex space-x-3">
-        <button onClick={onCancel} className="flex-1 py-3 rounded-xl font-bold text-slate-400 bg-slate-800 hover:bg-slate-700 transition-all">Annuller</button>
-        <button onClick={onConfirm} className="flex-1 py-3 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-500 transition-all shadow-lg shadow-blue-900/20">Bekræft</button>
+        <button onClick={onCancel} className="flex-1 py-3 rounded-xl font-bold text-slate-400 bg-slate-800 hover:bg-slate-700 transition-colors">Annuller</button>
+        <button onClick={onConfirm} className="flex-1 py-3 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-500 transition-colors shadow-lg">Bekræft</button>
       </div>
     </div>
   </div>
 );
 
-// --- ADMIN DASHBOARD ---
-const AdminDashboard = ({ user, onClose }) => {
+// --- FEEDBACK MODAL ---
+const FeedbackModal = ({ user, currentContext, onClose }) => {
+    const [text, setText] = useState('');
+    const [sending, setSending] = useState(false);
+
+    const sendFeedback = async () => {
+        if (!text.trim()) return;
+        setSending(true);
+        try {
+            await addDoc(collection(db, PUBLIC_DATA_PATH, 'feedback'), {
+                text,
+                user: user.email,
+                userName: USER_MAPPING[user.email.toLowerCase()]?.name || user.email,
+                timestamp: new Date().toISOString(),
+                context: currentContext || 'App',
+                device: getDeviceInfo(),
+                status: 'new',
+                order: -Date.now() 
+            });
+            onClose();
+            alert("Tak for dit input! Det er sendt til teamet.");
+        } catch (e) {
+            console.error("Fejl ved afsendelse:", e);
+            alert("Der skete en fejl. Prøv igen.");
+        }
+        setSending(false);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80] flex items-center justify-center p-4 fade-in">
+            <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-700 p-6">
+                <h3 className="text-white font-bold text-lg mb-2 flex items-center"><MessageSquarePlus className="w-5 h-5 mr-2 text-blue-500"/>Send Feedback</h3>
+                
+                <div className="bg-slate-800/50 p-3 rounded-xl mb-4 text-xs text-slate-400 space-y-1">
+                    <p className="font-bold text-slate-300">Hvad har du på hjerte?</p>
+                    <ul className="list-disc pl-4 space-y-1">
+                        <li>Feedback til træningen eller teamet?</li>
+                        <li>Fandt du en fejl i appen?</li>
+                        <li>Har du en god idé til en ny funktion?</li>
+                    </ul>
+                </div>
+                <textarea 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm focus:ring-2 focus:ring-blue-600 outline-none mb-4"
+                    rows="4"
+                    placeholder="Skriv din besked her..."
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                ></textarea>
+                <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="text-slate-400 px-4 py-2 text-sm">Luk</button>
+                    <button onClick={sendFeedback} disabled={sending} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center">
+                        {sending ? 'Sender...' : 'Send'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- IMPORT CSV MODAL ---
+const ImportModal = ({ onClose, onImport }) => {
+    const [text, setText] = useState('');
+    const [mode, setMode] = useState('append'); // 'append' | 'replace'
+
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+            <div className="bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl p-6">
+                 <h3 className="text-white font-bold text-lg mb-4">Importer Backlog (CSV)</h3>
+                 <p className="text-slate-500 text-xs mb-4">Understøtter nu både Excel (tabs) og semikolon-format.</p>
+                 
+                 <div className="flex gap-4 mb-4">
+                     <button onClick={() => setMode('append')} className={`flex-1 p-3 rounded-xl border flex flex-col items-center ${mode === 'append' ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                         <Plus className="w-6 h-6 mb-2"/>
+                         <span className="font-bold text-sm">Tilføj til liste</span>
+                         <span className="text-[10px] opacity-70">Bevarer eksisterende</span>
+                     </button>
+                     <button onClick={() => setMode('replace')} className={`flex-1 p-3 rounded-xl border flex flex-col items-center ${mode === 'replace' ? 'bg-red-900/30 border-red-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                         <RefreshCw className="w-6 h-6 mb-2"/>
+                         <span className="font-bold text-sm">Erstat hele listen</span>
+                         <span className="text-[10px] opacity-70">Sletter alt før import</span>
+                     </button>
+                 </div>
+
+                 {mode === 'replace' && (
+                     <div className="bg-red-900/30 border border-red-800 p-3 rounded-lg mb-4 text-xs text-red-200 flex items-start">
+                         <AlertCircle className="w-4 h-4 mr-2 shrink-0 mt-0.5"/>
+                         <p>Advarsel: Dette vil slette ALLE nuværende opgaver i backloggen og erstatte dem med indholdet herunder. Feedback slettes ikke.</p>
+                     </div>
+                 )}
+
+                 <p className="text-slate-400 text-xs mb-2">Indsæt CSV data (inkl. overskrifter):</p>
+                 <textarea 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-300 text-xs font-mono h-32 focus:ring-2 focus:ring-blue-600 outline-none mb-4"
+                    placeholder="Titel;Status;Beskrivelse..."
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                 />
+                 <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="text-slate-400 px-4 py-2 text-sm font-bold">Annuller</button>
+                    <button onClick={() => onImport(text, mode)} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center text-white ${mode === 'replace' ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'}`}>
+                        <Upload className="w-4 h-4 mr-2"/> {mode === 'replace' ? 'Erstat Data' : 'Importer'}
+                    </button>
+                 </div>
+            </div>
+        </div>
+    );
+};
+
+// --- ADMIN DASHBOARD (BACKLOG) ---
+const AdminDashboard = ({ onClose }) => {
     const [tasks, setTasks] = useState([]);
     const [feedback, setFeedback] = useState([]);
-    const [view, setView] = useState('list'); 
-    const [statusFilter, setStatusFilter] = useState('active'); 
+    const [view, setView] = useState('board'); 
+    const [filterTag, setFilterTag] = useState('ALL'); 
+    
+    // Task Form State
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isImportOpen, setIsImportOpen] = useState(false);
     const [editingTask, setEditingTask] = useState(null);
-    const [form, setForm] = useState({ title: '', status: 'backlog', priority: 'Medium', tag: 'APP', desc: '', acceptance: '', notes: '', release: '' });
+    const [linkedFeedbackId, setLinkedFeedbackId] = useState(null);
+    const [adminConfirm, setAdminConfirm] = useState(null);
+
+    const [form, setForm] = useState({
+        title: '',
+        status: 'backlog', 
+        priority: 'Medium',
+        tag: 'APP',
+        desc: '',
+        notes: '',
+        acceptance: '',
+        dataFields: '',
+        release: ''
+    });
+
+    // Drag and Drop State
+    const dragItem = useRef();
+    const dragOverItem = useRef();
 
     useEffect(() => {
-        if (!user) return;
-        const unsubT = onSnapshot(collection(db, PUBLIC_DATA_PATH, 'backlog'), (snap) => {
+        const qBacklog = query(collection(db, PUBLIC_DATA_PATH, 'backlog'));
+        const unsubBacklog = onSnapshot(qBacklog, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
             items.sort((a,b) => (a.order || 0) - (b.order || 0));
             setTasks(items);
-        });
-        const unsubF = onSnapshot(collection(db, PUBLIC_DATA_PATH, 'feedback'), (snap) => {
+        }, (err) => console.error("Backlog Error:", err));
+
+        const qFeedback = query(collection(db, PUBLIC_DATA_PATH, 'feedback'));
+        const unsubFeedback = onSnapshot(qFeedback, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
             items.sort((a,b) => (a.order || 0) - (b.order || 0));
             setFeedback(items);
-        });
-        return () => { unsubT(); unsubF(); };
-    }, [user]);
+        }, (err) => console.error("Feedback Error:", err));
 
-    const filteredTasks = tasks.filter(t => {
-        if (statusFilter === 'active') return t.status !== 'done';
-        if (statusFilter === 'done') return t.status === 'done';
-        return true;
-    });
+        return () => { unsubBacklog(); unsubFeedback(); }
+    }, []);
 
-    const handleSaveTask = async () => {
+    const filteredTasks = tasks.filter(t => filterTag === 'ALL' || t.tag === filterTag);
+
+    const saveTask = async () => {
         if (!form.title) return;
-        const payload = { ...form, updatedAt: new Date().toISOString() };
-        if (editingTask) {
-            await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', editingTask.id), payload);
-        } else {
-            await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), { ...payload, createdAt: new Date().toISOString(), order: Date.now() });
+        try {
+            if (editingTask) {
+                await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', editingTask.id), form);
+            } else {
+                await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), {
+                    ...form,
+                    createdAt: new Date().toISOString(),
+                    order: -Date.now() 
+                });
+                if (linkedFeedbackId) {
+                    await updateDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', linkedFeedbackId), { status: 'converted' });
+                }
+            }
+            setIsFormOpen(false);
+            setEditingTask(null);
+            setLinkedFeedbackId(null);
+            resetForm();
+        } catch (e) {
+            console.error("Save Error:", e);
+            alert("Fejl ved gemning: " + e.message);
         }
-        setIsFormOpen(false);
-        setEditingTask(null);
+    };
+
+    const handleExportCSV = async () => {
+        try {
+            const csv = generateCSV(tasks);
+            await navigator.clipboard.writeText(csv);
+            alert("CSV (semikolon-separeret) kopieret til udklipsholder!");
+        } catch (e) {
+            alert("Kunne ikke eksportere: " + e.message);
+        }
+    };
+
+    const handleExportFeedbackCSV = async () => {
+        try {
+            const csv = generateFeedbackCSV(feedback);
+            await navigator.clipboard.writeText(csv);
+            alert("Feedback CSV (semikolon-separeret) kopieret til udklipsholder!");
+        } catch (e) {
+            alert("Kunne ikke eksportere feedback: " + e.message);
+        }
     };
 
     const handleImportCSV = async (csvText, mode) => {
         try {
             const parsed = parseCSV(csvText);
-            const batch = writeBatch(db);
-            if (mode === 'replace') {
-                const snap = await getDocs(collection(db, PUBLIC_DATA_PATH, 'backlog'));
-                snap.forEach(d => batch.delete(d.ref));
+            
+            if (!parsed || parsed.length === 0) {
+                 alert("Ingen gyldige data fundet i CSV. Tjek formatet.");
+                 return;
             }
-            parsed.forEach((row, i) => {
+
+            const batch = writeBatch(db);
+            let count = 0;
+            const now = Date.now();
+            
+            // If REPLACE mode, delete all existing docs first
+            if (mode === 'replace') {
+                const snapshot = await getDocs(collection(db, PUBLIC_DATA_PATH, 'backlog'));
+                snapshot.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+            }
+            
+            // Status Mapping Helper
+            const mapStatus = (s) => {
+                s = (s || '').toLowerCase();
+                if (s.includes('done') || s === 'færdig') return 'done';
+                if (s.includes('doing') || s === 'igang') return 'doing';
+                if (s.includes('todo') || s === 'to do') return 'todo';
+                return 'backlog'; // Fallback for 'prototypet', 'backlog', empty etc.
+            };
+
+            parsed.forEach((row, idx) => {
                 if (!row.Titel) return;
-                const ref = doc(collection(db, PUBLIC_DATA_PATH, 'backlog'));
+                
+                let ref;
+                if (row.ID && row.ID.length > 5) { // Simple check if valid ID
+                     ref = doc(db, PUBLIC_DATA_PATH, 'backlog', row.ID);
+                } else {
+                     ref = doc(collection(db, PUBLIC_DATA_PATH, 'backlog'));
+                }
+
                 batch.set(ref, {
-                    title: row.Titel,
-                    status: (row.Status || 'backlog').toLowerCase().replace('færdig', 'done').replace('igang', 'doing'),
+                    title: row.Titel || '',
                     desc: row.Beskrivelse || '',
                     acceptance: row.Acceptkriterier || '',
                     notes: row.Noter || '',
+                    dataFields: row['Datafelter'] || '',
+                    status: mapStatus(row.Status),
+                    release: row.Release || '',
                     tag: row.Tag || 'APP',
                     priority: row.Prioritet || 'Medium',
-                    release: row.Release || '',
-                    order: row.Order ? Number(row.Order) : i,
+                    order: row.Order ? Number(row.Order) : -(now + idx), 
                     createdAt: new Date().toISOString()
                 });
+                count++;
             });
             await batch.commit();
             setIsImportOpen(false);
-            alert("Import fuldført!");
-        } catch (e) { alert("Fejl ved import: " + e.message); }
+            alert(`Succes! ${mode === 'replace' ? 'Backloggen er erstattet med' : 'Tilføjede'} ${count} opgaver.`);
+        } catch (e) {
+            alert("Fejl under import: " + e.message);
+        }
     };
 
+    const resetForm = () => {
+        setForm({
+            title: '', status: 'backlog', priority: 'Medium', tag: 'APP',
+            desc: '', notes: '', acceptance: '', dataFields: '', release: ''
+        });
+    };
+
+    const editTask = (task) => {
+        setEditingTask(task);
+        setForm({
+            title: task.title || '',
+            status: task.status || 'backlog',
+            priority: task.priority || 'Medium',
+            tag: task.tag || 'APP',
+            desc: task.desc || '',
+            notes: task.notes || '',
+            acceptance: task.acceptance || '',
+            dataFields: task.dataFields || '',
+            release: task.release || ''
+        });
+        setIsFormOpen(true);
+    };
+
+    const deleteTask = (id) => {
+        setAdminConfirm({
+            title: "Slet Opgave?",
+            message: "Er du sikker på, at du vil slette denne opgave? Handlingen kan ikke fortrydes.",
+            onConfirm: async () => {
+                try {
+                    await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
+                    if (isFormOpen) setIsFormOpen(false);
+                } catch (e) {
+                    console.error("Delete Error", e);
+                }
+                setAdminConfirm(null);
+            }
+        });
+    };
+    
+    const deleteFeedback = (id) => {
+         setAdminConfirm({
+            title: "Slet Feedback?",
+            message: "Er du sikker? Dette kan ikke fortrydes.",
+            onConfirm: async () => {
+                await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', id));
+                setAdminConfirm(null);
+            }
+        });
+    };
+
+    const moveTaskStatus = async (task, direction) => {
+        const statuses = ['backlog', 'todo', 'doing', 'done'];
+        const currentIdx = statuses.indexOf(task.status);
+        let newIdx = currentIdx + direction;
+        if (newIdx < 0) newIdx = 0;
+        if (newIdx >= statuses.length) newIdx = statuses.length - 1;
+        
+        if (newIdx !== currentIdx) {
+            await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', task.id), {
+                status: statuses[newIdx]
+            });
+        }
+    };
+
+    const moveItemOrder = async (index, direction, list, collectionName) => {
+        if (list === tasks && filterTag !== 'ALL') {
+             alert("Sortering virker kun når filtret er 'Alle'");
+             return;
+        }
+
+        const targetIndex = index + direction;
+        if (targetIndex < 0 || targetIndex >= list.length) return;
+
+        const itemA = list[index];
+        const itemB = list[targetIndex];
+        
+        const orderA = itemA.order || 0;
+        const orderB = itemB.order || 0;
+        
+        const batch = writeBatch(db);
+        batch.update(doc(db, PUBLIC_DATA_PATH, collectionName, itemA.id), { order: orderB });
+        batch.update(doc(db, PUBLIC_DATA_PATH, collectionName, itemB.id), { order: orderA });
+        
+        await batch.commit();
+    };
+
+    const dragStart = (e, position) => {
+        dragItem.current = position;
+        e.dataTransfer.effectAllowed = "move";
+    };
+
+    const dragEnter = (e, position) => {
+        dragOverItem.current = position;
+        e.preventDefault();
+    };
+
+    const dragEnd = async () => {
+        if (filterTag !== 'ALL') {
+             alert("Sortering virker kun når filtret er 'Alle'");
+             dragItem.current = null;
+             dragOverItem.current = null;
+             return;
+        }
+        
+        const sourceIdx = dragItem.current;
+        const destIdx = dragOverItem.current;
+
+        if (sourceIdx === null || destIdx === null || sourceIdx === destIdx) return;
+
+        const copyList = [...tasks];
+        const itemToMove = copyList[sourceIdx];
+        copyList.splice(sourceIdx, 1);
+        copyList.splice(destIdx, 0, itemToMove);
+        
+        setTasks(copyList);
+        
+        const batch = writeBatch(db);
+        copyList.forEach((t, i) => {
+            const newOrder = i; 
+            if (t.order !== newOrder) {
+                 batch.update(doc(db, PUBLIC_DATA_PATH, 'backlog', t.id), { order: newOrder });
+            }
+        });
+        
+        try {
+            await batch.commit();
+        } catch(e) { console.error("Reorder failed", e); }
+
+        dragItem.current = null;
+        dragOverItem.current = null;
+    };
+
+    const startConvertFeedback = (fbItem) => {
+        setForm({
+            title: fbItem.text,
+            status: 'todo',
+            priority: 'Medium',
+            tag: 'APP',
+            desc: `Feedback fra ${fbItem.userName} (${fbItem.context || 'App'}).\n\nOriginal: "${fbItem.text}"\n\nDevice: ${fbItem.device || 'Ikke oplyst'}`,
+            notes: '', acceptance: '', dataFields: '', release: ''
+        });
+        setEditingTask(null);
+        setLinkedFeedbackId(fbItem.id);
+        setIsFormOpen(true);
+        setView('board'); 
+    }
+
+    const copyDataToClipboard = async () => {
+        try {
+            const data = { backlog: tasks, feedback: feedback, exportedAt: new Date().toISOString() };
+            await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+            alert("Data kopieret!");
+        } catch (e) {
+            console.error("Clipboard Error:", e);
+            alert("Kunne ikke kopiere. Fejl: " + e.message);
+        }
+    };
+    
     return (
-        <div className="fixed inset-0 bg-slate-950 z-[100] overflow-y-auto pb-20 fade-in">
-            <div className="bg-slate-900 border-b border-slate-800 p-4 flex justify-between items-center sticky top-0 z-10 shadow-lg">
-                <div className="flex items-center">
-                    <button onClick={onClose} className="mr-3 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors"><ArrowLeft className="w-5 h-5"/></button>
-                    <div>
-                        <h2 className="text-white font-bold">Admin Dashboard</h2>
-                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">System Management</p>
+        <div className="fixed inset-0 bg-slate-950 z-[60] overflow-y-auto pb-safe">
+            {/* HEADER */}
+            <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-10 flex flex-col gap-4 shadow-md">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center">
+                        <button onClick={onClose} className="mr-3 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"><ArrowLeft className="w-5 h-5"/></button>
+                        <div>
+                            <h2 className="text-white font-bold text-lg">Admin Center</h2>
+                            <p className="text-xs text-slate-500">RTE Dashboard</p>
+                        </div>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={handleExportCSV} className="bg-slate-800 text-green-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700" title="Kopier Backlog CSV">
+                            <FileDown className="w-3 h-3 mr-2"/> Backlog
+                        </button>
+                        <button onClick={handleExportFeedbackCSV} className="bg-slate-800 text-purple-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700" title="Kopier Feedback CSV">
+                            <FileDown className="w-3 h-3 mr-2"/> Feedback
+                        </button>
+                        <button onClick={() => setIsImportOpen(true)} className="bg-slate-800 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
+                            <Upload className="w-3 h-3 mr-2"/> Import
+                        </button>
+                        <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
+                            <Copy className="w-3 h-3 mr-2"/> Backup
+                        </button>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={() => { const csv = generateCSV(tasks); navigator.clipboard.writeText(csv); alert("CSV kopieret!"); }} className="bg-slate-800 text-green-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-700 flex items-center hover:bg-slate-700 transition-colors"><FileDown className="w-3 h-3 mr-2"/> Export</button>
-                    <button onClick={() => setIsImportOpen(true)} className="bg-slate-800 text-blue-400 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-700 flex items-center hover:bg-slate-700 transition-colors"><Upload className="w-3 h-3 mr-2"/> Import</button>
+                
+                {/* GLOBAL FILTERS */}
+                <div className="flex gap-2 bg-slate-800/50 p-1 rounded-lg self-start">
+                    {['ALL', 'APP', 'TEAM'].map(tag => (
+                        <button 
+                            key={tag} 
+                            onClick={() => setFilterTag(tag)}
+                            className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${filterTag === tag ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
+                        >
+                            {tag === 'ALL' ? 'Alle' : tag}
+                        </button>
+                    ))}
                 </div>
             </div>
 
-            <div className="p-4 max-w-5xl mx-auto">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                    <div className="flex gap-2 bg-slate-900 p-1 rounded-xl border border-slate-800 shadow-inner">
-                        <button onClick={() => setView('list')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${view === 'list' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Liste</button>
-                        <button onClick={() => setView('board')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${view === 'board' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Board</button>
-                        <button onClick={() => setView('feedback')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Feedback ({feedback.length})</button>
-                    </div>
-
-                    <div className="flex gap-2 bg-slate-800/50 p-1 rounded-xl border border-slate-700/50 font-bold text-[10px] uppercase shadow-inner">
-                        <button onClick={() => setStatusFilter('active')} className={`px-3 py-1.5 rounded-lg transition-all ${statusFilter === 'active' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500'}`}>Aktive</button>
-                        <button onClick={() => setStatusFilter('all')} className={`px-3 py-1.5 rounded-lg transition-all ${statusFilter === 'all' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-500'}`}>Alle</button>
-                        <button onClick={() => setStatusFilter('done')} className={`px-3 py-1.5 rounded-lg transition-all ${statusFilter === 'done' ? 'bg-green-900 text-green-400 border border-green-800/30 shadow-sm' : 'text-slate-500'}`}>Færdige</button>
-                    </div>
+            <div className="p-4 max-w-6xl mx-auto">
+                {/* TABS */}
+                <div className="flex space-x-2 mb-6 bg-slate-900 p-1 rounded-xl inline-flex">
+                    <button onClick={() => setView('board')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'board' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                        <Layout className="w-4 h-4 mr-2"/> Board
+                    </button>
+                    <button onClick={() => setView('list')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'list' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                        <List className="w-4 h-4 mr-2"/> Backlog Liste
+                    </button>
+                    <button onClick={() => setView('feedback')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                        <MessageSquarePlus className="w-4 h-4 mr-2"/> Inbox ({feedback.filter(f => f.status === 'new').length})
+                    </button>
                 </div>
 
-                {view === 'list' && (
-                    <div className="space-y-3">
-                        <button onClick={() => { setForm({ title: '', status: 'backlog', priority: 'Medium', tag: 'APP', desc: '', acceptance: '', notes: '', release: '' }); setEditingTask(null); setIsFormOpen(true); }} className="w-full py-4 border-2 border-dashed border-slate-800 rounded-xl text-slate-500 font-bold hover:text-slate-300 hover:border-slate-600 transition-all flex justify-center items-center group"><Plus className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform"/> Tilføj ny opgave</button>
-                        {filteredTasks.map(t => (
-                            <div key={t.id} onClick={() => { setEditingTask(t); setForm(t); setIsFormOpen(true); }} className="bg-slate-900 border border-slate-800 p-4 rounded-xl cursor-pointer hover:bg-slate-800 transition-all border-l-4 border-l-blue-600 shadow-sm">
-                                <div className="flex justify-between items-start mb-2">
-                                    <div className="flex gap-2">
-                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${t.status === 'done' ? 'bg-green-900/50 text-green-400' : 'bg-blue-900/30 text-blue-400'}`}>{t.status.toUpperCase()}</span>
-                                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">{t.tag}</span>
-                                    </div>
-                                    <span className="text-slate-600 text-[10px] font-mono">#{t.order}</span>
-                                </div>
-                                <h3 className="text-white font-bold text-sm leading-snug">{t.title}</h3>
-                                {t.desc && <p className="text-slate-500 text-xs mt-1 line-clamp-1">{t.desc}</p>}
-                                {t.acceptance && <div className="mt-3 p-2 bg-slate-950 rounded text-[10px] text-slate-400 font-mono whitespace-pre-wrap border border-slate-800/50 leading-relaxed">AC: {t.acceptance.slice(0, 150)}...</div>}
-                            </div>
-                        ))}
-                    </div>
-                )}
-
+                {/* VIEW: BOARD (KANBAN) */}
                 {view === 'board' && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 overflow-x-auto pb-4">
-                        {['backlog', 'todo', 'doing', 'done'].map(status => {
-                            if (status === 'done' && statusFilter === 'active') return null;
-                            return (
-                                <div key={status} className="bg-slate-900/50 rounded-xl border border-slate-800 p-3 min-w-[280px] min-h-[500px] flex flex-col">
-                                    <h4 className="text-[10px] font-bold uppercase text-slate-500 mb-4 px-1 flex justify-between items-center">{status} <span className="bg-slate-800 px-2 rounded-full font-mono">{tasks.filter(t => t.status === status).length}</span></h4>
-                                    <div className="space-y-2 flex-1">
-                                        {filteredTasks.filter(t => t.status === status).map(t => (
-                                            <div key={t.id} onClick={() => { setEditingTask(t); setForm(t); setIsFormOpen(true); }} className="bg-slate-800 border border-slate-700 p-3 rounded-lg shadow-sm hover:border-slate-500 transition-all cursor-pointer">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <span className={`w-2 h-2 rounded-full ${t.priority === 'Critical' ? 'bg-red-500 animate-pulse' : t.priority === 'High' ? 'bg-orange-500' : 'bg-slate-600'}`}></span>
-                                                    <span className="text-[8px] text-slate-500 font-bold uppercase">{t.tag}</span>
+                    <div className="space-y-6 fade-in">
+                        <button onClick={() => { setEditingTask(null); resetForm(); setIsFormOpen(true); }} className="w-full py-3 bg-slate-800 border border-dashed border-slate-600 rounded-xl text-slate-400 hover:text-white hover:border-slate-400 flex justify-center items-center">
+                            <Plus className="w-5 h-5 mr-2"/> Opret Ny Opgave
+                        </button>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            {['backlog', 'todo', 'doing', 'done'].map(status => (
+                                <div key={status} className="bg-slate-900/50 rounded-xl border border-slate-800 p-3 min-h-[300px]">
+                                    <h3 className="text-slate-400 text-xs font-bold uppercase mb-3 flex justify-between items-center px-1">
+                                        {status} <span className="bg-slate-800 px-2 rounded-full border border-slate-700">{filteredTasks.filter(t => t.status === status).length}</span>
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {filteredTasks.filter(t => t.status === status).map(task => (
+                                            <div key={task.id} className="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-sm transition-all group hover:bg-slate-700 relative">
+                                                <div className="flex justify-between items-start mb-2 cursor-pointer" onClick={() => editTask(task)}>
+                                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.tag === 'APP' ? 'bg-indigo-900 text-indigo-200' : 'bg-orange-900 text-orange-200'}`}>{task.tag}</span>
+                                                    <div className="flex gap-1">
+                                                        {task.priority === 'Critical' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse mt-1"/>}
+                                                        <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} className="text-slate-600 hover:text-red-500 p-0.5"><Trash2 className="w-3 h-3"/></button>
+                                                    </div>
                                                 </div>
-                                                <p className="text-xs font-bold text-white leading-tight">{t.title}</p>
+                                                <div className="cursor-pointer" onClick={() => editTask(task)}>
+                                                    <p className="text-sm font-bold text-white mb-1 line-clamp-2">{task.title}</p>
+                                                    <p className="text-xs text-slate-500 line-clamp-2">{task.desc}</p>
+                                                </div>
+                                                {/* Kanban Arrows */}
+                                                <div className="flex justify-between mt-3 pt-2 border-t border-slate-700/50">
+                                                    <button onClick={() => moveTaskStatus(task, -1)} disabled={status === 'backlog'} className={`p-1 rounded ${status === 'backlog' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowLeft className="w-3 h-3"/></button>
+                                                    <button onClick={() => moveTaskStatus(task, 1)} disabled={status === 'done'} className={`p-1 rounded ${status === 'done' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowRight className="w-3 h-3"/></button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
-                            );
-                        })}
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* VIEW: LIST (PRIORITY ARROWS) */}
+                {view === 'list' && (
+                    <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden fade-in">
+                        <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
+                            <h3 className="font-bold text-white">Prioriteret Liste {filterTag !== 'ALL' && '(Sortering deaktiveret ved filtrering)'}</h3>
+                            <button onClick={() => { setEditingTask(null); resetForm(); setIsFormOpen(true); }} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center"><Plus className="w-3 h-3 mr-1"/> Ny</button>
+                        </div>
+                        <div className="divide-y divide-slate-800">
+                            {filteredTasks.map((task, index) => (
+                                <div 
+                                    key={task.id} 
+                                    className="p-3 flex items-center bg-slate-900 hover:bg-slate-800 transition-colors group"
+                                    draggable={filterTag === 'ALL'} // Only draggable if not filtered
+                                    onDragStart={(e) => dragStart(e, index)}
+                                    onDragEnter={(e) => dragEnter(e, index)}
+                                    onDragEnd={dragEnd}
+                                    onDragOver={(e) => e.preventDefault()}
+                                >
+                                    {/* DRAG HANDLE FOR DESKTOP */}
+                                    <div className="hidden md:flex text-slate-600 cursor-grab active:cursor-grabbing mr-2 hover:text-slate-400">
+                                        <GripVertical className="w-5 h-5" />
+                                    </div>
+
+                                    {/* Mobile Friendly Reorder Arrows (Visible on mobile, hidden on MD if you prefer, or keep both) */}
+                                    <div className="flex md:hidden flex-col gap-1 mr-3 text-slate-500">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); moveItemOrder(index, -1, filteredTasks, 'backlog'); }} 
+                                            disabled={index === 0 || filterTag !== 'ALL'}
+                                            className="p-1 hover:text-white disabled:opacity-30"
+                                        ><ChevronUp className="w-4 h-4"/></button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); moveItemOrder(index, 1, filteredTasks, 'backlog'); }}
+                                            disabled={index === filteredTasks.length - 1 || filterTag !== 'ALL'}
+                                            className="p-1 hover:text-white disabled:opacity-30"
+                                        ><ChevronDown className="w-4 h-4"/></button>
+                                    </div>
+                                    
+                                    <div className="flex-1 cursor-pointer" onClick={() => editTask(task)}>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.status === 'done' ? 'bg-green-900 text-green-200' : 'bg-slate-700 text-slate-300'}`}>{task.status}</span>
+                                            <span className="text-white font-bold text-sm">{task.title}</span>
+                                        </div>
+                                        <div className="flex gap-4 text-xs text-slate-500">
+                                            <span>{task.tag}</span>
+                                            {task.release && <span className="text-blue-400">Release: {task.release}</span>}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => editTask(task)} className="p-2 text-slate-500 hover:text-blue-400"><Edit2 className="w-4 h-4"/></button>
+                                        <button onClick={() => deleteTask(task.id)} className="p-2 text-slate-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* VIEW: INBOX */}
+                {view === 'feedback' && (
+                    <div className="space-y-3 fade-in">
+                        {feedback.length === 0 && <p className="text-slate-500 text-center py-10">Ingen feedback endnu.</p>}
+                        {feedback.map((item, index) => (
+                            <div key={item.id} className={`p-4 rounded-xl border ${item.status === 'new' ? 'bg-slate-800 border-blue-900/50' : 'bg-slate-900 border-slate-800 opacity-60'}`}>
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="flex items-center gap-3">
+                                        {/* FEEDBACK PRIORITY CONTROLS */}
+                                        <div className="flex flex-col gap-0.5 mr-1 text-slate-600">
+                                            <button onClick={() => moveItemOrder(index, -1, feedback, 'feedback')} disabled={index === 0} className="hover:text-white disabled:opacity-30"><ChevronUp className="w-3 h-3"/></button>
+                                            <button onClick={() => moveItemOrder(index, 1, feedback, 'feedback')} disabled={index === feedback.length -1} className="hover:text-white disabled:opacity-30"><ChevronDown className="w-3 h-3"/></button>
+                                        </div>
+
+                                        <div className="w-8 h-8 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center font-bold">
+                                            {item.userName.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-white">{item.userName}</p>
+                                            <p className="text-[10px] text-slate-500 flex items-center gap-2">
+                                                <span>{new Date(item.timestamp).toLocaleString()}</span>
+                                                <span className="bg-slate-800 px-1.5 rounded text-slate-400 border border-slate-700">{item.context || 'App'}</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {item.status === 'new' && (
+                                            <button onClick={() => startConvertFeedback(item)} className="text-xs bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-lg border border-blue-600/30 hover:bg-blue-600/30 font-bold transition-colors">
+                                                Opret Opgave
+                                            </button>
+                                        )}
+                                        <button onClick={() => deleteFeedback(item.id)} className="p-1.5 text-slate-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                                    </div>
+                                </div>
+                                <div className="bg-slate-950 p-3 rounded-lg text-sm text-slate-300 border border-slate-800 mb-2">
+                                    {item.text}
+                                </div>
+                                
+                                {/* DEVICE INFO AT BOTTOM */}
+                                {item.device && (
+                                    <div className="mt-2 pt-2 border-t border-slate-800/50">
+                                        <div className="flex items-start text-[9px] text-slate-600 font-mono">
+                                            <Terminal className="w-3 h-3 mr-1.5 mt-0.5 opacity-50 shrink-0"/> 
+                                            <span className="break-all opacity-70 leading-relaxed">{item.device}</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>
 
             {/* TASK FORM MODAL */}
             {isFormOpen && (
-                <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[110] fade-in">
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
                     <div className="bg-slate-900 w-full max-w-2xl rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
-                            <h3 className="text-white font-bold">{editingTask ? 'Rediger' : 'Ny'} Opgave</h3>
-                            <button onClick={() => setIsFormOpen(false)} className="text-slate-400 hover:text-white transition-colors"><X className="w-5 h-5"/></button>
+                            <h3 className="text-white font-bold text-lg">{editingTask ? 'Rediger Opgave' : 'Ny Opgave'}</h3>
+                            <button onClick={() => setIsFormOpen(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
                         </div>
                         <div className="p-6 overflow-y-auto space-y-4">
-                            <div>
-                                <label className="block text-slate-500 text-[10px] uppercase font-bold mb-1.5">Titel</label>
-                                <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="fx 'Opret Ugeplan'" className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-600 transition-all shadow-inner font-bold"/>
-                            </div>
                             <div className="grid grid-cols-2 gap-4">
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Titel (Påkrævet)</label>
+                                    <input type="text" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.title} onChange={e => setForm({...form, title: e.target.value})} autoFocus/>
+                                </div>
                                 <div>
-                                    <label className="block text-slate-500 text-[10px] uppercase font-bold mb-1.5">Status</label>
-                                    <select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none">
-                                        <option value="backlog">Backlog / Ideer</option>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Status</label>
+                                    <select className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
+                                        <option value="backlog">Backlog / Idé</option>
                                         <option value="todo">To Do</option>
                                         <option value="doing">Doing</option>
                                         <option value="done">Done</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-slate-500 text-[10px] uppercase font-bold mb-1.5">Prioritet</label>
-                                    <select value={form.priority} onChange={e => setForm({...form, priority: e.target.value})} className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tag / Type</label>
+                                    <select className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.tag} onChange={e => setForm({...form, tag: e.target.value})}>
+                                        <option value="APP">App Feature</option>
+                                        <option value="TEAM">Team Opgave</option>
+                                    </select>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Beskrivelse (User Story)</label>
+                                    <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.desc} onChange={e => setForm({...form, desc: e.target.value})} placeholder="Som [Rolle] vil jeg..."/>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Acceptkriterier</label>
+                                    <textarea rows="3" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.acceptance} onChange={e => setForm({...form, acceptance: e.target.value})} placeholder="- Skal kunne..."/>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Noter / Tech Specs</label>
+                                    <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Datafelter (Udkast)</label>
+                                    <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.dataFields} onChange={e => setForm({...form, dataFields: e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Prioritet</label>
+                                    <select className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.priority} onChange={e => setForm({...form, priority: e.target.value})}>
                                         <option>Critical</option>
                                         <option>High</option>
                                         <option>Medium</option>
                                         <option>Low</option>
                                     </select>
                                 </div>
-                            </div>
-                            <div>
-                                <label className="block text-slate-500 text-[10px] uppercase font-bold mb-1.5">Beskrivelse (User Story)</label>
-                                <textarea value={form.desc} onChange={e => setForm({...form, desc: e.target.value})} rows="2" className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none" placeholder="Som [rolle] vil jeg..."/>
-                            </div>
-                            <div>
-                                <label className="block text-slate-500 text-[10px] uppercase font-bold mb-1.5">Acceptkriterier (Håndterer linjeskift korrekt)</label>
-                                <textarea value={form.acceptance} onChange={e => setForm({...form, acceptance: e.target.value})} rows="8" className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none font-mono text-xs leading-relaxed" placeholder="- Punkt 1..."/>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Release / Sprint</label>
+                                    <input type="text" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.release} onChange={e => setForm({...form, release: e.target.value})} placeholder="fx MVP eller Sprint 1"/>
+                                </div>
                             </div>
                         </div>
-                        <div className="p-4 border-t border-slate-800 bg-slate-800/30 flex justify-between items-center">
-                            {editingTask && <button onClick={async () => { if(confirm('Slet opgaven permanent?')) { await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', editingTask.id)); setIsFormOpen(false); } }} className="text-red-500 text-xs font-bold px-4 py-2 hover:bg-red-900/20 rounded-lg transition-colors flex items-center"><Trash2 className="w-4 h-4 mr-2"/> Slet</button>}
-                            <div className="flex gap-3 ml-auto">
-                                <button onClick={() => setIsFormOpen(false)} className="text-slate-400 px-4 py-2 font-bold text-sm">Annuller</button>
-                                <button onClick={handleSaveTask} className="bg-blue-600 text-white px-8 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-blue-900/30 active:scale-95 transition-all">Gem Opgave</button>
+                        <div className="p-4 border-t border-slate-800 bg-slate-800/50 flex justify-between">
+                            {editingTask ? <button onClick={() => deleteTask(editingTask.id)} className="text-red-400 hover:text-red-300 px-4 py-2 text-sm font-bold flex items-center"><Trash2 className="w-4 h-4 mr-2"/> Slet</button> : <div/>}
+                            <div className="flex gap-3">
+                                <button onClick={() => setIsFormOpen(false)} className="text-slate-400 hover:text-white px-4 py-2 font-bold text-sm">Annuller</button>
+                                <button onClick={saveTask} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold text-sm">Gem Opgave</button>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
-
+            
             {/* IMPORT MODAL */}
             {isImportOpen && (
-                <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-[120] fade-in">
-                    <div className="bg-slate-900 w-full max-w-xl rounded-2xl border border-slate-700 p-6 shadow-2xl">
-                        <h3 className="text-white font-bold text-lg mb-2 flex items-center gap-2"><Upload className="w-5 h-5 text-blue-500"/> Importer CSV / Excel</h3>
-                        <p className="text-slate-500 text-xs mb-4 italic leading-relaxed text-balance">Den avancerede v5 parser håndterer linjeskift indkapslet i anførselstegn.</p>
-                        <textarea id="importArea" placeholder="Titel;Status;Beskrivelse;Acceptkriterier..." rows="12" className="w-full bg-slate-950 border border-slate-800 p-3 rounded-xl text-white outline-none font-mono text-[10px] mb-4 shadow-inner"/>
-                        <div className="flex justify-end gap-3">
-                            <button onClick={() => setIsImportOpen(false)} className="text-slate-400 font-bold px-4 py-2 hover:text-white transition-colors">Luk</button>
-                            <button onClick={() => handleImportCSV(document.getElementById('importArea').value, 'append')} className="bg-slate-800 text-blue-400 px-4 py-2 rounded-lg font-bold border border-slate-700 hover:bg-slate-700 transition-colors">Tilføj</button>
-                            <button onClick={() => handleImportCSV(document.getElementById('importArea').value, 'replace')} className="bg-red-600 text-white px-4 py-2 rounded-lg font-bold shadow-lg shadow-red-900/20 active:scale-95 transition-all">Erstat hele listen</button>
-                        </div>
-                    </div>
-                </div>
+                <ImportModal onClose={() => setIsImportOpen(false)} onImport={handleImportCSV} />
+            )}
+            
+            {/* ADMIN CONFIRM DIALOG */}
+            {adminConfirm && (
+                <ConfirmModal 
+                    title={adminConfirm.title}
+                    message={adminConfirm.message}
+                    onConfirm={adminConfirm.onConfirm}
+                    onCancel={() => setAdminConfirm(null)}
+                />
             )}
         </div>
     );
@@ -485,7 +1073,7 @@ const App = () => {
   const [editingDay, setEditingDay] = useState(null);
   const [editingSession, setEditingSession] = useState(null); 
   const [confirmDialog, setConfirmDialog] = useState(null);
-  const [feedbackContext, setFeedbackContext] = useState(null); 
+  const [feedbackContext, setFeedbackContext] = useState(null); // String or null
   const [adminOpen, setAdminOpen] = useState(false);
 
   // Auth & Init
@@ -497,9 +1085,12 @@ const App = () => {
         setAuthLoading(false); 
         return; 
     }
+    getRedirectResult(auth).catch((error) => {
+        if (error.code !== 'auth/popup-closed-by-user') setLoginError(error.message);
+    });
 
-    // Initial Auth Listener
-    const unsubAuth = onAuthStateChanged(auth, async (u) => {
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
+      setAuthLoading(false);
       if (u) {
         const email = u.email ? u.email.toLowerCase() : '';
         const userProfile = USER_MAPPING[email];
@@ -520,76 +1111,46 @@ const App = () => {
       } else {
         setUser(null);
       }
-      setAuthLoading(false);
     });
-
-    // Check Redirect Results
-    getRedirectResult(auth).catch((error) => {
-        if (error.code !== 'auth/popup-closed-by-user') setLoginError(error.message);
-    });
-
-    // URL Parameter Logic
-    const params = new URLSearchParams(window.location.search);
-    const fighterParam = params.get('fighter');
-    if (fighterParam && FIGHTERS.includes(fighterParam)) {
-      setActiveFighter(fighterParam);
-      setIsLocked(true);
-    }
-
     return () => unsubAuth();
   }, []);
 
-  // Sync Data
+  // Handlers (Login, CRUD, Logic)
+  const handleSmartLogin = async () => {
+      setLoginError(null);
+      const provider = new GoogleAuthProvider();
+      try { isMobile ? await signInWithRedirect(auth, provider) : await signInWithPopup(auth, provider); } 
+      catch (error) { setLoginError(error.message); }
+  };
+
+  const handleLogout = () => { signOut(auth); setAccessDenied(false); setLoginError(null); };
+
+  // Data Sync Hooks (Personal & Team)
   useEffect(() => {
     if (!user || accessDenied || isBrowserBlocked) return;
-    
     const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
     const collectionPath = isStandardMode ? 'templates' : 'weeks';
     
-    // Personal Snapshot
     const docRef = doc(db, ROOT_COLLECTION, activeFighter, collectionPath, docId);
     const unsubPersonal = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setScheduleData(data);
         if (data.lastUpdated) setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
-      } else { 
-        setScheduleData({}); 
-        setLastUpdated('Ingen data'); 
-      }
-    }, (err) => console.error("Personal Sync Error:", err));
+      } else { setScheduleData({}); setLastUpdated('Aldrig'); }
+    });
 
-    // Team Snapshot (Weeks only)
     const unsubsTeam = [];
-    if (!isStandardMode) {
-        FIGHTERS.forEach(fighter => {
-            const fRef = doc(db, ROOT_COLLECTION, fighter, 'weeks', `week_${currentWeek}`);
-            const unsub = onSnapshot(fRef, (snap) => {
-                if (snap.exists()) setTeamData(prev => ({...prev, [fighter]: snap.data()}));
-                else setTeamData(prev => ({...prev, [fighter]: {}}));
-            });
-            unsubsTeam.push(unsub);
+    FIGHTERS.forEach(fighter => {
+        const fRef = doc(db, ROOT_COLLECTION, fighter, collectionPath, docId);
+        const unsub = onSnapshot(fRef, (snap) => {
+            if (snap.exists()) setTeamData(prev => ({...prev, [fighter]: snap.data()}));
+            else setTeamData(prev => ({...prev, [fighter]: {}}));
         });
-    }
-
-    return () => { 
-        unsubPersonal(); 
-        unsubsTeam.forEach(u => u()); 
-    };
-  }, [user, activeFighter, currentWeek, isStandardMode, accessDenied]);
-
-  // Handlers
-  const handleSmartLogin = async (mode) => {
-      setLoginError(null);
-      const provider = new GoogleAuthProvider();
-      try { 
-          if (mode === 'redirect') {
-              await signInWithRedirect(auth, provider);
-          } else {
-              await signInWithPopup(auth, provider); 
-          }
-      } catch (error) { setLoginError(error.message); }
-  };
+        unsubsTeam.push(unsub);
+    });
+    return () => { unsubPersonal(); unsubsTeam.forEach(u => u()); };
+  }, [user, activeFighter, currentWeek, isStandardMode, accessDenied, isBrowserBlocked]);
 
   const saveToDb = async (newData) => {
       const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
@@ -599,6 +1160,7 @@ const App = () => {
       await setDoc(docRef, newData);
   };
 
+  // Helper Wrappers for Modals
   const handleSaveSession = async (session) => {
     const newData = JSON.parse(JSON.stringify(scheduleData));
     if (!newData[editingDay]) newData[editingDay] = [];
@@ -633,163 +1195,205 @@ const App = () => {
         if (isRest) {
             newData[day] = currentSessions.filter(s => !s.isRestDay);
         } else {
-            if (currentSessions.length > 0 && !confirm("Dette sletter dagens pas for at holde hviledag. Fortsæt?")) return;
-            newData[day] = [{ isRestDay: true, id: Date.now() }];
+            currentSessions = currentSessions.map(s => {
+                if (s.status !== 'cancelled' && !s.isRestDay) {
+                    return { ...s, status: 'cancelled', cancellationReason: 'Hviledag', cancellationTime: new Date().toISOString() };
+                }
+                return s;
+            });
+            currentSessions.push({ isRestDay: true, id: Date.now() });
+            newData[day] = currentSessions;
         }
         await saveToDb(newData);
         setConfirmDialog(null);
     };
-    executeToggle();
+    const currentSessions = scheduleData[day] || [];
+    const isRest = currentSessions.some(s => s.isRestDay);
+    if (!isRest && currentSessions.filter(s => s.status !== 'cancelled' && !s.isRestDay).length > 0) {
+        setConfirmDialog({ title: "Bekræft Hviledag", message: `Du har planlagte pas. Vil du aflyse dem?`, onConfirm: executeToggle });
+    } else { executeToggle(); }
   };
 
-  // --- RENDER ---
-  if (isBrowserBlocked) return <BrowserBlockScreen />;
-  if (authLoading) return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-500 gap-4">
-          <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
-          <p className="font-mono text-[10px] tracking-widest uppercase font-bold">Initialiserer FightWeek...</p>
-      </div>
-  );
-  
-  if (!user) return <LoginScreen onLoginPopup={() => handleSmartLogin('popup')} onLoginRedirect={() => handleSmartLogin('redirect')} error={loginError} loading={authLoading} />;
-  if (accessDenied) return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-8 text-center">
-          <Lock className="w-12 h-12 text-red-500 mb-4" />
-          <h2 className="text-white font-bold text-xl mb-2">Ingen adgang</h2>
-          <p className="text-slate-400 text-sm mb-6">Din e-mail ({user.email}) er ikke registreret i systemet.</p>
-          <button onClick={() => signOut(auth)} className="bg-slate-800 text-white px-6 py-2 rounded-xl font-bold flex items-center gap-2">
-              <LogOut className="w-4 h-4" /> Log ud
-          </button>
-      </div>
-  );
+  const handleAddClick = (day) => {
+      const sessions = scheduleData[day] || [];
+      if (sessions.some(s => s.isRestDay)) {
+          setConfirmDialog({
+              title: "Fjern Hviledag?", message: "Dette er en hviledag. Vil du fjerne hviledagen og oprette et pas?",
+              onConfirm: async () => {
+                  const newData = JSON.parse(JSON.stringify(scheduleData));
+                  newData[day] = (newData[day] || []).filter(s => !s.isRestDay);
+                  await saveToDb(newData);
+                  setConfirmDialog(null);
+                  setTimeout(() => { setEditingDay(day); setEditingSession(null); setModalOpen(true); }, 100);
+              }
+          });
+      } else { setEditingDay(day); setEditingSession(null); setModalOpen(true); }
+  };
 
-  const isAdmin = ['coach', 'admin'].includes(USER_MAPPING[user.email.toLowerCase()]?.role);
+  const handleImportStandard = () => {
+    setConfirmDialog({
+        title: "Hent Standarduge", message: "Dette vil overskrive hele ugen. Er du sikker?",
+        onConfirm: async () => {
+            const standardSnap = await getDoc(doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard'));
+            if (standardSnap.exists()) await saveToDb(standardSnap.data());
+            else alert("Ingen standarduge fundet.");
+            setConfirmDialog(null);
+        }
+    });
+  };
+
+  // --- RENDERING ---
+  if (isBrowserBlocked) return <BrowserBlockScreen />;
+  if (authLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loader...</div>;
+  if (!user) return <LoginScreen onLoginPopup={() => handleSmartLogin()} onLoginRedirect={() => handleSmartLogin()} error={loginError} />;
+  if (accessDenied) return <div className="text-white text-center p-10">Ingen adgang <button onClick={handleLogout}>Log ud</button></div>;
+
   const isReadOnly = !isStandardMode && currentWeek < systemWeek;
+  const userRole = USER_MAPPING[user.email.toLowerCase()]?.role;
+  const isAdmin = userRole === 'admin' || userRole === 'coach';
+
+  // Helper for Context Name
+  const getWeekLabel = () => {
+        if (currentWeek === systemWeek) return `Uge ${currentWeek} (Aktuel)`;
+        if (currentWeek > systemWeek) return `Uge ${currentWeek} (Næste)`;
+        return `Uge ${currentWeek} (Tidligere)`;
+    };
+
+    const getCurrentContextName = () => {
+        if (view === 'team') {
+            if (isStandardMode) return 'Standarduge - Teamet';
+            return `${getWeekLabel()} - Teamet`;
+        }
+        if (isStandardMode) return 'Standarduge - Min';
+        return `${getWeekLabel()} - Min Plan`;
+    };
+
+  // Trigger feedback with explicit context
+  const openFeedback = (ctx) => setFeedbackContext(ctx || getCurrentContextName());
 
   return (
     <div className="bg-slate-950 text-slate-200 min-h-screen pb-24 font-sans selection:bg-blue-500/30">
       {/* HEADER */}
-      <header className="bg-slate-900 p-4 shadow-lg border-b border-slate-800 sticky top-0 z-50">
+      <div className="bg-slate-900 p-4 shadow-lg border-b border-slate-800 sticky top-0 z-20">
         <div className="flex justify-between items-center max-w-md mx-auto">
-          <div className="flex items-center space-x-3">
-            <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-900/30">
+          <div className="flex items-center space-x-2">
+            <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-900/20">
               <ShieldCheck className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-white font-bold text-lg leading-tight tracking-tight">FightWeek</h1>
-              <p className="text-blue-400 text-[10px] font-bold uppercase tracking-widest">v1.44 Stable</p>
+              <h1 className="text-white font-bold text-lg leading-tight">FightWeek</h1>
+              <p className="text-blue-400 text-xs font-bold uppercase tracking-wide">
+                 {isAdmin ? 'Admin / Coach' : 'Fighter'}
+              </p>
             </div>
           </div>
           
           <div className="flex items-center gap-2">
             {isAdmin && (
-                <button onClick={() => setAdminOpen(true)} className="p-2 bg-slate-800 rounded-lg text-yellow-500 border border-slate-700 hover:bg-slate-700 transition-colors">
+                <button onClick={() => setAdminOpen(true)} className="p-2 bg-slate-800 rounded-lg text-yellow-500 border border-yellow-900/30 shadow-sm">
                     <ClipboardList className="w-5 h-5" />
                 </button>
             )}
-            <div className="relative">
-                <select 
-                    disabled={isLocked}
-                    value={activeFighter} 
-                    onChange={(e) => setActiveFighter(e.target.value)} 
-                    className="appearance-none bg-slate-800 text-white pl-3 pr-8 py-2 rounded-lg border border-slate-700 text-xs font-bold shadow-sm disabled:opacity-80"
-                >
-                    {FIGHTERS.map(f => <option key={f} value={f}>{f}</option>)}
+            {isLocked ? (
+              <div className="flex items-center bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700/50">
+                <User className="w-3 h-3 text-slate-400 mr-2" />
+                <span className="text-sm font-bold text-white">{activeFighter}</span>
+              </div>
+            ) : (
+              <div className="relative group">
+                <select value={activeFighter} onChange={(e) => setActiveFighter(e.target.value)} className="appearance-none bg-slate-800 text-white pl-4 pr-10 py-2 rounded-lg border border-slate-700 text-sm font-bold">
+                  {FIGHTERS.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
-                {!isLocked && <ChevronDown className="w-3 h-3 absolute right-2.5 top-3 text-slate-500 pointer-events-none" />}
-            </div>
-            <button onClick={() => signOut(auth)} className="p-2 text-slate-500 hover:text-white transition-colors"><LogOut className="w-5 h-5" /></button>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400"><ChevronDown className="w-4 h-4" /></div>
+              </div>
+            )}
+            <button onClick={handleLogout} className="p-2 text-slate-500 hover:text-white"><LogOut className="w-5 h-5" /></button>
           </div>
         </div>
-      </header>
+      </div>
 
       <div className="max-w-md mx-auto relative pt-4 min-h-[85vh]">
         {/* Banner: Standard Mode */}
         {isStandardMode && (
-          <div className="mx-4 mb-4 bg-yellow-900/20 border border-yellow-700/40 rounded-xl p-3 flex items-start space-x-3 fade-in">
-            <Globe className="w-5 h-5 text-yellow-500 mt-0.5" />
-            <div>
-              <p className="text-sm text-yellow-100 font-bold leading-tight">Redigerer Standarduge</p>
-              <p className="text-[10px] text-yellow-500/80 mt-1 uppercase font-bold tracking-widest">Din faste skabelon</p>
-            </div>
+          <div className={`mx-4 mb-4 rounded-xl p-3 flex items-start space-x-3 fade-in ${view === 'team' ? 'bg-indigo-900/30 border-indigo-700/50' : 'bg-yellow-900/30 border-yellow-700/50'}`}>
+              <Info className={`w-5 h-5 mt-0.5 ${view === 'team' ? 'text-indigo-400' : 'text-yellow-500'}`} />
+              <div>
+                <p className={`text-sm font-bold ${view === 'team' ? 'text-indigo-200' : 'text-yellow-200'}`}>{view === 'team' ? 'Teamets Standarduger' : 'Redigerer Standarduge'}</p>
+                <p className="text-xs opacity-80 mt-1">{view === 'team' ? 'Her ser du teamets faste grundplan.' : 'Dette er din skabelon. Klik "Gem" når du er færdig.'}</p>
+              </div>
           </div>
         )}
 
-        {/* Week Selector */}
-        <div className="mx-4 mb-6 space-y-4">
-          <div className="flex items-center justify-between bg-slate-800/50 p-2.5 rounded-2xl border border-slate-700/50 shadow-xl">
-            <button onClick={() => { setCurrentWeek(Math.max(1, currentWeek - 1)); setIsStandardMode(false); }} className={`p-2 hover:bg-slate-700 rounded-xl text-slate-400 transition-colors ${currentWeek <= 1 ? 'invisible' : ''}`}><ChevronLeft className="w-7 h-7" /></button>
+        {/* Controls (Week Selector) */}
+        <div className="mx-4 mb-4 space-y-3">
+          <div className="flex items-center justify-between bg-slate-800 p-2 rounded-xl border border-slate-700 shadow-md">
+            <button onClick={() => { setCurrentWeek(currentWeek - 1); setIsStandardMode(false); }} className={`p-2 hover:bg-slate-700 rounded-lg text-slate-400 ${currentWeek <= 1 ? 'invisible' : ''}`}><ChevronLeft className="w-6 h-6" /></button>
             <div className="text-center">
-              <span className="text-slate-500 text-[10px] uppercase tracking-widest font-black block mb-0.5">{currentWeek === systemWeek ? "Aktuel Uge" : "Ugeplan"}</span>
-              <div className="text-white font-black text-xl">Uge {currentWeek}</div>
+              <span className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">{currentWeek === systemWeek ? "Aktuel Uge" : currentWeek < systemWeek ? "Tidligere Uge" : "Næste Uge"}</span>
+              <div className="text-white font-bold text-xl">Uge {currentWeek}</div>
             </div>
-            <button onClick={() => { setCurrentWeek(currentWeek + 1); setIsStandardMode(false); }} className="p-2 hover:bg-slate-700 rounded-xl text-slate-400 transition-colors"><ChevronRight className="w-7 h-7" /></button>
+            <button onClick={() => { setCurrentWeek(currentWeek + 1); setIsStandardMode(false); }} className={`p-2 hover:bg-slate-700 rounded-lg text-slate-400 ${currentWeek >= systemWeek + 1 ? 'invisible' : ''}`}><ChevronRight className="w-6 h-6" /></button>
           </div>
 
           <div className="flex justify-between items-center px-1">
-            <div className="flex items-center space-x-1.5 text-[10px] text-slate-500 font-bold uppercase tracking-tight">
-                {lastUpdated && <><Clock className="w-3 h-3" /><span>Update: {lastUpdated}</span></>}
-                {isReadOnly && <span className="flex items-center text-slate-400 ml-2 bg-slate-900 px-2 py-0.5 rounded border border-slate-800"><History className="w-3 h-3 mr-1"/> Historik</span>}
+            <div className="flex items-center space-x-1 text-[10px] text-slate-500 font-medium">
+                {!isStandardMode && lastUpdated && <><Clock className="w-3 h-3" /><span>Opdateret: {lastUpdated}</span></>}
+                {isReadOnly && <span className="flex items-center text-slate-400 ml-2"><History className="w-3 h-3 mr-1"/> Historik</span>}
             </div>
-            <div className="flex gap-2">
-                {!isReadOnly && !isStandardMode && (
-                    <button onClick={async () => {
-                        if(confirm("Hent din standarduge? Dette overskriver nuværende plan.")) {
-                            const snap = await getDoc(doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard'));
-                            if (snap.exists()) await saveToDb(snap.data());
-                            else alert("Ingen skabelon fundet.");
-                        }
-                    }} className="text-[10px] font-bold px-3 py-1.5 rounded-lg bg-blue-900/20 text-blue-400 border border-blue-800/50 flex items-center gap-1.5 transition-all hover:bg-blue-900/40">
-                        <Download className="w-3 h-3"/> Hent Standard
+            {!isReadOnly && (
+                <div className="flex space-x-2">
+                    <button onClick={() => setIsStandardMode(!isStandardMode)} className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors flex items-center ${isStandardMode ? 'bg-yellow-900/50 text-yellow-100 border-yellow-700' : 'bg-slate-800 text-slate-300 border-slate-700'}`}>
+                        {isStandardMode ? <><X className="w-3 h-3 mr-1.5"/> Luk Standard</> : <><Globe className="w-3 h-3 mr-1.5"/> {view === 'personal' ? 'Rediger standarduge' : 'Se standarduger'}</>}
                     </button>
-                )}
-                <button onClick={() => setIsStandardMode(!isStandardMode)} className={`text-[10px] font-bold px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 shadow-sm ${isStandardMode ? 'bg-yellow-900/40 text-yellow-100 border-yellow-700 shadow-yellow-900/10' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}>
-                    {isStandardMode ? <><X className="w-3 h-3"/> Luk Skabelon</> : <><Globe className="w-3 h-3"/> Rediger Skabelon</>}
-                </button>
-            </div>
+                    {view === 'personal' && !isStandardMode && (
+                        <button onClick={handleImportStandard} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-blue-900/20 text-blue-400 border-blue-800/50 flex items-center">
+                            <ChevronDown className="w-3 h-3 mr-1.5"/> Hent Standard
+                        </button>
+                    )}
+                </div>
+            )}
           </div>
         </div>
 
         {/* VIEWS */}
         {view === 'personal' ? (
-          <div className="px-4 space-y-4 pb-32 fade-in">
+          <div className="px-4 space-y-3 pb-32 fade-in">
              {DAYS.map(day => {
                 const sessions = scheduleData[day] || [];
                 const isRestDay = sessions.some(s => s.isRestDay);
                 const visibleSessions = sessions.filter(s => !s.isRestDay);
                 return (
-                    <div key={day} className={`rounded-2xl p-4 border transition-all shadow-md ${isRestDay ? 'bg-slate-900/40 border-slate-800/60' : 'bg-slate-900 border-slate-800'}`}>
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-white font-black text-lg flex items-center gap-2">
-                                {day} 
-                                {isRestDay && <span className="text-[9px] bg-blue-900/50 text-blue-400 px-2 py-0.5 rounded-full border border-blue-800/50 uppercase tracking-tighter font-black">Hvile</span>}
-                            </h3>
-                            <div className="flex space-x-1.5">
-                                 <button disabled={isReadOnly} onClick={() => handleToggleRestDay(day)} className={`p-2 rounded-full transition-all border shadow-sm ${isRestDay ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-800 text-slate-500 border-slate-700 hover:text-slate-300'} ${isReadOnly ? 'hidden' : ''}`}><Bed className="w-4 h-4" /></button>
-                                 <button disabled={isReadOnly} onClick={() => { setEditingDay(day); setEditingSession(null); setModalOpen(true); }} className={`bg-blue-600 rounded-full p-2 text-white shadow-lg shadow-blue-900/30 transition-all active:scale-90 ${isReadOnly ? 'hidden' : ''}`}><Plus className="w-5 h-5" /></button>
+                    <div key={day} className={`mb-3 rounded-2xl p-4 border transition-all shadow-md ${isRestDay ? 'bg-slate-900/30 border-slate-800' : 'bg-slate-900 border-slate-800'}`}>
+                        <div className="flex justify-between items-center mb-3">
+                            <div className="flex items-center space-x-2">
+                                <h3 className={`text-white font-bold text-lg ${isReadOnly ? 'text-slate-400' : ''}`}>{day}</h3>
+                                {isRestDay && <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">HVILEDAG</span>}
+                            </div>
+                            <div className="flex space-x-1">
+                                 <button disabled={isReadOnly} onClick={() => handleToggleRestDay(day)} className={`p-1.5 rounded-full transition-colors ${isRestDay ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'} ${isReadOnly ? 'opacity-0' : ''}`}><Bed className="w-4 h-4" /></button>
+                                 <button disabled={isReadOnly} onClick={() => handleAddClick(day)} className={`bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 rounded-full p-1.5 transition-colors ${isReadOnly ? 'opacity-0' : ''}`}><Plus className="w-5 h-5" /></button>
                             </div>
                         </div>
-                        {visibleSessions.length === 0 && !isRestDay && <div className="text-slate-700 text-[10px] font-black py-4 text-center border-2 border-dashed border-slate-800/50 rounded-xl uppercase tracking-widest">Ingen planlagte pas</div>}
+                        {visibleSessions.length === 0 && !isRestDay && <div className="text-slate-600 text-sm font-medium py-3 text-center border-2 border-dashed border-slate-800/50 rounded-xl">Ingen pas planlagt</div>}
                         {visibleSessions.map(s => {
                             const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
                             const isCancelled = s.status === 'cancelled';
                             return (
-                                <div key={s.id} onClick={() => !isReadOnly && (setEditingDay(day), setEditingSession(s), setModalOpen(true))} className={`relative flex items-center justify-between p-3.5 rounded-xl mb-2.5 border shadow-sm transition-all ${isCancelled ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-slate-800 border-slate-700/50'} ${!isReadOnly ? 'cursor-pointer active:scale-[0.98] hover:bg-slate-750' : 'opacity-80'}`}>
+                                <div key={s.id} onClick={() => !isReadOnly && (setEditingDay(day), setEditingSession(s), setModalOpen(true))} className={`relative flex items-center justify-between p-3 rounded-xl mb-2 border shadow-sm transition-all ${isCancelled ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-slate-800 border-slate-700/50'} ${!isReadOnly ? 'cursor-pointer active:scale-[0.98]' : ''}`}>
                                     <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl ${isCancelled ? 'bg-red-900' : cat.color}`}></div>
                                     <div className="flex-1 pl-3">
-                                        <div className="flex justify-between items-start mb-1.5">
-                                            <h4 className={`font-black text-sm leading-tight ${isCancelled ? 'line-through text-slate-500' : 'text-white'}`}>{s.name}</h4>
-                                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 border border-slate-600 uppercase">{s.category}</span>
+                                        <div className="flex justify-between items-start">
+                                            <h4 className={`font-bold text-sm leading-tight mb-1 ${isCancelled ? 'line-through text-slate-500' : 'text-white'}`}>{s.name}</h4>
+                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 border border-slate-600">{s.category}</span>
                                         </div>
                                         <div className="flex flex-col">
-                                            <div className="flex items-center text-slate-500 text-[10px] space-x-3 font-black uppercase tracking-tight">
+                                            <div className="flex items-center text-slate-400 text-xs space-x-3 font-medium">
                                                 <span className="flex items-center"><Clock className="w-3 h-3 mr-1"/> {s.start} - {s.end}</span>
                                                 <span className="flex items-center"><MapPin className="w-3 h-3 mr-1"/> {s.location}</span>
                                             </div>
-                                            {isCancelled && <div className="mt-1.5 text-[9px] text-red-500 font-bold flex items-center uppercase tracking-tighter"><AlertCircle className="w-3 h-3 mr-1"/> Aflyst: {s.cancellationReason}</div>}
+                                            {isCancelled && <div className="mt-1 text-[10px] text-red-400 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Aflyst {formatCancellationTime(s.cancellationTime)}: {s.cancellationReason}</div>}
                                         </div>
                                     </div>
-                                    {!isReadOnly && <ChevronRight className="w-4 h-4 text-slate-700" />}
                                 </div>
                             );
                         })}
@@ -798,91 +1402,94 @@ const App = () => {
              })}
           </div>
         ) : (
-             <TeamScheduleView days={DAYS} teamData={teamData} />
+             <TeamSchedule days={DAYS} teamData={teamData} />
         )}
       </div>
 
-      {/* FOOTER NAV */}
-      <footer className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 pb-safe z-50 rounded-t-3xl shadow-2xl">
-        <div className="max-w-md mx-auto flex justify-around p-3 px-8">
-            <button onClick={() => setView('personal')} className={`flex flex-col items-center gap-1.5 transition-all ${view === 'personal' ? 'text-blue-500 scale-110' : 'text-slate-600'}`}>
-                <Calendar className="w-6 h-6"/><span className="text-[9px] font-black uppercase tracking-widest">Plan</span>
+      {/* FOOTER & OVERLAYS */}
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 pb-safe z-50">
+        <div className="max-w-md mx-auto flex justify-between items-center p-2 px-6">
+            <NavButton icon={Calendar} label="Min Plan" active={view === 'personal'} onClick={() => setView('personal')} />
+            <button onClick={() => openFeedback()} className="flex flex-col items-center justify-center p-2 text-slate-500 hover:text-blue-400">
+                <div className="bg-slate-800 p-2 rounded-full mb-1 border border-slate-700"><MessageSquarePlus className="w-5 h-5" /></div>
             </button>
-            <button onClick={() => setFeedbackContext('App Feedback')} className="flex flex-col items-center justify-center p-2 text-slate-600 hover:text-blue-400 transition-colors">
-                <div className="bg-slate-800 p-2 rounded-full border border-slate-700 shadow-inner"><MessageSquarePlus className="w-5 h-5" /></div>
-            </button>
-            <button onClick={() => setView('team')} className={`flex flex-col items-center gap-1.5 transition-all ${view === 'team' ? 'text-blue-500 scale-110' : 'text-slate-600'}`}>
-                <User className="w-6 h-6"/><span className="text-[9px] font-black uppercase tracking-widest">Team</span>
-            </button>
+            <NavButton icon={User} label="Teamet" active={view === 'team'} onClick={() => setView('team')} />
         </div>
-      </footer>
+      </div>
 
-      {/* MODALS */}
-      {modalOpen && (
-          <SessionModal 
-            day={editingDay} 
-            initialData={editingSession} 
-            onClose={() => setModalOpen(false)} 
-            onSave={handleSaveSession} 
-            onDelete={handleDeleteSession} 
-            isStandardMode={isStandardMode} 
-            onFeedback={(ctx) => setFeedbackContext(ctx)} 
-          />
-      )}
+      {modalOpen && <SessionModal day={editingDay} initialData={editingSession} onClose={() => setModalOpen(false)} onSave={handleSaveSession} onDelete={handleDeleteSession} isStandardMode={isStandardMode} onFeedback={(ctx) => openFeedback(ctx)} />}
+      {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
       
+      {/* NEW SYSTEM MODALS */}
       {feedbackContext && <FeedbackModal user={user} currentContext={feedbackContext} onClose={() => setFeedbackContext(null)} />}
-      {adminOpen && <AdminDashboard user={user} onClose={() => setAdminOpen(false)} />}
+      {adminOpen && <AdminDashboard onClose={() => setAdminOpen(false)} />}
     </div>
   );
 };
 
-// --- SUB COMPONENTS ---
+// --- HELPER COMPONENTS ---
+const NavButton = ({ icon: Icon, label, active, onClick }) => (
+    <button onClick={onClick} className={`flex flex-col items-center justify-center p-2 rounded-xl w-16 transition-colors ${active ? 'text-blue-500' : 'text-slate-500'}`}>
+        <Icon className="w-6 h-6 mb-1" />
+        <span className="text-[10px] font-bold uppercase tracking-wide">{label}</span>
+    </button>
+);
 
-const TeamScheduleView = ({ days, teamData }) => {
-    const [selectedDay, setSelectedDay] = useState(days[0]);
-    const aggregated = useMemo(() => {
-        const slots = {};
-        FIGHTERS.forEach(f => {
-            const sessions = teamData[f]?.[selectedDay] || [];
-            sessions.forEach(s => {
-                if (s.isRestDay) return;
-                const time = s.start || 'TBA';
-                if (!slots[time]) slots[time] = [];
-                slots[time].push({ ...s, fighter: f });
-            });
+const TeamSchedule = ({ days, teamData }) => {
+    const [selectedDay, setSelectedDay] = useState('Mandag');
+    const timeSlots = {};
+    Object.keys(teamData).forEach(fighter => {
+        const data = teamData[fighter];
+        if (!data) return; 
+        const sessions = data[selectedDay] || [];
+        sessions.forEach(s => {
+            if (s.isRestDay) return;
+            const timeKey = s.start || 'TBA';
+            if (!timeSlots[timeKey]) timeSlots[timeKey] = [];
+            timeSlots[timeKey].push({ ...s, fighter });
         });
-        return Object.keys(slots).sort().map(time => ({ time, sessions: slots[time] }));
-    }, [teamData, selectedDay]);
+    });
+    const sortedTimes = Object.keys(timeSlots).sort();
 
     return (
-        <div className="fade-in pb-20">
-            <div className="flex gap-2 overflow-x-auto pb-4 hide-scroll px-4 mb-2">
-                {days.map(d => (
-                    <button key={d} onClick={() => setSelectedDay(d)} className={`px-5 py-2 rounded-xl text-xs font-black border transition-all flex-shrink-0 uppercase tracking-widest ${selectedDay === d ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-slate-900 border-slate-800 text-slate-500'}`}>{d}</button>
-                ))}
-            </div>
-            <div className="px-4 space-y-4">
-                {aggregated.length === 0 && <div className="text-center py-20 text-slate-700 italic border-2 border-dashed border-slate-900 rounded-2xl flex flex-col items-center"><User className="w-10 h-10 mb-2 opacity-20"/><p className="text-xs font-black uppercase tracking-widest">Ingen fælles pas planlagt</p></div>}
-                {aggregated.map(slot => (
-                    <div key={slot.time} className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-                        <div className="bg-slate-800/60 p-3.5 px-5 flex justify-between items-center border-b border-slate-800">
-                            <span className="font-mono text-blue-400 font-black text-xl leading-none">{slot.time}</span>
-                            <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest bg-slate-950 px-2.5 py-1 rounded border border-slate-800 shadow-inner">{slot.sessions[0].location}</span>
+        <div className="fade-in">
+             <div className="bg-slate-900/50 mx-4 mb-4 rounded-xl p-2 flex space-x-2 overflow-x-auto hide-scroll">
+                 {days.map(d => (
+                     <button key={d} onClick={() => setSelectedDay(d)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-bold transition-all border ${selectedDay === d ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>{d}</button>
+                 ))}
+             </div>
+             <div className="px-4 space-y-4 pb-32">
+                 {sortedTimes.length === 0 && <div className="flex flex-col items-center justify-center py-20 text-slate-500 border-2 border-dashed border-slate-800 rounded-2xl"><User className="w-10 h-10 mb-2 opacity-50"/><p>Ingen fælles træning</p></div>}
+                 {sortedTimes.map(time => {
+                     const sessions = timeSlots[time];
+                     return (
+                        <div key={time} className="bg-slate-900 rounded-xl overflow-hidden border border-slate-800 shadow-lg">
+                            <div className="bg-slate-800/80 p-3 flex justify-between items-center border-b border-slate-800">
+                                <div className="flex items-center text-blue-400 font-bold font-mono text-lg">{time}</div>
+                                <div className="flex items-center text-slate-500 text-[10px] font-medium uppercase bg-slate-950 px-2 py-1 rounded"><MapPin className="w-3 h-3 mr-1"/> {sessions[0].location}</div>
+                            </div>
+                            <div className="p-3 grid grid-cols-2 gap-2">
+                                {sessions.map((s, i) => {
+                                    const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
+                                    const isCancelled = s.status === 'cancelled';
+                                    return (
+                                        <div key={i} className="bg-slate-800/50 p-2.5 rounded border border-slate-700/50 flex items-center justify-between">
+                                            <div className="flex items-center w-full">
+                                                <span className={`w-1.5 h-6 rounded-full ${isCancelled ? 'bg-slate-700' : cat.color} mr-2.5 shadow-sm`}></span>
+                                                <div className={`flex-1 ${isCancelled ? 'opacity-50 line-through' : ''}`}>
+                                                    <div className="text-white text-xs font-bold leading-tight">{s.fighter}</div>
+                                                    <div className="text-slate-400 text-[10px]">{s.name}</div>
+                                                </div>
+                                                {isCancelled && <span className="text-[9px] text-red-400 bg-red-900/50 px-1 rounded ml-auto">AFLYST</span>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
-                        <div className="p-3.5 space-y-2.5">
-                            {slot.sessions.map((s, i) => (
-                                <div key={i} className="flex items-center justify-between p-3 bg-slate-800/30 rounded-xl border border-slate-800/50">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`w-1.5 h-6 rounded-full ${CATEGORIES.find(c => c.label === s.category)?.color || 'bg-slate-600'} shadow-sm`}></div>
-                                        <span className="text-sm font-black text-white">{s.fighter}</span>
-                                    </div>
-                                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{s.name}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </div>
+                     );
+                 })}
+             </div>
         </div>
     );
 };
@@ -899,81 +1506,107 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
         reason: initialData?.cancellationReason || ''
     });
 
+    const isExisting = !!initialData; 
+    const submit = () => {
+        onSave({
+            id: initialData?.id,
+            ...form,
+            status: form.cancel ? 'cancelled' : 'active',
+            cancellationReason: form.cancel ? form.reason : null,
+            cancellationTime: form.cancel ? (initialData?.cancellationTime || new Date().toISOString()) : null
+        });
+    };
+
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 fade-in">
-             <div className="bg-slate-900 w-full max-w-md rounded-t-3xl sm:rounded-3xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-800/50 shrink-0">
-                    <h3 className="text-white font-black text-lg flex items-center"><span className="w-1.5 h-6 bg-blue-500 rounded-full mr-3 shadow-sm shadow-blue-500/20"></span> {day}</h3>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 fade-in">
+             <div className="bg-slate-900 w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50 shrink-0">
+                    <h3 className="text-white font-bold text-lg flex items-center"><span className="w-1 h-6 bg-blue-500 rounded-full mr-3"></span> {day}</h3>
                     <div className="flex gap-2">
-                        {initialData && (
-                            <button onClick={() => onFeedback(`Pas: ${initialData.name} (${day})`)} className="p-2.5 bg-slate-800 rounded-full text-slate-400 hover:text-white border border-slate-700 shadow-inner transition-colors"><MessageSquarePlus className="w-5 h-5"/></button>
+                        {/* FEEDBACK BUTTON IN MODAL */}
+                        {isExisting && (
+                            <button onClick={() => onFeedback(`Session: ${initialData.name} (${day})`)} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white border border-slate-700">
+                                <MessageSquarePlus className="w-5 h-5"/>
+                            </button>
                         )}
-                        <button onClick={onClose} className="p-2.5 bg-slate-800 rounded-full text-slate-400 hover:text-white transition-colors border border-slate-700"><X className="w-5 h-5"/></button>
+                        <button onClick={onClose} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
                     </div>
                 </div>
                 {!initialData && (
-                    <div className="flex p-2 bg-slate-950/50 gap-2 shrink-0">
-                        <button onClick={() => setTab('favorites')} className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-sm ${tab === 'favorites' ? 'bg-blue-600 text-white shadow-blue-900/20' : 'bg-slate-800 text-slate-500'}`}>Hent Katalog</button>
-                        <button onClick={() => setTab('adhoc')} className={`flex-1 py-3 text-xs font-black uppercase tracking-widest rounded-xl transition-all shadow-sm ${tab === 'adhoc' ? 'bg-blue-600 text-white shadow-blue-900/20' : 'bg-slate-800 text-slate-500'}`}>Adhoc</button>
+                    <div className="flex p-2 bg-slate-800/30 gap-2 shrink-0">
+                        <button onClick={() => setTab('favorites')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tab === 'favorites' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>Vælg Eksisterende</button>
+                        <button onClick={() => setTab('adhoc')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tab === 'adhoc' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>Opret Ny</button>
                     </div>
                 )}
-                <div className="p-6 space-y-6 overflow-y-auto">
+                <div className="p-5 space-y-6 overflow-y-auto">
                     {tab === 'favorites' && !initialData ? (
                         <div className="space-y-2">
-                             {GLOBAL_TEMPLATES.filter(t => t.day === day).map(t => (
-                                 <button key={t.id} onClick={() => onSave({...t, id: null})} className="w-full text-left bg-slate-950 p-4 rounded-2xl border border-slate-800 hover:border-blue-500 transition-all group active:scale-[0.98] shadow-inner">
-                                     <div className="font-black text-sm text-white group-hover:text-blue-400 transition-colors">{t.name}</div>
-                                     <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mt-1.5">{t.start}-{t.end} • {t.location}</div>
-                                 </button>
-                             ))}
+                             {GLOBAL_TEMPLATES.filter(t => t.day === day).map(t => {
+                                 const cat = CATEGORIES.find(c => c.label === t.category) || CATEGORIES[6];
+                                 return (
+                                     <button key={t.id} onClick={() => onSave({...t, id: null})} className={`w-full text-left bg-slate-950 p-3 rounded-xl border ${cat.border} border-l-4 hover:bg-slate-900 transition-colors`}>
+                                         <div className="font-bold text-sm text-white">{t.name}</div>
+                                         <div className="text-xs text-slate-500">{t.start}-{t.end} • {t.location}</div>
+                                     </button>
+                                 );
+                             })}
+                             {GLOBAL_TEMPLATES.filter(t => t.day === day).length === 0 && <p className="text-slate-500 text-xs italic text-center">Ingen faste pas denne dag.</p>}
                         </div>
                     ) : (
-                        <div className="space-y-6">
+                        <div className="space-y-4">
+                            {isExisting && <div className="p-3 bg-yellow-900/20 border border-yellow-700/50 rounded-lg text-xs text-yellow-200 mb-2">Du kan kun slette eller aflyse dette pas. For at ændre tid/sted, slet og opret på ny.</div>}
                             <div>
-                                <label className="block text-slate-500 text-[10px] uppercase font-black mb-3 tracking-widest">Aktivitet</label>
+                                <label className="block text-slate-400 text-xs uppercase font-bold mb-3">Kategori</label>
                                 <div className="flex flex-wrap gap-2">
                                     {CATEGORIES.map(cat => (
-                                        <button key={cat.label} onClick={() => setForm({...form, category: cat.label})} className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase border transition-all shadow-sm tracking-tight ${form.category === cat.label ? `${cat.color} text-white border-transparent scale-105 shadow-lg` : 'bg-slate-800 border-slate-700 text-slate-500'}`}>{cat.label}</button>
+                                        <button key={cat.label} disabled={isExisting} onClick={() => setForm({...form, category: cat.label})} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${form.category === cat.label ? `${cat.color} text-white border-transparent` : 'bg-slate-900 border-slate-700 text-slate-400'} ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}>{cat.label}</button>
                                     ))}
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-slate-500 text-[10px] uppercase font-black mb-2 tracking-widest">Navn</label>
-                                <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 text-white rounded-2xl px-5 py-3.5 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none shadow-inner"/>
+                                <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Navn</label>
+                                <input disabled={isExisting} type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-slate-500 text-[10px] uppercase font-black mb-2 tracking-widest text-center">Start</label>
-                                    <input type="time" value={form.start} onChange={e => setForm({...form, start: e.target.value})} className="w-full bg-slate-950 border border-slate-800 text-white rounded-2xl px-4 py-3.5 text-sm font-black focus:ring-2 focus:ring-blue-600 outline-none text-center shadow-inner"/>
+                                    <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Start</label>
+                                    <input disabled={isExisting} type="time" value={form.start} onChange={e => setForm({...form, start: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
                                 </div>
                                 <div>
-                                    <label className="block text-slate-500 text-[10px] uppercase font-black mb-2 tracking-widest text-center">Slut</label>
-                                    <input type="time" value={form.end} onChange={e => setForm({...form, end: e.target.value})} className="w-full bg-slate-950 border border-slate-800 text-white rounded-2xl px-4 py-3.5 text-sm font-black focus:ring-2 focus:ring-blue-600 outline-none text-center shadow-inner"/>
+                                    <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Slut</label>
+                                    <input disabled={isExisting} type="time" value={form.end} onChange={e => setForm({...form, end: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
                                 </div>
                             </div>
-                            
-                            {!isStandardMode && initialData && (
-                                <div className="pt-6 border-t border-slate-800">
-                                    <label className="flex items-center space-x-3 cursor-pointer group mb-4">
-                                        <div className={`w-6 h-6 rounded border border-slate-700 flex items-center justify-center transition-all ${form.cancel ? 'bg-red-600 border-red-500 shadow-lg shadow-red-900/20' : 'bg-slate-800'}`}>
-                                            {form.cancel && <Check className="w-4 h-4 text-white" />}
-                                        </div>
-                                        <input type="checkbox" className="hidden" checked={form.cancel} onChange={e => setForm({...form, cancel: e.target.checked})} />
-                                        <span className="text-sm font-black uppercase tracking-widest text-slate-300 group-hover:text-red-400 transition-colors">Aflys Træning</span>
+                            <div>
+                                <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Lokation</label>
+                                <div className="relative">
+                                    <MapPin className="absolute left-3 top-3.5 w-4 h-4 text-slate-500" />
+                                    <select disabled={isExisting} value={form.location} onChange={e => setForm({...form, location: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:ring-2 focus:ring-blue-600 outline-none appearance-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                        <option value="Rumble">Rumble</option>
+                                        <option value="Burnell">Burnell</option>
+                                        <option value="Roskilde">Roskilde</option>
+                                        <option value="Andet">Andet</option>
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500"><ChevronDown className="w-4 h-4" /></div>
+                                </div>
+                            </div>
+                            {isExisting && !isStandardMode && (
+                                <div className="pt-4 border-t border-slate-800">
+                                    <label className="flex items-center space-x-2 cursor-pointer mb-3">
+                                        <input type="checkbox" checked={form.cancel} onChange={e => setForm({...form, cancel: e.target.checked})} className="w-5 h-5 rounded border-slate-600 text-red-600 bg-slate-800"/>
+                                        <span className="text-sm font-bold text-slate-300">Aflys Træning</span>
                                     </label>
                                     {form.cancel && (
-                                        <input type="text" placeholder="Årsag (fx Sygdom)" value={form.reason} onChange={e => setForm({...form, reason: e.target.value})} className="w-full bg-red-950/20 border border-red-900/50 text-red-200 rounded-2xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-red-600 outline-none animate-slide-up"/>
+                                        <input type="text" placeholder="Årsag (fx Sygdom)" value={form.reason} onChange={e => setForm({...form, reason: e.target.value})} className="w-full bg-red-950/30 border border-red-900/50 text-red-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-600 outline-none"/>
                                     )}
                                 </div>
                             )}
                         </div>
                     )}
                 </div>
-                <div className="p-5 border-t border-slate-800 bg-slate-800/30 flex space-x-4 shrink-0 shadow-inner">
-                    {initialData && <button onClick={() => onDelete(initialData.id)} className="py-4 px-5 rounded-2xl font-black text-red-500 bg-red-950/20 hover:bg-red-950/40 transition-all border border-red-900/30 active:scale-95"><Trash2 className="w-6 h-6"/></button>}
-                    <button onClick={() => onSave({ id: initialData?.id, ...form, status: form.cancel ? 'cancelled' : 'active', cancellationReason: form.cancel ? form.reason : null, cancellationTime: form.cancel ? (initialData?.cancellationTime || new Date().toISOString()) : null })} className={`flex-1 py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl transition-all active:scale-95 flex justify-center items-center gap-2 ${form.cancel ? 'bg-red-600 hover:bg-red-500 text-white shadow-red-900/20' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/20'}`}>
-                        {form.cancel ? <><AlertCircle className="w-5 h-5"/> Bekræft Aflysning</> : 'Gem Træningspas'}
-                    </button>
+                <div className="p-4 border-t border-slate-800 bg-slate-800/50 flex space-x-3 shrink-0">
+                    {initialData && <button onClick={() => onDelete(initialData.id)} className="py-3.5 px-4 rounded-xl font-bold text-slate-400 bg-slate-800 hover:bg-slate-700 transition-colors"><Trash2 className="w-5 h-5"/></button>}
+                    <button onClick={submit} className={`flex-1 py-3.5 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex justify-center items-center ${form.cancel ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>{form.cancel ? 'Gem & Aflys' : 'Gem'}</button>
                 </div>
              </div>
         </div>
@@ -981,3 +1614,4 @@ const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardM
 };
 
 export default App;
+
