@@ -3,7 +3,7 @@ import {
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -135,6 +135,25 @@ const getDeviceInfo = () => {
     return navigator.userAgent;
 };
 
+// Simple CSV Parser
+const parseCSV = (text) => {
+    const rows = text.trim().split('\n');
+    const headers = rows[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    
+    return rows.slice(1).map(row => {
+        // Handle commas inside quotes: simple regex split
+        const values = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
+        const cleanValues = values.map(v => v ? v.replace(/^"|"$/g, '').replace(/""/g, '"').trim() : '');
+        
+        const obj = {};
+        headers.forEach((h, i) => {
+            obj[h] = cleanValues[i] || '';
+        });
+        return obj;
+    });
+};
+
+
 // --- COMPONENTS ---
 
 const BrowserBlockScreen = () => {
@@ -167,7 +186,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.32</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.33</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -270,6 +289,31 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
     );
 };
 
+// --- IMPORT CSV MODAL ---
+const ImportModal = ({ onClose, onImport }) => {
+    const [text, setText] = useState('');
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+            <div className="bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl p-6">
+                 <h3 className="text-white font-bold text-lg mb-2">Importer Backlog (CSV)</h3>
+                 <p className="text-slate-400 text-xs mb-4">Kopier indholdet fra din CSV fil (inkl. overskrifter) og indsæt her.</p>
+                 <textarea 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-300 text-xs font-mono h-48 focus:ring-2 focus:ring-blue-600 outline-none mb-4"
+                    placeholder="Titel,Noter,Beskrivelse,..."
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                 />
+                 <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="text-slate-400 px-4 py-2 text-sm font-bold">Annuller</button>
+                    <button onClick={() => onImport(text)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center">
+                        <Upload className="w-4 h-4 mr-2"/> Importer
+                    </button>
+                 </div>
+            </div>
+        </div>
+    );
+};
+
 // --- ADMIN DASHBOARD (BACKLOG) ---
 const AdminDashboard = ({ onClose }) => {
     const [tasks, setTasks] = useState([]);
@@ -279,8 +323,10 @@ const AdminDashboard = ({ onClose }) => {
     
     // Task Form State
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [isImportOpen, setIsImportOpen] = useState(false);
     const [editingTask, setEditingTask] = useState(null);
     const [linkedFeedbackId, setLinkedFeedbackId] = useState(null);
+    const [adminConfirm, setAdminConfirm] = useState(null);
 
     const [form, setForm] = useState({
         title: '',
@@ -294,11 +340,14 @@ const AdminDashboard = ({ onClose }) => {
         release: ''
     });
 
+    // Drag and Drop State
+    const dragItem = useRef();
+    const dragOverItem = useRef();
+
     useEffect(() => {
         const qBacklog = query(collection(db, PUBLIC_DATA_PATH, 'backlog'));
         const unsubBacklog = onSnapshot(qBacklog, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
-            // Sorter efter 'order' ASC. Nyere items har mindre 'order' værdi (negativ timestamp), så de kommer først.
             items.sort((a,b) => (a.order || 0) - (b.order || 0));
             setTasks(items);
         }, (err) => console.error("Backlog Error:", err));
@@ -306,7 +355,6 @@ const AdminDashboard = ({ onClose }) => {
         const qFeedback = query(collection(db, PUBLIC_DATA_PATH, 'feedback'));
         const unsubFeedback = onSnapshot(qFeedback, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
-            // Sorter efter 'order' ASC.
             items.sort((a,b) => (a.order || 0) - (b.order || 0));
             setFeedback(items);
         }, (err) => console.error("Feedback Error:", err));
@@ -341,6 +389,39 @@ const AdminDashboard = ({ onClose }) => {
         }
     };
 
+    const handleImportCSV = async (csvText) => {
+        try {
+            const parsed = parseCSV(csvText);
+            const batch = writeBatch(db);
+            let count = 0;
+            const now = Date.now();
+            
+            parsed.forEach((row, idx) => {
+                if (!row.Titel) return;
+                const ref = doc(collection(db, PUBLIC_DATA_PATH, 'backlog'));
+                batch.set(ref, {
+                    title: row.Titel || '',
+                    desc: row.Beskrivelse || '',
+                    acceptance: row.Acceptkriterier || '',
+                    notes: row.Noter || '',
+                    dataFields: row['Datafelter (udkast)'] || '',
+                    status: (row.Status || 'backlog').toLowerCase(),
+                    release: row.Release || '',
+                    priority: 'Medium',
+                    tag: 'APP',
+                    createdAt: new Date().toISOString(),
+                    order: -(now + idx) // Ensure they are added in sequence at top
+                });
+                count++;
+            });
+            await batch.commit();
+            setIsImportOpen(false);
+            alert(`Importerede ${count} opgaver.`);
+        } catch (e) {
+            alert("Fejl under import: " + e.message);
+        }
+    };
+
     const resetForm = () => {
         setForm({
             title: '', status: 'backlog', priority: 'Medium', tag: 'APP',
@@ -364,21 +445,33 @@ const AdminDashboard = ({ onClose }) => {
         setIsFormOpen(true);
     };
 
-    const deleteTask = async (id) => {
-        if(confirm('Er du sikker på, at du vil slette denne opgave? Handlingen kan ikke fortrydes.')) {
-            try {
-                await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
-                if (isFormOpen) setIsFormOpen(false);
-            } catch (e) {
-                alert("Kunne ikke slette: " + e.message);
+    const deleteTask = (id) => {
+        // NON-BLOCKING CONFIRMATION
+        setAdminConfirm({
+            title: "Slet Opgave?",
+            message: "Er du sikker på, at du vil slette denne opgave? Handlingen kan ikke fortrydes.",
+            onConfirm: async () => {
+                try {
+                    await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
+                    if (isFormOpen) setIsFormOpen(false);
+                } catch (e) {
+                    console.error("Delete Error", e);
+                }
+                setAdminConfirm(null);
             }
-        }
+        });
     };
     
-    const deleteFeedback = async (id) => {
-        if(confirm('Er du sikker på, at du vil slette dette feedback item?')) {
-            await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', id));
-        }
+    const deleteFeedback = (id) => {
+         // NON-BLOCKING CONFIRMATION
+         setAdminConfirm({
+            title: "Slet Feedback?",
+            message: "Er du sikker? Dette kan ikke fortrydes.",
+            onConfirm: async () => {
+                await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', id));
+                setAdminConfirm(null);
+            }
+        });
     };
 
     const moveTaskStatus = async (task, direction) => {
@@ -417,6 +510,78 @@ const AdminDashboard = ({ onClose }) => {
         await batch.commit();
     };
 
+    const dragStart = (e, position) => {
+        dragItem.current = position;
+        // Effect for visual feedback
+        e.dataTransfer.effectAllowed = "move";
+        // Ghost image hack if needed, but default usually works
+    };
+
+    const dragEnter = (e, position) => {
+        dragOverItem.current = position;
+        e.preventDefault();
+    };
+
+    const dragEnd = async () => {
+        if (filterTag !== 'ALL') {
+             alert("Sortering virker kun når filtret er 'Alle'");
+             dragItem.current = null;
+             dragOverItem.current = null;
+             return;
+        }
+        
+        const sourceIdx = dragItem.current;
+        const destIdx = dragOverItem.current;
+
+        if (sourceIdx === null || destIdx === null || sourceIdx === destIdx) return;
+
+        const copyList = [...tasks];
+        const itemToMove = copyList[sourceIdx];
+        copyList.splice(sourceIdx, 1);
+        copyList.splice(destIdx, 0, itemToMove);
+        
+        // Update local state immediately for smooth UI
+        setTasks(copyList);
+
+        // Update DB
+        // Swapping orders is tricky with multi-item reorder. 
+        // Simplest robust strategy: Re-assign orders for the affected range or swap if just 1 step.
+        // For prototype: Just swap the order values of the two items involved if adjacent, or re-calculate.
+        // Better: Take order of Item BEFORE dest and Item AFTER dest and average? 
+        // Or simpler: Just swap exact order values for ALL items (heavy write) or just the moved one.
+        
+        // Let's do a simple swap of order values for the two items if we want exact position swap logic, 
+        // BUT drag n drop usually implies insertion.
+        // We will re-assign order values based on the NEW array index. 
+        // To be safe and simple: Update ALL orders (Batch write limit is 500).
+        // If list is small (<500), this is fine.
+        
+        const batch = writeBatch(db);
+        copyList.forEach((t, i) => {
+            // New order: index * 1000 (to allow future inserts). 
+            // ASC sort means index 0 should have lowest val.
+            // Our previous logic was: Newest = negative timestamp (Lowest).
+            // So if we sort by Order ASC, top item has lowest value.
+            // Let's just normalize: Top item = -Date.now() + i * 1000? No, simply 0, 1, 2...
+            // But we want new items to appear top.
+            // Let's stick to: Order field determines position. 
+            // We set order = index. (0 at top, 1 next...). 
+            // If we do this, we break the "Negative timestamp" logic for new items unless we re-sort everything.
+            // Let's just set order = index.
+            const newOrder = i; 
+            if (t.order !== newOrder) {
+                 batch.update(doc(db, PUBLIC_DATA_PATH, 'backlog', t.id), { order: newOrder });
+            }
+        });
+        
+        try {
+            await batch.commit();
+        } catch(e) { console.error("Reorder failed", e); }
+
+        dragItem.current = null;
+        dragOverItem.current = null;
+    };
+
     const startConvertFeedback = (fbItem) => {
         setForm({
             title: fbItem.text,
@@ -442,10 +607,6 @@ const AdminDashboard = ({ onClose }) => {
             alert("Kunne ikke kopiere. Fejl: " + e.message);
         }
     };
-
-    // DnD Refs
-    const dragItem = useRef();
-    const dragOverItem = useRef();
     
     return (
         <div className="fixed inset-0 bg-slate-950 z-[60] overflow-y-auto pb-safe">
@@ -459,9 +620,14 @@ const AdminDashboard = ({ onClose }) => {
                             <p className="text-xs text-slate-500">RTE Dashboard</p>
                         </div>
                     </div>
-                    <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
-                        <Copy className="w-3 h-3 mr-2"/> Kopier til AI
-                    </button>
+                    <div className="flex gap-2">
+                        <button onClick={() => setIsImportOpen(true)} className="bg-slate-800 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
+                            <Upload className="w-3 h-3 mr-2"/> Import
+                        </button>
+                        <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
+                            <Copy className="w-3 h-3 mr-2"/> Kopier til AI
+                        </button>
+                    </div>
                 </div>
                 
                 {/* GLOBAL FILTERS */}
@@ -541,9 +707,22 @@ const AdminDashboard = ({ onClose }) => {
                         </div>
                         <div className="divide-y divide-slate-800">
                             {filteredTasks.map((task, index) => (
-                                <div key={task.id} className="p-3 flex items-center bg-slate-900 hover:bg-slate-800 transition-colors group">
-                                    {/* Mobile Friendly Reorder Arrows */}
-                                    <div className="flex flex-col gap-1 mr-3 text-slate-500">
+                                <div 
+                                    key={task.id} 
+                                    className="p-3 flex items-center bg-slate-900 hover:bg-slate-800 transition-colors group"
+                                    draggable={filterTag === 'ALL'} // Only draggable if not filtered
+                                    onDragStart={(e) => dragStart(e, index)}
+                                    onDragEnter={(e) => dragEnter(e, index)}
+                                    onDragEnd={dragEnd}
+                                    onDragOver={(e) => e.preventDefault()}
+                                >
+                                    {/* DRAG HANDLE FOR DESKTOP */}
+                                    <div className="hidden md:flex text-slate-600 cursor-grab active:cursor-grabbing mr-2 hover:text-slate-400">
+                                        <GripVertical className="w-5 h-5" />
+                                    </div>
+
+                                    {/* Mobile Friendly Reorder Arrows (Visible on mobile, hidden on MD if you prefer, or keep both) */}
+                                    <div className="flex md:hidden flex-col gap-1 mr-3 text-slate-500">
                                         <button 
                                             onClick={(e) => { e.stopPropagation(); moveItemOrder(index, -1, filteredTasks, 'backlog'); }} 
                                             disabled={index === 0 || filterTag !== 'ALL'}
@@ -699,6 +878,21 @@ const AdminDashboard = ({ onClose }) => {
                         </div>
                     </div>
                 </div>
+            )}
+            
+            {/* IMPORT MODAL */}
+            {isImportOpen && (
+                <ImportModal onClose={() => setIsImportOpen(false)} onImport={handleImportCSV} />
+            )}
+            
+            {/* ADMIN CONFIRM DIALOG */}
+            {adminConfirm && (
+                <ConfirmModal 
+                    title={adminConfirm.title}
+                    message={adminConfirm.message}
+                    onConfirm={adminConfirm.onConfirm}
+                    onCancel={() => setAdminConfirm(null)}
+                />
             )}
         </div>
     );
