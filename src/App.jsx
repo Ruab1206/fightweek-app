@@ -3,7 +3,7 @@ import {
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -167,7 +167,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.31</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.32</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -227,7 +227,8 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
                 context: currentContext || 'App',
                 device: getDeviceInfo(),
                 status: 'new',
-                order: Date.now() // For sorting
+                // Sæt en negativ timestamp som order, så den sorteres først (laveste tal først ved ASC sortering)
+                order: -Date.now() 
             });
             onClose();
             alert("Tak for dit input! Det er sendt til teamet.");
@@ -297,27 +298,16 @@ const AdminDashboard = ({ onClose }) => {
         const qBacklog = query(collection(db, PUBLIC_DATA_PATH, 'backlog'));
         const unsubBacklog = onSnapshot(qBacklog, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            // Sorter efter 'order' ASC. Nyere items har mindre 'order' værdi (negativ timestamp), så de kommer først.
             items.sort((a,b) => (a.order || 0) - (b.order || 0));
             setTasks(items);
         }, (err) => console.error("Backlog Error:", err));
 
-        // Get feedback (sort by order if present, else timestamp desc as fallback logic handled in UI)
         const qFeedback = query(collection(db, PUBLIC_DATA_PATH, 'feedback'));
         const unsubFeedback = onSnapshot(qFeedback, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
-            // Sort logic: use order if available, else fallback to timestamp
-            items.sort((a,b) => {
-                if (a.order && b.order) return b.order - a.order; // High order top? Or manual? 
-                // Let's stick to standard manual sort: sort asc by 'order'
-                return (a.order || 0) - (b.order || 0);
-            });
-            // However default is often new first. Let's stick to the manual reorder pattern used in Tasks
-            // If no order, we use timestamp desc
-            if (items.every(i => !i.order)) {
-                items.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-            } else {
-                 items.sort((a,b) => (a.order || 0) - (b.order || 0));
-            }
+            // Sorter efter 'order' ASC.
+            items.sort((a,b) => (a.order || 0) - (b.order || 0));
             setFeedback(items);
         }, (err) => console.error("Feedback Error:", err));
 
@@ -335,7 +325,7 @@ const AdminDashboard = ({ onClose }) => {
                 await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), {
                     ...form,
                     createdAt: new Date().toISOString(),
-                    order: Date.now()
+                    order: -Date.now() // Negativ timestamp for at placere øverst
                 });
                 if (linkedFeedbackId) {
                     await updateDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', linkedFeedbackId), { status: 'converted' });
@@ -405,7 +395,6 @@ const AdminDashboard = ({ onClose }) => {
         }
     };
 
-    // Mobile friendly reordering for Task List
     const moveItemOrder = async (index, direction, list, collectionName) => {
         if (list === tasks && filterTag !== 'ALL') {
              alert("Sortering virker kun når filtret er 'Alle'");
@@ -418,12 +407,8 @@ const AdminDashboard = ({ onClose }) => {
         const itemA = list[index];
         const itemB = list[targetIndex];
         
-        // Ensure order fields exist, defaulting to timestamp based fallback if needed
         const orderA = itemA.order || 0;
         const orderB = itemB.order || 0;
-        
-        // Simple swap if orders are different, else we might need to assign specific values
-        // To be safe in simple prototype: just swap the values currently held in memory/db
         
         const batch = writeBatch(db);
         batch.update(doc(db, PUBLIC_DATA_PATH, collectionName, itemA.id), { order: orderB });
@@ -462,34 +447,6 @@ const AdminDashboard = ({ onClose }) => {
     const dragItem = useRef();
     const dragOverItem = useRef();
     
-    const dragStart = (e, position) => {
-        dragItem.current = position;
-    };
-    const dragEnter = (e, position) => {
-        dragOverItem.current = position;
-    };
-    const drop = async () => {
-        const copyListItems = [...filteredTasks]; 
-        const dragItemContent = copyListItems[dragItem.current];
-        copyListItems.splice(dragItem.current, 1);
-        copyListItems.splice(dragOverItem.current, 0, dragItemContent);
-        dragItem.current = null;
-        dragOverItem.current = null;
-        setTasks(prev => { if (filterTag !== 'ALL') return prev; return copyListItems; });
-        if (filterTag !== 'ALL') { alert("Sortering virker kun når filtret er 'Alle'"); return; }
-        try {
-            const batch = writeBatch(db);
-            copyListItems.forEach((item, index) => {
-                const newOrder = index * 1000;
-                if (item.order !== newOrder) {
-                    const ref = doc(db, PUBLIC_DATA_PATH, 'backlog', item.id);
-                    batch.update(ref, { order: newOrder });
-                }
-            });
-            await batch.commit();
-        } catch(e) { console.error("Reorder failed", e); }
-    };
-
     return (
         <div className="fixed inset-0 bg-slate-950 z-[60] overflow-y-auto pb-safe">
             {/* HEADER */}
@@ -656,10 +613,14 @@ const AdminDashboard = ({ onClose }) => {
                                 <div className="bg-slate-950 p-3 rounded-lg text-sm text-slate-300 border border-slate-800 mb-2">
                                     {item.text}
                                 </div>
+                                
+                                {/* DEVICE INFO AT BOTTOM */}
                                 {item.device && (
-                                    <div className="flex items-center text-[9px] text-slate-600 font-mono mt-1">
-                                        <Monitor className="w-3 h-3 mr-1 opacity-50"/> 
-                                        <span className="truncate max-w-xs">{item.device}</span>
+                                    <div className="mt-2 pt-2 border-t border-slate-800/50">
+                                        <div className="flex items-start text-[9px] text-slate-600 font-mono">
+                                            <Terminal className="w-3 h-3 mr-1.5 mt-0.5 opacity-50 shrink-0"/> 
+                                            <span className="break-all opacity-70 leading-relaxed">{item.device}</span>
+                                        </div>
                                     </div>
                                 )}
                             </div>
