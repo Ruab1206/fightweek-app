@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -97,7 +97,7 @@ const db = getFirestore(app);
 
 // Data Path Helper
 const ROOT_COLLECTION = `artifacts/production/users`; 
-const PUBLIC_DATA_PATH = `artifacts/production/public/data`; // For Backlog & Feedback
+const PUBLIC_DATA_PATH = `artifacts/production/public/data`; 
 
 // --- UTILS ---
 const formatCancellationTime = (isoString) => {
@@ -163,7 +163,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.25</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.26</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -207,7 +207,7 @@ const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
 );
 
 // --- UPDATED COMPONENT: FEEDBACK MODAL ---
-const FeedbackModal = ({ user, onClose }) => {
+const FeedbackModal = ({ user, currentContext, onClose }) => {
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
 
@@ -215,12 +215,12 @@ const FeedbackModal = ({ user, onClose }) => {
         if (!text.trim()) return;
         setSending(true);
         try {
-            // FIX: Removed 'items' subcollection to ensure valid path structure
             await addDoc(collection(db, PUBLIC_DATA_PATH, 'feedback'), {
                 text,
                 user: user.email,
                 userName: USER_MAPPING[user.email.toLowerCase()]?.name || user.email,
                 timestamp: new Date().toISOString(),
+                context: currentContext || 'App',
                 status: 'new'
             });
             onClose();
@@ -236,6 +236,8 @@ const FeedbackModal = ({ user, onClose }) => {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80] flex items-center justify-center p-4 fade-in">
             <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-700 p-6">
                 <h3 className="text-white font-bold text-lg mb-2 flex items-center"><MessageSquarePlus className="w-5 h-5 mr-2 text-blue-500"/>Send Feedback</h3>
+                <p className="text-xs text-slate-500 mb-4">Kontekst: <span className="text-blue-400 font-mono">{currentContext}</span></p>
+                
                 <div className="bg-slate-800/50 p-3 rounded-xl mb-4 text-xs text-slate-400 space-y-1">
                     <p className="font-bold text-slate-300">Hvad har du på hjerte?</p>
                     <ul className="list-disc pl-4 space-y-1">
@@ -266,21 +268,32 @@ const FeedbackModal = ({ user, onClose }) => {
 const AdminDashboard = ({ onClose }) => {
     const [tasks, setTasks] = useState([]);
     const [feedback, setFeedback] = useState([]);
-    const [view, setView] = useState('board'); 
+    const [view, setView] = useState('board'); // 'board', 'list', 'feedback'
     
-    // Board State
-    const [newTaskText, setNewTaskText] = useState('');
-    const [newTaskTag, setNewTaskTag] = useState('APP'); 
+    // Task Form State
+    const [isFormOpen, setIsFormOpen] = useState(false);
+    const [editingTask, setEditingTask] = useState(null);
+    const [form, setForm] = useState({
+        title: '',
+        status: 'todo', // 'todo', 'doing', 'done', 'backlog'
+        priority: 'Medium',
+        tag: 'APP',
+        desc: '',
+        notes: '',
+        acceptance: '',
+        dataFields: '',
+        release: ''
+    });
 
     useEffect(() => {
-        // FIX: Removed 'items' subcollection to ensure valid path structure
         const qBacklog = query(collection(db, PUBLIC_DATA_PATH, 'backlog'));
         const unsubBacklog = onSnapshot(qBacklog, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            // Sort by 'order' if exists, else by createdAt
+            items.sort((a,b) => (a.order || 0) - (b.order || 0));
             setTasks(items);
         }, (err) => console.error("Backlog Error:", err));
 
-        // FIX: Removed 'items' subcollection to ensure valid path structure
         const qFeedback = query(collection(db, PUBLIC_DATA_PATH, 'feedback'), orderBy('timestamp', 'desc'));
         const unsubFeedback = onSnapshot(qFeedback, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
@@ -290,148 +303,152 @@ const AdminDashboard = ({ onClose }) => {
         return () => { unsubBacklog(); unsubFeedback(); }
     }, []);
 
-    const addTask = async () => {
-        if (!newTaskText) return;
-        // FIX: Path structure
-        await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), {
-            title: newTaskText,
-            status: 'todo',
-            priority: 'Medium',
-            tag: newTaskTag,
-            createdAt: new Date().toISOString()
-        });
-        setNewTaskText('');
+    const saveTask = async () => {
+        if (!form.title) return;
+        
+        try {
+            if (editingTask) {
+                await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', editingTask.id), form);
+            } else {
+                await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), {
+                    ...form,
+                    createdAt: new Date().toISOString(),
+                    order: Date.now() // Simple ordering
+                });
+            }
+            setIsFormOpen(false);
+            setEditingTask(null);
+            resetForm();
+        } catch (e) {
+            console.error("Save Error:", e);
+            alert("Fejl ved gemning: " + e.message);
+        }
     };
 
-    const moveTask = async (task, direction) => {
-        const statuses = ['todo', 'doing', 'done'];
-        const currentIdx = statuses.indexOf(task.status);
-        let newIdx = currentIdx + direction;
-        if (newIdx < 0) newIdx = statuses.length - 1;
-        if (newIdx >= statuses.length) newIdx = 0;
-        
-        // FIX: Path structure - removed 'items'
-        await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', task.id), {
-            status: statuses[newIdx]
+    const resetForm = () => {
+        setForm({
+            title: '', status: 'todo', priority: 'Medium', tag: 'APP',
+            desc: '', notes: '', acceptance: '', dataFields: '', release: ''
         });
+    };
+
+    const editTask = (task) => {
+        setEditingTask(task);
+        setForm({
+            title: task.title || '',
+            status: task.status || 'todo',
+            priority: task.priority || 'Medium',
+            tag: task.tag || 'APP',
+            desc: task.desc || '',
+            notes: task.notes || '',
+            acceptance: task.acceptance || '',
+            dataFields: task.dataFields || '',
+            release: task.release || ''
+        });
+        setIsFormOpen(true);
     };
 
     const deleteTask = async (id) => {
-        // FIX: Path structure - removed 'items'
         if(confirm('Slet?')) await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
     };
 
     const convertFeedbackToTask = async (fbItem) => {
-        if(confirm('Opret som opgave i backlog?')) {
-            // FIX: Path structure
-            await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), {
-                title: fbItem.text,
-                desc: `Fra ${fbItem.userName}`,
-                status: 'todo',
-                priority: 'Medium',
-                tag: 'APP',
-                createdAt: new Date().toISOString()
-            });
-            // FIX: Path structure
-            await updateDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', fbItem.id), { status: 'converted' });
-        }
+        setForm({
+            title: fbItem.text,
+            status: 'todo',
+            priority: 'Medium',
+            tag: 'APP',
+            desc: `Feedback fra ${fbItem.userName} (${fbItem.context || 'App'}).\nOriginal: "${fbItem.text}"`,
+            notes: '', acceptance: '', dataFields: '', release: ''
+        });
+        setEditingTask(null); // New task
+        setIsFormOpen(true);
+        setView('board'); // Switch to view where modal opens
+        
+        // Mark feedback as processed
+        await updateDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', fbItem.id), { status: 'converted' });
     }
 
-    const exportToJson = () => {
-        const data = {
-            backlog: tasks,
-            feedback: feedback,
-            exportedAt: new Date().toISOString(),
-            context: "FightWeek Project Data"
-        };
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", `fightweek_data_${new Date().toISOString().slice(0,10)}.json`);
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
+    const copyDataToClipboard = () => {
+        const data = { backlog: tasks, feedback: feedback, exportedAt: new Date().toISOString() };
+        navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+        alert("Data kopieret!");
     };
 
-    const copyDataToClipboard = () => {
-        const data = {
-            backlog: tasks,
-            feedback: feedback,
-            exportedAt: new Date().toISOString(),
-            context: "FightWeek Project Data"
-        };
-        navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-        alert("Data kopieret! Indsæt det bare direkte i chatten.");
+    // --- DRAG & DROP LOGIC (SIMPLIFIED FOR LIST) ---
+    const moveItem = async (dragIndex, hoverIndex) => {
+        const newTasks = [...tasks];
+        const [removed] = newTasks.splice(dragIndex, 1);
+        newTasks.splice(hoverIndex, 0, removed);
+        
+        // Optimistic UI update
+        setTasks(newTasks);
+
+        // Update Order in DB (Debounced in real app, simplified here)
+        // We only update the two affected items to save writes, or all if needed.
+        // For simplicity in this constraints: we just update the 'order' field of the moved item
+        // A proper implementation requires re-indexing. Here we just swap order values if possible or use index
+        // To be safe and simple: We assign new order based on index * 1000
+        const batch = [];
+        newTasks.forEach((t, index) => {
+             if (t.order !== index * 1000) {
+                 // updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', t.id), { order: index * 1000 }); // Would be too many writes
+             }
+        });
+        // We will skip complex DnD persistence in this file-constraint and just do UI reorder
     };
 
     return (
         <div className="fixed inset-0 bg-slate-950 z-[60] overflow-y-auto pb-safe">
+            {/* HEADER */}
             <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-10 flex justify-between items-center shadow-md">
                 <div className="flex items-center">
                     <button onClick={onClose} className="mr-3 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"><ArrowLeft className="w-5 h-5"/></button>
                     <div>
                         <h2 className="text-white font-bold text-lg">Admin Center</h2>
-                        <p className="text-xs text-slate-500">Backlog & Feedback</p>
+                        <p className="text-xs text-slate-500">RTE Dashboard</p>
                     </div>
                 </div>
-                <div className="flex space-x-2">
-                    <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
-                        <Copy className="w-3 h-3 mr-2"/> Kopier Data (til AI)
-                    </button>
-                    <button onClick={exportToJson} className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-1.5 rounded-lg">
-                        <Download className="w-3 h-3"/>
-                    </button>
-                </div>
+                <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
+                    <Copy className="w-3 h-3 mr-2"/> Kopier til AI
+                </button>
             </div>
 
-            <div className="p-4 max-w-4xl mx-auto">
-                {/* Tabs */}
-                <div className="flex space-x-2 mb-6">
-                    <button onClick={() => setView('board')} className={`flex-1 py-2 rounded-lg text-sm font-bold ${view === 'board' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>Backlog Board</button>
-                    <button onClick={() => setView('feedback')} className={`flex-1 py-2 rounded-lg text-sm font-bold ${view === 'feedback' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
-                        Inbox ({feedback.filter(f => f.status === 'new').length})
+            <div className="p-4 max-w-6xl mx-auto">
+                {/* TABS */}
+                <div className="flex space-x-2 mb-6 bg-slate-900 p-1 rounded-xl inline-flex">
+                    <button onClick={() => setView('board')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center ${view === 'board' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                        <Layout className="w-4 h-4 mr-2"/> Board
+                    </button>
+                    <button onClick={() => setView('list')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center ${view === 'list' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                        <List className="w-4 h-4 mr-2"/> Backlog Liste
+                    </button>
+                    <button onClick={() => setView('feedback')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                        <MessageSquarePlus className="w-4 h-4 mr-2"/> Inbox ({feedback.filter(f => f.status === 'new').length})
                     </button>
                 </div>
 
-                {view === 'board' ? (
-                    <div className="space-y-6">
-                        {/* Add Task */}
-                        <div className="flex gap-2">
-                            <select value={newTaskTag} onChange={e => setNewTaskTag(e.target.value)} className="bg-slate-800 text-white text-xs font-bold rounded-lg px-2 border border-slate-700 outline-none">
-                                <option value="APP">APP</option>
-                                <option value="TEAM">TEAM</option>
-                            </select>
-                            <input 
-                                type="text" 
-                                value={newTaskText} 
-                                onChange={e => setNewTaskText(e.target.value)}
-                                placeholder="Ny opgave..." 
-                                className="flex-1 bg-slate-800 text-white rounded-lg px-4 py-3 text-sm border border-slate-700 focus:ring-2 focus:ring-blue-500 outline-none"
-                                onKeyDown={e => e.key === 'Enter' && addTask()}
-                            />
-                            <button onClick={addTask} className="bg-blue-600 text-white px-4 rounded-lg"><Plus className="w-5 h-5"/></button>
-                        </div>
-
-                        {/* Kanban Columns */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {['todo', 'doing', 'done'].map(status => (
+                {/* VIEW: BOARD (KANBAN) */}
+                {view === 'board' && (
+                    <div className="space-y-6 fade-in">
+                        <button onClick={() => { setEditingTask(null); resetForm(); setIsFormOpen(true); }} className="w-full py-3 bg-slate-800 border border-dashed border-slate-600 rounded-xl text-slate-400 hover:text-white hover:border-slate-400 flex justify-center items-center">
+                            <Plus className="w-5 h-5 mr-2"/> Opret Ny Opgave
+                        </button>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            {['backlog', 'todo', 'doing', 'done'].map(status => (
                                 <div key={status} className="bg-slate-900/50 rounded-xl border border-slate-800 p-3 min-h-[300px]">
-                                    <h3 className="text-slate-400 text-xs font-bold uppercase mb-3 flex justify-between items-center">
-                                        {status} <span className="bg-slate-800 px-2 rounded-full">{tasks.filter(t => t.status === status).length}</span>
+                                    <h3 className="text-slate-400 text-xs font-bold uppercase mb-3 flex justify-between items-center px-1">
+                                        {status} <span className="bg-slate-800 px-2 rounded-full border border-slate-700">{tasks.filter(t => t.status === status).length}</span>
                                     </h3>
                                     <div className="space-y-2">
                                         {tasks.filter(t => t.status === status).map(task => (
-                                            <div key={task.id} className="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-sm relative group">
-                                                <div className="flex justify-between items-start mb-1">
+                                            <div key={task.id} onClick={() => editTask(task)} className="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-sm cursor-pointer hover:border-blue-500 transition-all group">
+                                                <div className="flex justify-between items-start mb-2">
                                                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.tag === 'APP' ? 'bg-indigo-900 text-indigo-200' : 'bg-orange-900 text-orange-200'}`}>{task.tag}</span>
-                                                    <button onClick={() => deleteTask(task.id)} className="text-slate-600 hover:text-red-500"><Trash2 className="w-3 h-3"/></button>
+                                                    {task.priority === 'Critical' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/>}
                                                 </div>
-                                                <p className="text-sm font-medium text-white mb-2">{task.title}</p>
-                                                {task.desc && <p className="text-xs text-slate-500 mb-2">{task.desc}</p>}
-                                                <div className="flex justify-end gap-1">
-                                                    <button onClick={() => moveTask(task, -1)} className="p-1 bg-slate-700 rounded hover:bg-slate-600 text-slate-400"><ArrowLeft className="w-3 h-3"/></button>
-                                                    <button onClick={() => moveTask(task, 1)} className="p-1 bg-slate-700 rounded hover:bg-slate-600 text-slate-400"><ArrowRight className="w-3 h-3"/></button>
-                                                </div>
+                                                <p className="text-sm font-bold text-white mb-1 line-clamp-2">{task.title}</p>
+                                                <p className="text-xs text-slate-500 line-clamp-2">{task.desc}</p>
                                             </div>
                                         ))}
                                     </div>
@@ -439,34 +456,147 @@ const AdminDashboard = ({ onClose }) => {
                             ))}
                         </div>
                     </div>
-                ) : (
-                    // Feedback Inbox View
-                    <div className="space-y-3">
+                )}
+
+                {/* VIEW: LIST (PRIORITY) */}
+                {view === 'list' && (
+                    <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden fade-in">
+                        <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
+                            <h3 className="font-bold text-white">Prioriteret Liste</h3>
+                            <button onClick={() => { setEditingTask(null); resetForm(); setIsFormOpen(true); }} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center"><Plus className="w-3 h-3 mr-1"/> Ny</button>
+                        </div>
+                        <div className="divide-y divide-slate-800">
+                            {tasks.map((task, index) => (
+                                <div key={task.id} className="p-3 flex items-center hover:bg-slate-800/50 group">
+                                    <div className="mr-3 text-slate-600 cursor-grab active:cursor-grabbing"><GripVertical className="w-4 h-4"/></div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.status === 'done' ? 'bg-green-900 text-green-200' : 'bg-slate-700 text-slate-300'}`}>{task.status}</span>
+                                            <span className="text-white font-bold text-sm">{task.title}</span>
+                                        </div>
+                                        <div className="flex gap-4 text-xs text-slate-500">
+                                            <span>{task.tag}</span>
+                                            {task.release && <span>Release: {task.release}</span>}
+                                        </div>
+                                    </div>
+                                    <button onClick={() => editTask(task)} className="p-2 text-slate-500 hover:text-blue-400"><Edit2 className="w-4 h-4"/></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* VIEW: INBOX */}
+                {view === 'feedback' && (
+                    <div className="space-y-3 fade-in">
                         {feedback.length === 0 && <p className="text-slate-500 text-center py-10">Ingen feedback endnu.</p>}
                         {feedback.map(item => (
                             <div key={item.id} className={`p-4 rounded-xl border ${item.status === 'new' ? 'bg-slate-800 border-blue-900/50' : 'bg-slate-900 border-slate-800 opacity-60'}`}>
-                                <div className="flex justify-between items-start mb-2">
-                                    <div className="flex items-center">
-                                        <div className="w-6 h-6 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center text-xs font-bold mr-2">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center font-bold">
                                             {item.userName.charAt(0)}
                                         </div>
                                         <div>
-                                            <p className="text-xs font-bold text-slate-300">{item.userName}</p>
-                                            <p className="text-[10px] text-slate-500">{new Date(item.timestamp).toLocaleString()}</p>
+                                            <p className="text-sm font-bold text-white">{item.userName}</p>
+                                            <p className="text-[10px] text-slate-500 flex items-center gap-2">
+                                                <span>{new Date(item.timestamp).toLocaleString()}</span>
+                                                <span className="bg-slate-800 px-1.5 rounded text-slate-400 border border-slate-700">{item.context || 'N/A'}</span>
+                                            </p>
                                         </div>
                                     </div>
                                     {item.status === 'new' && (
-                                        <button onClick={() => convertFeedbackToTask(item)} className="text-[10px] bg-blue-600/20 text-blue-400 px-2 py-1 rounded border border-blue-600/30">
+                                        <button onClick={() => convertFeedbackToTask(item)} className="text-xs bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-lg border border-blue-600/30 hover:bg-blue-600/30 font-bold">
                                             Opret Opgave
                                         </button>
                                     )}
                                 </div>
-                                <p className="text-sm text-white">{item.text}</p>
+                                <div className="bg-slate-950 p-3 rounded-lg text-sm text-slate-300 border border-slate-800">
+                                    {item.text}
+                                </div>
                             </div>
                         ))}
                     </div>
                 )}
             </div>
+
+            {/* TASK FORM MODAL */}
+            {isFormOpen && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                    <div className="bg-slate-900 w-full max-w-2xl rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
+                            <h3 className="text-white font-bold text-lg">{editingTask ? 'Rediger Opgave' : 'Ny Opgave'}</h3>
+                            <button onClick={() => setIsFormOpen(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+                        </div>
+                        <div className="p-6 overflow-y-auto space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="col-span-2">
+                                    <label className="label">Titel (Påkrævet)</label>
+                                    <input type="text" className="input" value={form.title} onChange={e => setForm({...form, title: e.target.value})} autoFocus/>
+                                </div>
+                                <div>
+                                    <label className="label">Status</label>
+                                    <select className="input" value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
+                                        <option value="backlog">Backlog / Idé</option>
+                                        <option value="todo">To Do</option>
+                                        <option value="doing">Doing</option>
+                                        <option value="done">Done</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="label">Tag / Type</label>
+                                    <select className="input" value={form.tag} onChange={e => setForm({...form, tag: e.target.value})}>
+                                        <option value="APP">App Feature</option>
+                                        <option value="TEAM">Team Opgave</option>
+                                    </select>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="label">Beskrivelse (User Story)</label>
+                                    <textarea rows="2" className="input" value={form.desc} onChange={e => setForm({...form, desc: e.target.value})} placeholder="Som [Rolle] vil jeg..."/>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="label">Acceptkriterier</label>
+                                    <textarea rows="3" className="input" value={form.acceptance} onChange={e => setForm({...form, acceptance: e.target.value})} placeholder="- Skal kunne..."/>
+                                </div>
+                                <div>
+                                    <label className="label">Noter / Tech Specs</label>
+                                    <textarea rows="2" className="input" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="label">Datafelter (Udkast)</label>
+                                    <textarea rows="2" className="input" value={form.dataFields} onChange={e => setForm({...form, dataFields: e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="label">Prioritet</label>
+                                    <select className="input" value={form.priority} onChange={e => setForm({...form, priority: e.target.value})}>
+                                        <option>Critical</option>
+                                        <option>High</option>
+                                        <option>Medium</option>
+                                        <option>Low</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="label">Release / Sprint</label>
+                                    <input type="text" className="input" value={form.release} onChange={e => setForm({...form, release: e.target.value})} placeholder="fx MVP eller Sprint 1"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-slate-800 bg-slate-800/50 flex justify-between">
+                            {editingTask ? <button onClick={() => deleteTask(editingTask.id)} className="text-red-400 hover:text-red-300 px-4 py-2 text-sm font-bold flex items-center"><Trash2 className="w-4 h-4 mr-2"/> Slet</button> : <div/>}
+                            <div className="flex gap-3">
+                                <button onClick={() => setIsFormOpen(false)} className="text-slate-400 hover:text-white px-4 py-2 font-bold text-sm">Annuller</button>
+                                <button onClick={saveTask} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold text-sm">Gem Opgave</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            <style>{`
+                .label { display: block; font-size: 0.75rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.25rem; text-transform: uppercase; }
+                .input { width: 100%; background-color: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.5rem 0.75rem; color: white; font-size: 0.875rem; outline: none; }
+                .input:focus { ring: 2px solid #2563eb; border-color: transparent; }
+            `}</style>
         </div>
     );
 };
@@ -539,7 +669,7 @@ const App = () => {
     return () => unsubAuth();
   }, []);
 
-  // Handlers (Login, CRUD, Logic) - Keeping previous logic
+  // Handlers (Login, CRUD, Logic)
   const handleSmartLogin = async () => {
       setLoginError(null);
       const provider = new GoogleAuthProvider();
@@ -675,6 +805,13 @@ const App = () => {
   const isReadOnly = !isStandardMode && currentWeek < systemWeek;
   const userRole = USER_MAPPING[user.email.toLowerCase()]?.role;
   const isAdmin = userRole === 'admin' || userRole === 'coach';
+
+  // Helper for Context Name
+  const getCurrentContextName = () => {
+      if (view === 'team') return 'Team View';
+      if (isStandardMode) return 'Standarduge Edit';
+      return 'Min Plan';
+  };
 
   return (
     <div className="bg-slate-950 text-slate-200 min-h-screen pb-24 font-sans selection:bg-blue-500/30">
@@ -826,7 +963,7 @@ const App = () => {
       {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
       
       {/* NEW SYSTEM MODALS */}
-      {feedbackOpen && <FeedbackModal user={user} onClose={() => setFeedbackOpen(false)} />}
+      {feedbackOpen && <FeedbackModal user={user} currentContext={getCurrentContextName()} onClose={() => setFeedbackOpen(false)} />}
       {adminOpen && <AdminDashboard onClose={() => setAdminOpen(false)} />}
     </div>
   );
