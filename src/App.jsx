@@ -213,22 +213,31 @@ const generateCSV = (tasks) => {
     const csvRows = [headers.join(separator)];
 
     tasks.forEach(task => {
-        const row = [
-            `"${(task.title || '').replace(/"/g, '""')}"`,
-            `"${(task.status || 'backlog')}"`,
-            `"${(task.desc || '').replace(/"/g, '""')}"`,
-            `"${(task.acceptance || '').replace(/"/g, '""')}"`,
-            `"${(task.notes || '').replace(/"/g, '""')}"`,
-            `"${(task.dataFields || '').replace(/"/g, '""')}"`,
-            `"${(task.release || '').replace(/"/g, '""')}"`,
-            `"${(task.tag || 'APP')}"`,
-            `"${(task.priority || 'Medium')}"`,
-            `"${task.id}"`,
-            `"${task.order || 0}"`
+        const fields = [
+            task.title,
+            task.status || 'backlog',
+            task.desc,
+            task.acceptance,
+            task.notes,
+            task.dataFields,
+            task.release,
+            task.tag || 'APP',
+            task.priority || 'Medium',
+            task.id,
+            task.order || 0
         ];
+
+        // Safe CSV escaping: Convert to string, escape quotes, wrap in quotes
+        const row = fields.map(field => {
+            const val = String(field || '').replace(/"/g, '""');
+            return `"${val}"`;
+        });
+
         csvRows.push(row.join(separator));
     });
-    return csvRows.join('\n');
+
+    // Prepend BOM for Excel UTF-8 compatibility
+    return '\uFEFF' + csvRows.join('\n');
 };
 
 const generateFeedbackCSV = (feedbackItems) => {
@@ -237,18 +246,24 @@ const generateFeedbackCSV = (feedbackItems) => {
     const csvRows = [headers.join(separator)];
 
     feedbackItems.forEach(item => {
-        const row = [
-            `"${(item.userName || '').replace(/"/g, '""')}"`,
-            `"${(item.context || '').replace(/"/g, '""')}"`,
-            `"${(item.text || '').replace(/"/g, '""')}"`,
-            `"${(item.device || '').replace(/"/g, '""')}"`,
-            `"${(item.status || 'new')}"`,
-            `"${item.timestamp}"`,
-            `"${item.id}"`
+        const fields = [
+            item.userName,
+            item.context,
+            item.text,
+            item.device,
+            item.status || 'new',
+            item.timestamp,
+            item.id
         ];
+
+        const row = fields.map(field => {
+            const val = String(field || '').replace(/"/g, '""');
+            return `"${val}"`;
+        });
         csvRows.push(row.join(separator));
     });
-    return csvRows.join('\n');
+    
+    return '\uFEFF' + csvRows.join('\n');
 };
 
 
@@ -284,7 +299,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.38</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.45</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
