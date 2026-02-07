@@ -9,7 +9,7 @@ import {
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from "firebase/app";
 import { 
-  getFirestore, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, collection, onSnapshot, query, orderBy 
+  getFirestore, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, collection, onSnapshot, query, orderBy, writeBatch 
 } from "firebase/firestore";
 import { 
   getAuth, 
@@ -163,7 +163,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.26</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.27</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -206,7 +206,7 @@ const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
   </div>
 );
 
-// --- UPDATED COMPONENT: FEEDBACK MODAL ---
+// --- FEEDBACK MODAL ---
 const FeedbackModal = ({ user, currentContext, onClose }) => {
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
@@ -264,7 +264,7 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
     );
 };
 
-// --- UPDATED COMPONENT: ADMIN DASHBOARD (BACKLOG) ---
+// --- ADMIN DASHBOARD (BACKLOG) ---
 const AdminDashboard = ({ onClose }) => {
     const [tasks, setTasks] = useState([]);
     const [feedback, setFeedback] = useState([]);
@@ -273,9 +273,11 @@ const AdminDashboard = ({ onClose }) => {
     // Task Form State
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingTask, setEditingTask] = useState(null);
+    const [linkedFeedbackId, setLinkedFeedbackId] = useState(null);
+
     const [form, setForm] = useState({
         title: '',
-        status: 'todo', // 'todo', 'doing', 'done', 'backlog'
+        status: 'todo',
         priority: 'Medium',
         tag: 'APP',
         desc: '',
@@ -285,11 +287,14 @@ const AdminDashboard = ({ onClose }) => {
         release: ''
     });
 
+    // DnD Refs
+    const dragItem = useRef();
+    const dragOverItem = useRef();
+
     useEffect(() => {
         const qBacklog = query(collection(db, PUBLIC_DATA_PATH, 'backlog'));
         const unsubBacklog = onSnapshot(qBacklog, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
-            // Sort by 'order' if exists, else by createdAt
             items.sort((a,b) => (a.order || 0) - (b.order || 0));
             setTasks(items);
         }, (err) => console.error("Backlog Error:", err));
@@ -310,14 +315,21 @@ const AdminDashboard = ({ onClose }) => {
             if (editingTask) {
                 await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', editingTask.id), form);
             } else {
+                // Create new
                 await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), {
                     ...form,
                     createdAt: new Date().toISOString(),
-                    order: Date.now() // Simple ordering
+                    order: Date.now()
                 });
+
+                // If created from feedback, mark feedback as converted NOW
+                if (linkedFeedbackId) {
+                    await updateDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', linkedFeedbackId), { status: 'converted' });
+                }
             }
             setIsFormOpen(false);
             setEditingTask(null);
+            setLinkedFeedbackId(null);
             resetForm();
         } catch (e) {
             console.error("Save Error:", e);
@@ -352,7 +364,7 @@ const AdminDashboard = ({ onClose }) => {
         if(confirm('Slet?')) await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
     };
 
-    const convertFeedbackToTask = async (fbItem) => {
+    const startConvertFeedback = (fbItem) => {
         setForm({
             title: fbItem.text,
             status: 'todo',
@@ -361,12 +373,10 @@ const AdminDashboard = ({ onClose }) => {
             desc: `Feedback fra ${fbItem.userName} (${fbItem.context || 'App'}).\nOriginal: "${fbItem.text}"`,
             notes: '', acceptance: '', dataFields: '', release: ''
         });
-        setEditingTask(null); // New task
+        setEditingTask(null);
+        setLinkedFeedbackId(fbItem.id);
         setIsFormOpen(true);
-        setView('board'); // Switch to view where modal opens
-        
-        // Mark feedback as processed
-        await updateDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', fbItem.id), { status: 'converted' });
+        setView('board'); 
     }
 
     const copyDataToClipboard = () => {
@@ -375,27 +385,40 @@ const AdminDashboard = ({ onClose }) => {
         alert("Data kopieret!");
     };
 
-    // --- DRAG & DROP LOGIC (SIMPLIFIED FOR LIST) ---
-    const moveItem = async (dragIndex, hoverIndex) => {
-        const newTasks = [...tasks];
-        const [removed] = newTasks.splice(dragIndex, 1);
-        newTasks.splice(hoverIndex, 0, removed);
+    // --- DRAG & DROP HANDLERS ---
+    const dragStart = (e, position) => {
+        dragItem.current = position;
+    };
+ 
+    const dragEnter = (e, position) => {
+        dragOverItem.current = position;
+    };
+ 
+    const drop = async () => {
+        const copyListItems = [...tasks];
+        const dragItemContent = copyListItems[dragItem.current];
+        copyListItems.splice(dragItem.current, 1);
+        copyListItems.splice(dragOverItem.current, 0, dragItemContent);
         
-        // Optimistic UI update
-        setTasks(newTasks);
+        dragItem.current = null;
+        dragOverItem.current = null;
+        setTasks(copyListItems); // Optimistic UI
 
-        // Update Order in DB (Debounced in real app, simplified here)
-        // We only update the two affected items to save writes, or all if needed.
-        // For simplicity in this constraints: we just update the 'order' field of the moved item
-        // A proper implementation requires re-indexing. Here we just swap order values if possible or use index
-        // To be safe and simple: We assign new order based on index * 1000
-        const batch = [];
-        newTasks.forEach((t, index) => {
-             if (t.order !== index * 1000) {
-                 // updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', t.id), { order: index * 1000 }); // Would be too many writes
-             }
-        });
-        // We will skip complex DnD persistence in this file-constraint and just do UI reorder
+        // Persist Order (Simpel implementering: Update alle der er ændret)
+        // For at undgå for mange writes, opdaterer vi bare alle 'order' felter i batch i denne version
+        try {
+            const batch = writeBatch(db);
+            copyListItems.forEach((item, index) => {
+                const newOrder = index * 1000;
+                if (item.order !== newOrder) {
+                    const ref = doc(db, PUBLIC_DATA_PATH, 'backlog', item.id);
+                    batch.update(ref, { order: newOrder });
+                }
+            });
+            await batch.commit();
+        } catch(e) {
+            console.error("Reorder failed", e);
+        }
     };
 
     return (
@@ -417,13 +440,13 @@ const AdminDashboard = ({ onClose }) => {
             <div className="p-4 max-w-6xl mx-auto">
                 {/* TABS */}
                 <div className="flex space-x-2 mb-6 bg-slate-900 p-1 rounded-xl inline-flex">
-                    <button onClick={() => setView('board')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center ${view === 'board' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                    <button onClick={() => setView('board')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'board' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
                         <Layout className="w-4 h-4 mr-2"/> Board
                     </button>
-                    <button onClick={() => setView('list')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center ${view === 'list' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                    <button onClick={() => setView('list')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'list' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
                         <List className="w-4 h-4 mr-2"/> Backlog Liste
                     </button>
-                    <button onClick={() => setView('feedback')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                    <button onClick={() => setView('feedback')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
                         <MessageSquarePlus className="w-4 h-4 mr-2"/> Inbox ({feedback.filter(f => f.status === 'new').length})
                     </button>
                 </div>
@@ -442,7 +465,7 @@ const AdminDashboard = ({ onClose }) => {
                                     </h3>
                                     <div className="space-y-2">
                                         {tasks.filter(t => t.status === status).map(task => (
-                                            <div key={task.id} onClick={() => editTask(task)} className="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-sm cursor-pointer hover:border-blue-500 transition-all group">
+                                            <div key={task.id} onClick={() => editTask(task)} className="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-sm cursor-pointer hover:border-blue-500 transition-all group hover:bg-slate-700">
                                                 <div className="flex justify-between items-start mb-2">
                                                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.tag === 'APP' ? 'bg-indigo-900 text-indigo-200' : 'bg-orange-900 text-orange-200'}`}>{task.tag}</span>
                                                     {task.priority === 'Critical' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/>}
@@ -458,25 +481,34 @@ const AdminDashboard = ({ onClose }) => {
                     </div>
                 )}
 
-                {/* VIEW: LIST (PRIORITY) */}
+                {/* VIEW: LIST (PRIORITY DRAG N DROP) */}
                 {view === 'list' && (
                     <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden fade-in">
                         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
-                            <h3 className="font-bold text-white">Prioriteret Liste</h3>
+                            <h3 className="font-bold text-white">Prioriteret Liste (Træk for at sortere)</h3>
                             <button onClick={() => { setEditingTask(null); resetForm(); setIsFormOpen(true); }} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center"><Plus className="w-3 h-3 mr-1"/> Ny</button>
                         </div>
                         <div className="divide-y divide-slate-800">
                             {tasks.map((task, index) => (
-                                <div key={task.id} className="p-3 flex items-center hover:bg-slate-800/50 group">
-                                    <div className="mr-3 text-slate-600 cursor-grab active:cursor-grabbing"><GripVertical className="w-4 h-4"/></div>
-                                    <div className="flex-1">
+                                <div 
+                                    key={task.id} 
+                                    className="p-3 flex items-center bg-slate-900 hover:bg-slate-800 transition-colors group"
+                                    onDragStart={(e) => dragStart(e, index)}
+                                    onDragEnter={(e) => dragEnter(e, index)}
+                                    onDragEnd={drop}
+                                    draggable
+                                >
+                                    <div className="mr-3 text-slate-600 cursor-grab active:cursor-grabbing hover:text-slate-400 p-2">
+                                        <GripVertical className="w-5 h-5"/>
+                                    </div>
+                                    <div className="flex-1 cursor-pointer" onClick={() => editTask(task)}>
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.status === 'done' ? 'bg-green-900 text-green-200' : 'bg-slate-700 text-slate-300'}`}>{task.status}</span>
                                             <span className="text-white font-bold text-sm">{task.title}</span>
                                         </div>
                                         <div className="flex gap-4 text-xs text-slate-500">
                                             <span>{task.tag}</span>
-                                            {task.release && <span>Release: {task.release}</span>}
+                                            {task.release && <span className="text-blue-400">Release: {task.release}</span>}
                                         </div>
                                     </div>
                                     <button onClick={() => editTask(task)} className="p-2 text-slate-500 hover:text-blue-400"><Edit2 className="w-4 h-4"/></button>
@@ -501,12 +533,12 @@ const AdminDashboard = ({ onClose }) => {
                                             <p className="text-sm font-bold text-white">{item.userName}</p>
                                             <p className="text-[10px] text-slate-500 flex items-center gap-2">
                                                 <span>{new Date(item.timestamp).toLocaleString()}</span>
-                                                <span className="bg-slate-800 px-1.5 rounded text-slate-400 border border-slate-700">{item.context || 'N/A'}</span>
+                                                <span className="bg-slate-800 px-1.5 rounded text-slate-400 border border-slate-700">{item.context || 'App'}</span>
                                             </p>
                                         </div>
                                     </div>
                                     {item.status === 'new' && (
-                                        <button onClick={() => convertFeedbackToTask(item)} className="text-xs bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-lg border border-blue-600/30 hover:bg-blue-600/30 font-bold">
+                                        <button onClick={() => startConvertFeedback(item)} className="text-xs bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-lg border border-blue-600/30 hover:bg-blue-600/30 font-bold transition-colors">
                                             Opret Opgave
                                         </button>
                                     )}
@@ -531,12 +563,12 @@ const AdminDashboard = ({ onClose }) => {
                         <div className="p-6 overflow-y-auto space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="col-span-2">
-                                    <label className="label">Titel (Påkrævet)</label>
-                                    <input type="text" className="input" value={form.title} onChange={e => setForm({...form, title: e.target.value})} autoFocus/>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Titel (Påkrævet)</label>
+                                    <input type="text" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.title} onChange={e => setForm({...form, title: e.target.value})} autoFocus/>
                                 </div>
                                 <div>
-                                    <label className="label">Status</label>
-                                    <select className="input" value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Status</label>
+                                    <select className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
                                         <option value="backlog">Backlog / Idé</option>
                                         <option value="todo">To Do</option>
                                         <option value="doing">Doing</option>
@@ -544,31 +576,31 @@ const AdminDashboard = ({ onClose }) => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="label">Tag / Type</label>
-                                    <select className="input" value={form.tag} onChange={e => setForm({...form, tag: e.target.value})}>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tag / Type</label>
+                                    <select className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.tag} onChange={e => setForm({...form, tag: e.target.value})}>
                                         <option value="APP">App Feature</option>
                                         <option value="TEAM">Team Opgave</option>
                                     </select>
                                 </div>
                                 <div className="col-span-2">
-                                    <label className="label">Beskrivelse (User Story)</label>
-                                    <textarea rows="2" className="input" value={form.desc} onChange={e => setForm({...form, desc: e.target.value})} placeholder="Som [Rolle] vil jeg..."/>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Beskrivelse (User Story)</label>
+                                    <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.desc} onChange={e => setForm({...form, desc: e.target.value})} placeholder="Som [Rolle] vil jeg..."/>
                                 </div>
                                 <div className="col-span-2">
-                                    <label className="label">Acceptkriterier</label>
-                                    <textarea rows="3" className="input" value={form.acceptance} onChange={e => setForm({...form, acceptance: e.target.value})} placeholder="- Skal kunne..."/>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Acceptkriterier</label>
+                                    <textarea rows="3" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.acceptance} onChange={e => setForm({...form, acceptance: e.target.value})} placeholder="- Skal kunne..."/>
                                 </div>
                                 <div>
-                                    <label className="label">Noter / Tech Specs</label>
-                                    <textarea rows="2" className="input" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})}/>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Noter / Tech Specs</label>
+                                    <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})}/>
                                 </div>
                                 <div>
-                                    <label className="label">Datafelter (Udkast)</label>
-                                    <textarea rows="2" className="input" value={form.dataFields} onChange={e => setForm({...form, dataFields: e.target.value})}/>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Datafelter (Udkast)</label>
+                                    <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.dataFields} onChange={e => setForm({...form, dataFields: e.target.value})}/>
                                 </div>
                                 <div>
-                                    <label className="label">Prioritet</label>
-                                    <select className="input" value={form.priority} onChange={e => setForm({...form, priority: e.target.value})}>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Prioritet</label>
+                                    <select className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.priority} onChange={e => setForm({...form, priority: e.target.value})}>
                                         <option>Critical</option>
                                         <option>High</option>
                                         <option>Medium</option>
@@ -576,8 +608,8 @@ const AdminDashboard = ({ onClose }) => {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="label">Release / Sprint</label>
-                                    <input type="text" className="input" value={form.release} onChange={e => setForm({...form, release: e.target.value})} placeholder="fx MVP eller Sprint 1"/>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Release / Sprint</label>
+                                    <input type="text" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.release} onChange={e => setForm({...form, release: e.target.value})} placeholder="fx MVP eller Sprint 1"/>
                                 </div>
                             </div>
                         </div>
@@ -591,12 +623,6 @@ const AdminDashboard = ({ onClose }) => {
                     </div>
                 </div>
             )}
-            
-            <style>{`
-                .label { display: block; font-size: 0.75rem; font-weight: 700; color: #94a3b8; margin-bottom: 0.25rem; text-transform: uppercase; }
-                .input { width: 100%; background-color: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.5rem 0.75rem; color: white; font-size: 0.875rem; outline: none; }
-                .input:focus { ring: 2px solid #2563eb; border-color: transparent; }
-            `}</style>
         </div>
     );
 };
