@@ -3,13 +3,13 @@ import {
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from "firebase/app";
 import { 
-  getFirestore, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, collection, onSnapshot, query, orderBy, writeBatch 
+  getFirestore, doc, setDoc, getDoc, addDoc, updateDoc, deleteDoc, collection, onSnapshot, query, orderBy, writeBatch, getDocs 
 } from "firebase/firestore";
 import { 
   getAuth, 
@@ -153,6 +153,29 @@ const parseCSV = (text) => {
     });
 };
 
+const generateCSV = (tasks) => {
+    const headers = ['Titel', 'Status', 'Beskrivelse', 'Acceptkriterier', 'Noter', 'Datafelter', 'Release', 'Tag', 'Prioritet', 'ID', 'Order'];
+    const csvRows = [headers.join(',')];
+
+    tasks.forEach(task => {
+        const row = [
+            `"${(task.title || '').replace(/"/g, '""')}"`,
+            `"${(task.status || 'backlog')}"`,
+            `"${(task.desc || '').replace(/"/g, '""')}"`,
+            `"${(task.acceptance || '').replace(/"/g, '""')}"`,
+            `"${(task.notes || '').replace(/"/g, '""')}"`,
+            `"${(task.dataFields || '').replace(/"/g, '""')}"`,
+            `"${(task.release || '').replace(/"/g, '""')}"`,
+            `"${(task.tag || 'APP')}"`,
+            `"${(task.priority || 'Medium')}"`,
+            `"${task.id}"`,
+            `"${task.order || 0}"`
+        ];
+        csvRows.push(row.join(','));
+    });
+    return csvRows.join('\n');
+};
+
 
 // --- COMPONENTS ---
 
@@ -186,7 +209,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.33</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.34</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -246,7 +269,6 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
                 context: currentContext || 'App',
                 device: getDeviceInfo(),
                 status: 'new',
-                // Sæt en negativ timestamp som order, så den sorteres først (laveste tal først ved ASC sortering)
                 order: -Date.now() 
             });
             onClose();
@@ -292,21 +314,44 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
 // --- IMPORT CSV MODAL ---
 const ImportModal = ({ onClose, onImport }) => {
     const [text, setText] = useState('');
+    const [mode, setMode] = useState('append'); // 'append' | 'replace'
+
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
             <div className="bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl p-6">
-                 <h3 className="text-white font-bold text-lg mb-2">Importer Backlog (CSV)</h3>
-                 <p className="text-slate-400 text-xs mb-4">Kopier indholdet fra din CSV fil (inkl. overskrifter) og indsæt her.</p>
+                 <h3 className="text-white font-bold text-lg mb-4">Importer Backlog (CSV)</h3>
+                 
+                 <div className="flex gap-4 mb-4">
+                     <button onClick={() => setMode('append')} className={`flex-1 p-3 rounded-xl border flex flex-col items-center ${mode === 'append' ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                         <Plus className="w-6 h-6 mb-2"/>
+                         <span className="font-bold text-sm">Tilføj til liste</span>
+                         <span className="text-[10px] opacity-70">Bevarer eksisterende</span>
+                     </button>
+                     <button onClick={() => setMode('replace')} className={`flex-1 p-3 rounded-xl border flex flex-col items-center ${mode === 'replace' ? 'bg-red-900/30 border-red-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                         <RefreshCw className="w-6 h-6 mb-2"/>
+                         <span className="font-bold text-sm">Erstat hele listen</span>
+                         <span className="text-[10px] opacity-70">Sletter alt før import</span>
+                     </button>
+                 </div>
+
+                 {mode === 'replace' && (
+                     <div className="bg-red-900/30 border border-red-800 p-3 rounded-lg mb-4 text-xs text-red-200 flex items-start">
+                         <AlertCircle className="w-4 h-4 mr-2 shrink-0 mt-0.5"/>
+                         <p>Advarsel: Dette vil slette ALLE nuværende opgaver i backloggen og erstatte dem med indholdet herunder. Feedback slettes ikke.</p>
+                     </div>
+                 )}
+
+                 <p className="text-slate-400 text-xs mb-2">Indsæt CSV data (inkl. overskrifter):</p>
                  <textarea 
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-300 text-xs font-mono h-48 focus:ring-2 focus:ring-blue-600 outline-none mb-4"
-                    placeholder="Titel,Noter,Beskrivelse,..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-300 text-xs font-mono h-32 focus:ring-2 focus:ring-blue-600 outline-none mb-4"
+                    placeholder="Titel,Status,Beskrivelse..."
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                  />
                  <div className="flex justify-end gap-2">
                     <button onClick={onClose} className="text-slate-400 px-4 py-2 text-sm font-bold">Annuller</button>
-                    <button onClick={() => onImport(text)} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center">
-                        <Upload className="w-4 h-4 mr-2"/> Importer
+                    <button onClick={() => onImport(text, mode)} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center text-white ${mode === 'replace' ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'}`}>
+                        <Upload className="w-4 h-4 mr-2"/> {mode === 'replace' ? 'Erstat Data' : 'Importer'}
                     </button>
                  </div>
             </div>
@@ -373,7 +418,7 @@ const AdminDashboard = ({ onClose }) => {
                 await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), {
                     ...form,
                     createdAt: new Date().toISOString(),
-                    order: -Date.now() // Negativ timestamp for at placere øverst
+                    order: -Date.now() 
                 });
                 if (linkedFeedbackId) {
                     await updateDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', linkedFeedbackId), { status: 'converted' });
@@ -389,34 +434,66 @@ const AdminDashboard = ({ onClose }) => {
         }
     };
 
-    const handleImportCSV = async (csvText) => {
+    const handleExportCSV = async () => {
+        try {
+            const csv = generateCSV(tasks);
+            await navigator.clipboard.writeText(csv);
+            alert("CSV kopieret til udklipsholder! Du kan nu indsætte det i Excel/Sheets.");
+        } catch (e) {
+            alert("Kunne ikke eksportere: " + e.message);
+        }
+    };
+
+    const handleImportCSV = async (csvText, mode) => {
         try {
             const parsed = parseCSV(csvText);
             const batch = writeBatch(db);
             let count = 0;
             const now = Date.now();
             
+            // If REPLACE mode, delete all existing docs first
+            if (mode === 'replace') {
+                const snapshot = await getDocs(collection(db, PUBLIC_DATA_PATH, 'backlog'));
+                snapshot.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+            }
+
             parsed.forEach((row, idx) => {
                 if (!row.Titel) return;
-                const ref = doc(collection(db, PUBLIC_DATA_PATH, 'backlog'));
+                
+                // If appending, check if ID exists to avoid duplicates? No, explicit append is usually desired or handled by ID in CSV
+                // But here we generate new IDs for simplicity unless we want to support updating existing by ID.
+                // For "Round Trip" editing, user might have IDs in CSV.
+                
+                let ref;
+                if (row.ID && row.ID.length > 5) { // Simple check if valid ID
+                     ref = doc(db, PUBLIC_DATA_PATH, 'backlog', row.ID);
+                } else {
+                     ref = doc(collection(db, PUBLIC_DATA_PATH, 'backlog'));
+                }
+
+                // If replacing, we just set. If appending with existing ID, we overwrite (update).
+                // If appending with no ID, we create new.
+                
                 batch.set(ref, {
                     title: row.Titel || '',
                     desc: row.Beskrivelse || '',
                     acceptance: row.Acceptkriterier || '',
                     notes: row.Noter || '',
-                    dataFields: row['Datafelter (udkast)'] || '',
+                    dataFields: row['Datafelter'] || '',
                     status: (row.Status || 'backlog').toLowerCase(),
                     release: row.Release || '',
-                    priority: 'Medium',
-                    tag: 'APP',
-                    createdAt: new Date().toISOString(),
-                    order: -(now + idx) // Ensure they are added in sequence at top
+                    tag: row.Tag || 'APP',
+                    priority: row.Prioritet || 'Medium',
+                    order: row.Order ? Number(row.Order) : -(now + idx), // Preserve order if exists, else add top
+                    createdAt: new Date().toISOString()
                 });
                 count++;
             });
             await batch.commit();
             setIsImportOpen(false);
-            alert(`Importerede ${count} opgaver.`);
+            alert(`Succes! ${mode === 'replace' ? 'Backloggen er erstattet med' : 'Tilføjede'} ${count} opgaver.`);
         } catch (e) {
             alert("Fejl under import: " + e.message);
         }
@@ -446,7 +523,6 @@ const AdminDashboard = ({ onClose }) => {
     };
 
     const deleteTask = (id) => {
-        // NON-BLOCKING CONFIRMATION
         setAdminConfirm({
             title: "Slet Opgave?",
             message: "Er du sikker på, at du vil slette denne opgave? Handlingen kan ikke fortrydes.",
@@ -463,7 +539,6 @@ const AdminDashboard = ({ onClose }) => {
     };
     
     const deleteFeedback = (id) => {
-         // NON-BLOCKING CONFIRMATION
          setAdminConfirm({
             title: "Slet Feedback?",
             message: "Er du sikker? Dette kan ikke fortrydes.",
@@ -512,9 +587,7 @@ const AdminDashboard = ({ onClose }) => {
 
     const dragStart = (e, position) => {
         dragItem.current = position;
-        // Effect for visual feedback
         e.dataTransfer.effectAllowed = "move";
-        // Ghost image hack if needed, but default usually works
     };
 
     const dragEnter = (e, position) => {
@@ -540,34 +613,10 @@ const AdminDashboard = ({ onClose }) => {
         copyList.splice(sourceIdx, 1);
         copyList.splice(destIdx, 0, itemToMove);
         
-        // Update local state immediately for smooth UI
         setTasks(copyList);
-
-        // Update DB
-        // Swapping orders is tricky with multi-item reorder. 
-        // Simplest robust strategy: Re-assign orders for the affected range or swap if just 1 step.
-        // For prototype: Just swap the order values of the two items involved if adjacent, or re-calculate.
-        // Better: Take order of Item BEFORE dest and Item AFTER dest and average? 
-        // Or simpler: Just swap exact order values for ALL items (heavy write) or just the moved one.
-        
-        // Let's do a simple swap of order values for the two items if we want exact position swap logic, 
-        // BUT drag n drop usually implies insertion.
-        // We will re-assign order values based on the NEW array index. 
-        // To be safe and simple: Update ALL orders (Batch write limit is 500).
-        // If list is small (<500), this is fine.
         
         const batch = writeBatch(db);
         copyList.forEach((t, i) => {
-            // New order: index * 1000 (to allow future inserts). 
-            // ASC sort means index 0 should have lowest val.
-            // Our previous logic was: Newest = negative timestamp (Lowest).
-            // So if we sort by Order ASC, top item has lowest value.
-            // Let's just normalize: Top item = -Date.now() + i * 1000? No, simply 0, 1, 2...
-            // But we want new items to appear top.
-            // Let's stick to: Order field determines position. 
-            // We set order = index. (0 at top, 1 next...). 
-            // If we do this, we break the "Negative timestamp" logic for new items unless we re-sort everything.
-            // Let's just set order = index.
             const newOrder = i; 
             if (t.order !== newOrder) {
                  batch.update(doc(db, PUBLIC_DATA_PATH, 'backlog', t.id), { order: newOrder });
@@ -621,11 +670,14 @@ const AdminDashboard = ({ onClose }) => {
                         </div>
                     </div>
                     <div className="flex gap-2">
+                        <button onClick={handleExportCSV} className="bg-slate-800 text-green-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700" title="Kopier CSV til Excel">
+                            <FileDown className="w-3 h-3 mr-2"/> Eksportér CSV
+                        </button>
                         <button onClick={() => setIsImportOpen(true)} className="bg-slate-800 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
                             <Upload className="w-3 h-3 mr-2"/> Import
                         </button>
                         <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
-                            <Copy className="w-3 h-3 mr-2"/> Kopier til AI
+                            <Copy className="w-3 h-3 mr-2"/> Backup JSON
                         </button>
                     </div>
                 </div>
