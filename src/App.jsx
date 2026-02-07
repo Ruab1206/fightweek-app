@@ -163,7 +163,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.28</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.29</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -237,14 +237,12 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
             <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-700 p-6">
                 <h3 className="text-white font-bold text-lg mb-2 flex items-center"><MessageSquarePlus className="w-5 h-5 mr-2 text-blue-500"/>Send Feedback</h3>
                 
-                {/* Context Hidden from UI but passed in background */}
-                
                 <div className="bg-slate-800/50 p-3 rounded-xl mb-4 text-xs text-slate-400 space-y-1">
                     <p className="font-bold text-slate-300">Hvad har du på hjerte?</p>
                     <ul className="list-disc pl-4 space-y-1">
+                        <li>Feedback til træningen eller teamet?</li>
                         <li>Fandt du en fejl i appen?</li>
                         <li>Har du en god idé til en ny funktion?</li>
-                        <li>Feedback til træningen eller teamet?</li>
                     </ul>
                 </div>
                 <textarea 
@@ -269,8 +267,8 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
 const AdminDashboard = ({ onClose }) => {
     const [tasks, setTasks] = useState([]);
     const [feedback, setFeedback] = useState([]);
-    const [view, setView] = useState('board'); // 'board', 'list', 'feedback'
-    const [filterTag, setFilterTag] = useState('ALL'); // 'ALL', 'APP', 'TEAM'
+    const [view, setView] = useState('board'); 
+    const [filterTag, setFilterTag] = useState('ALL'); 
     
     // Task Form State
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -310,24 +308,19 @@ const AdminDashboard = ({ onClose }) => {
         return () => { unsubBacklog(); unsubFeedback(); }
     }, []);
 
-    // Filter Logic
     const filteredTasks = tasks.filter(t => filterTag === 'ALL' || t.tag === filterTag);
 
     const saveTask = async () => {
         if (!form.title) return;
-        
         try {
             if (editingTask) {
                 await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', editingTask.id), form);
             } else {
-                // Create new
                 await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), {
                     ...form,
                     createdAt: new Date().toISOString(),
                     order: Date.now()
                 });
-
-                // If created from feedback, mark feedback as converted NOW
                 if (linkedFeedbackId) {
                     await updateDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', linkedFeedbackId), { status: 'converted' });
                 }
@@ -366,7 +359,28 @@ const AdminDashboard = ({ onClose }) => {
     };
 
     const deleteTask = async (id) => {
-        if(confirm('Slet?')) await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
+        if(confirm('Er du sikker på, at du vil slette denne opgave?')) {
+            try {
+                await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
+                if (isFormOpen) setIsFormOpen(false);
+            } catch (e) {
+                alert("Kunne ikke slette: " + e.message);
+            }
+        }
+    };
+
+    const moveTaskStatus = async (task, direction) => {
+        const statuses = ['backlog', 'todo', 'doing', 'done'];
+        const currentIdx = statuses.indexOf(task.status);
+        let newIdx = currentIdx + direction;
+        if (newIdx < 0) newIdx = 0;
+        if (newIdx >= statuses.length) newIdx = statuses.length - 1;
+        
+        if (newIdx !== currentIdx) {
+            await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', task.id), {
+                status: statuses[newIdx]
+            });
+        }
     };
 
     const startConvertFeedback = (fbItem) => {
@@ -405,7 +419,7 @@ const AdminDashboard = ({ onClose }) => {
     };
  
     const drop = async () => {
-        const copyListItems = [...filteredTasks]; // Only reorder visible
+        const copyListItems = [...filteredTasks]; 
         const dragItemContent = copyListItems[dragItem.current];
         copyListItems.splice(dragItem.current, 1);
         copyListItems.splice(dragOverItem.current, 0, dragItemContent);
@@ -413,12 +427,7 @@ const AdminDashboard = ({ onClose }) => {
         dragItem.current = null;
         dragOverItem.current = null;
         
-        // Optimistic UI update on filtered set might be tricky if not careful, 
-        // but sufficient for MVP constraints
         setTasks(prev => {
-             // This is complex for filtered list, so for now we just rely on visual update 
-             // and saving the order value. In a real app we'd map back to full list.
-             // For constraint simplicity: We only support full reorder when Filter is ALL.
              if (filterTag !== 'ALL') return prev;
              return copyListItems;
         });
@@ -502,13 +511,23 @@ const AdminDashboard = ({ onClose }) => {
                                     </h3>
                                     <div className="space-y-2">
                                         {filteredTasks.filter(t => t.status === status).map(task => (
-                                            <div key={task.id} onClick={() => editTask(task)} className="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-sm cursor-pointer hover:border-blue-500 transition-all group hover:bg-slate-700">
-                                                <div className="flex justify-between items-start mb-2">
+                                            <div key={task.id} className="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-sm transition-all group hover:bg-slate-700 relative">
+                                                <div className="flex justify-between items-start mb-2 cursor-pointer" onClick={() => editTask(task)}>
                                                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.tag === 'APP' ? 'bg-indigo-900 text-indigo-200' : 'bg-orange-900 text-orange-200'}`}>{task.tag}</span>
-                                                    {task.priority === 'Critical' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/>}
+                                                    <div className="flex gap-1">
+                                                        {task.priority === 'Critical' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse mt-1"/>}
+                                                        <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} className="text-slate-600 hover:text-red-500 p-0.5"><Trash2 className="w-3 h-3"/></button>
+                                                    </div>
                                                 </div>
-                                                <p className="text-sm font-bold text-white mb-1 line-clamp-2">{task.title}</p>
-                                                <p className="text-xs text-slate-500 line-clamp-2">{task.desc}</p>
+                                                <div className="cursor-pointer" onClick={() => editTask(task)}>
+                                                    <p className="text-sm font-bold text-white mb-1 line-clamp-2">{task.title}</p>
+                                                    <p className="text-xs text-slate-500 line-clamp-2">{task.desc}</p>
+                                                </div>
+                                                {/* Kanban Arrows */}
+                                                <div className="flex justify-between mt-3 pt-2 border-t border-slate-700/50">
+                                                    <button onClick={() => moveTaskStatus(task, -1)} disabled={status === 'backlog'} className={`p-1 rounded ${status === 'backlog' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowLeft className="w-3 h-3"/></button>
+                                                    <button onClick={() => moveTaskStatus(task, 1)} disabled={status === 'done'} className={`p-1 rounded ${status === 'done' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowRight className="w-3 h-3"/></button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -548,7 +567,10 @@ const AdminDashboard = ({ onClose }) => {
                                             {task.release && <span className="text-blue-400">Release: {task.release}</span>}
                                         </div>
                                     </div>
-                                    <button onClick={() => editTask(task)} className="p-2 text-slate-500 hover:text-blue-400"><Edit2 className="w-4 h-4"/></button>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => editTask(task)} className="p-2 text-slate-500 hover:text-blue-400"><Edit2 className="w-4 h-4"/></button>
+                                        <button onClick={() => deleteTask(task.id)} className="p-2 text-slate-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -871,8 +893,11 @@ const App = () => {
 
   // Helper for Context Name
   const getCurrentContextName = () => {
-      if (view === 'team') return 'Team View';
-      if (isStandardMode) return `Standarduge (${view === 'team' ? 'Team' : 'Min'})`;
+      if (view === 'team') {
+          if (isStandardMode) return 'Standarduge - Teamet';
+          return 'Team View';
+      }
+      if (isStandardMode) return 'Standarduge - Min';
       return 'Min Plan';
   };
 
