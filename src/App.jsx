@@ -206,7 +206,7 @@ const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
   </div>
 );
 
-// --- NEW COMPONENT: FEEDBACK MODAL ---
+// --- UPDATED COMPONENT: FEEDBACK MODAL ---
 const FeedbackModal = ({ user, onClose }) => {
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
@@ -215,7 +215,8 @@ const FeedbackModal = ({ user, onClose }) => {
         if (!text.trim()) return;
         setSending(true);
         try {
-            await addDoc(collection(db, PUBLIC_DATA_PATH, 'feedback', 'items'), {
+            // FIX: Removed 'items' subcollection to ensure valid path structure
+            await addDoc(collection(db, PUBLIC_DATA_PATH, 'feedback'), {
                 text,
                 user: user.email,
                 userName: USER_MAPPING[user.email.toLowerCase()]?.name || user.email,
@@ -223,10 +224,10 @@ const FeedbackModal = ({ user, onClose }) => {
                 status: 'new'
             });
             onClose();
-            alert("Tak for dit input!");
+            alert("Tak for dit input! Det er sendt til teamet.");
         } catch (e) {
-            console.error("Fejl:", e);
-            alert("Der skete en fejl.");
+            console.error("Fejl ved afsendelse:", e);
+            alert("Der skete en fejl. Prøv igen.");
         }
         setSending(false);
     };
@@ -234,12 +235,19 @@ const FeedbackModal = ({ user, onClose }) => {
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80] flex items-center justify-center p-4 fade-in">
             <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-700 p-6">
-                <h3 className="text-white font-bold text-lg mb-2 flex items-center"><MessageSquarePlus className="w-5 h-5 mr-2 text-blue-500"/>Send Feedback / Idé</h3>
-                <p className="text-slate-400 text-xs mb-4">Fandt du en fejl, eller har du en god idé til appen eller teamet?</p>
+                <h3 className="text-white font-bold text-lg mb-2 flex items-center"><MessageSquarePlus className="w-5 h-5 mr-2 text-blue-500"/>Send Feedback</h3>
+                <div className="bg-slate-800/50 p-3 rounded-xl mb-4 text-xs text-slate-400 space-y-1">
+                    <p className="font-bold text-slate-300">Hvad har du på hjerte?</p>
+                    <ul className="list-disc pl-4 space-y-1">
+                        <li>Fandt du en fejl i appen?</li>
+                        <li>Har du en god idé til en ny funktion?</li>
+                        <li>Feedback til træningen eller teamet?</li>
+                    </ul>
+                </div>
                 <textarea 
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm focus:ring-2 focus:ring-blue-600 outline-none mb-4"
                     rows="4"
-                    placeholder="Skriv her..."
+                    placeholder="Skriv din besked her..."
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                 ></textarea>
@@ -254,37 +262,38 @@ const FeedbackModal = ({ user, onClose }) => {
     );
 };
 
-// --- NEW COMPONENT: ADMIN DASHBOARD (BACKLOG) ---
+// --- UPDATED COMPONENT: ADMIN DASHBOARD (BACKLOG) ---
 const AdminDashboard = ({ onClose }) => {
     const [tasks, setTasks] = useState([]);
     const [feedback, setFeedback] = useState([]);
-    const [view, setView] = useState('board'); // 'board' | 'feedback'
+    const [view, setView] = useState('board'); 
     
     // Board State
     const [newTaskText, setNewTaskText] = useState('');
-    const [newTaskTag, setNewTaskTag] = useState('APP'); // 'APP' | 'TEAM'
+    const [newTaskTag, setNewTaskTag] = useState('APP'); 
 
     useEffect(() => {
-        // Listen to Backlog
-        const qBacklog = query(collection(db, PUBLIC_DATA_PATH, 'backlog', 'items'));
+        // FIX: Removed 'items' subcollection to ensure valid path structure
+        const qBacklog = query(collection(db, PUBLIC_DATA_PATH, 'backlog'));
         const unsubBacklog = onSnapshot(qBacklog, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
             setTasks(items);
-        });
+        }, (err) => console.error("Backlog Error:", err));
 
-        // Listen to Feedback
-        const qFeedback = query(collection(db, PUBLIC_DATA_PATH, 'feedback', 'items'), orderBy('timestamp', 'desc'));
+        // FIX: Removed 'items' subcollection to ensure valid path structure
+        const qFeedback = query(collection(db, PUBLIC_DATA_PATH, 'feedback'), orderBy('timestamp', 'desc'));
         const unsubFeedback = onSnapshot(qFeedback, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
             setFeedback(items);
-        });
+        }, (err) => console.error("Feedback Error:", err));
 
         return () => { unsubBacklog(); unsubFeedback(); }
     }, []);
 
     const addTask = async () => {
         if (!newTaskText) return;
-        await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog', 'items'), {
+        // FIX: Path structure
+        await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), {
             title: newTaskText,
             status: 'todo',
             priority: 'Medium',
@@ -301,18 +310,21 @@ const AdminDashboard = ({ onClose }) => {
         if (newIdx < 0) newIdx = statuses.length - 1;
         if (newIdx >= statuses.length) newIdx = 0;
         
-        await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', 'items', task.id), {
+        // FIX: Path structure - removed 'items'
+        await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', task.id), {
             status: statuses[newIdx]
         });
     };
 
     const deleteTask = async (id) => {
-        if(confirm('Slet?')) await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', 'items', id));
+        // FIX: Path structure - removed 'items'
+        if(confirm('Slet?')) await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
     };
 
     const convertFeedbackToTask = async (fbItem) => {
         if(confirm('Opret som opgave i backlog?')) {
-            await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog', 'items'), {
+            // FIX: Path structure
+            await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), {
                 title: fbItem.text,
                 desc: `Fra ${fbItem.userName}`,
                 status: 'todo',
@@ -320,7 +332,8 @@ const AdminDashboard = ({ onClose }) => {
                 tag: 'APP',
                 createdAt: new Date().toISOString()
             });
-            await updateDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', 'items', fbItem.id), { status: 'converted' });
+            // FIX: Path structure
+            await updateDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', fbItem.id), { status: 'converted' });
         }
     }
 
@@ -340,7 +353,6 @@ const AdminDashboard = ({ onClose }) => {
         downloadAnchorNode.remove();
     };
 
-    // --- NEW: COPY TO CLIPBOARD ---
     const copyDataToClipboard = () => {
         const data = {
             backlog: tasks,
@@ -366,7 +378,6 @@ const AdminDashboard = ({ onClose }) => {
                     <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
                         <Copy className="w-3 h-3 mr-2"/> Kopier Data (til AI)
                     </button>
-                    {/* Behold download som backup */}
                     <button onClick={exportToJson} className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-1.5 rounded-lg">
                         <Download className="w-3 h-3"/>
                     </button>
