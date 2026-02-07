@@ -164,13 +164,16 @@ const getCompactWeekDateMap = (weekNumber) => {
     return map;
 };
 
+// FIX: Force HH:MM format for HTML input compatibility
 const addMinutes = (timeStr, minutes) => {
     if (!timeStr) return '';
     const [h, m] = timeStr.split(':').map(Number);
     const date = new Date();
     date.setHours(h, m);
     date.setMinutes(date.getMinutes() + minutes);
-    return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const newH = String(date.getHours()).padStart(2, '0');
+    const newM = String(date.getMinutes()).padStart(2, '0');
+    return `${newH}:${newM}`;
 }
 
 const checkInAppBrowser = () => {
@@ -354,7 +357,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.58</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.59</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
