@@ -135,21 +135,65 @@ const getDeviceInfo = () => {
     return navigator.userAgent;
 };
 
-// Advanced CSV Parser (Handles semicolons and quotes)
+// Advanced CSV Parser (Robust State Machine)
 const parseCSV = (text) => {
-    const rows = text.trim().split('\n');
-    const headers = rows[0].split(';').map(h => h.trim().replace(/^"|"$/g, ''));
+    const result = [];
+    let row = [];
+    let current = "";
+    let inQuotes = false;
     
-    return rows.slice(1).map(row => {
-        // Robust split by semicolon that respects quotes
-        // This Regex matches a semicolon that is followed by an even number of quotes (meaning it's outside quotes)
-        const values = row.split(/;(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+    // Normalize line endings to \n and remove carriage returns
+    const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    for (let i = 0; i < cleanText.length; i++) {
+        const char = cleanText[i];
+        const nextChar = cleanText[i + 1];
         
-        const cleanValues = values.map(v => v ? v.trim().replace(/^"|"$/g, '').replace(/""/g, '"') : '');
-        
+        if (inQuotes) {
+            if (char === '"' && nextChar === '"') {
+                current += '"';
+                i++; // Skip the 2nd quote of the escape pair
+            } else if (char === '"') {
+                inQuotes = false;
+            } else {
+                current += char;
+            }
+        } else {
+            if (char === '"') {
+                inQuotes = true;
+            } else if (char === ';') { // SEMICOLON DELIMITER
+                row.push(current);
+                current = "";
+            } else if (char === '\n') {
+                row.push(current);
+                // Only push row if it's not just a trailing empty line
+                if (row.length > 1 || (row.length === 1 && row[0] !== '')) {
+                     result.push(row);
+                }
+                row = [];
+                current = "";
+            } else {
+                current += char;
+            }
+        }
+    }
+    // Handle last row if no trailing newline
+    if (current || row.length > 0) {
+        row.push(current);
+        if (row.length > 1 || (row.length === 1 && row[0] !== '')) {
+            result.push(row);
+        }
+    }
+
+    if (result.length === 0) return [];
+    
+    const headers = result[0].map(h => h.trim().replace(/^"|"$/g, ''));
+    
+    return result.slice(1).map(values => {
         const obj = {};
         headers.forEach((h, i) => {
-            obj[h] = cleanValues[i] || '';
+            let val = values[i] || '';
+            obj[h] = val.trim();
         });
         return obj;
     });
@@ -232,7 +276,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.35</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.36</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -343,7 +387,7 @@ const ImportModal = ({ onClose, onImport }) => {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
             <div className="bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl p-6">
                  <h3 className="text-white font-bold text-lg mb-4">Importer Backlog (CSV)</h3>
-                 <p className="text-slate-500 text-xs mb-4">OBS: Brug <strong>semikolon (;)</strong> som separator (standard for Excel/Sheets på dansk).</p>
+                 <p className="text-slate-500 text-xs mb-4">OBS: Brug <strong>semikolon (;)</strong> som separator. <br/>Parser understøtter linjeskift i celler.</p>
                  
                  <div className="flex gap-4 mb-4">
                      <button onClick={() => setMode('append')} className={`flex-1 p-3 rounded-xl border flex flex-col items-center ${mode === 'append' ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
@@ -481,6 +525,12 @@ const AdminDashboard = ({ onClose }) => {
     const handleImportCSV = async (csvText, mode) => {
         try {
             const parsed = parseCSV(csvText);
+            
+            if (!parsed || parsed.length === 0) {
+                 alert("Ingen gyldige data fundet i CSV.");
+                 return;
+            }
+
             const batch = writeBatch(db);
             let count = 0;
             const now = Date.now();
