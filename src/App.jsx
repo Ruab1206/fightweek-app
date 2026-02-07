@@ -299,7 +299,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.56</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.57</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -376,7 +376,7 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
                 <textarea 
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm focus:ring-2 focus:ring-blue-600 outline-none mb-4"
                     rows="4"
-                    placeholder="Skriv din besked her..."
+                    placeholder="Skriv her, hvis du har feedback til træningen, teamet eller app'en."
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                 ></textarea>
