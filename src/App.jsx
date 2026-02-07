@@ -135,15 +135,17 @@ const getDeviceInfo = () => {
     return navigator.userAgent;
 };
 
-// Simple CSV Parser
+// Advanced CSV Parser (Handles semicolons and quotes)
 const parseCSV = (text) => {
     const rows = text.trim().split('\n');
-    const headers = rows[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+    const headers = rows[0].split(';').map(h => h.trim().replace(/^"|"$/g, ''));
     
     return rows.slice(1).map(row => {
-        // Handle commas inside quotes: simple regex split
-        const values = row.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || [];
-        const cleanValues = values.map(v => v ? v.replace(/^"|"$/g, '').replace(/""/g, '"').trim() : '');
+        // Robust split by semicolon that respects quotes
+        // This Regex matches a semicolon that is followed by an even number of quotes (meaning it's outside quotes)
+        const values = row.split(/;(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+        
+        const cleanValues = values.map(v => v ? v.trim().replace(/^"|"$/g, '').replace(/""/g, '"') : '');
         
         const obj = {};
         headers.forEach((h, i) => {
@@ -155,7 +157,8 @@ const parseCSV = (text) => {
 
 const generateCSV = (tasks) => {
     const headers = ['Titel', 'Status', 'Beskrivelse', 'Acceptkriterier', 'Noter', 'Datafelter', 'Release', 'Tag', 'Prioritet', 'ID', 'Order'];
-    const csvRows = [headers.join(',')];
+    const separator = ';';
+    const csvRows = [headers.join(separator)];
 
     tasks.forEach(task => {
         const row = [
@@ -171,7 +174,27 @@ const generateCSV = (tasks) => {
             `"${task.id}"`,
             `"${task.order || 0}"`
         ];
-        csvRows.push(row.join(','));
+        csvRows.push(row.join(separator));
+    });
+    return csvRows.join('\n');
+};
+
+const generateFeedbackCSV = (feedbackItems) => {
+    const headers = ['Bruger', 'Kontekst', 'Tekst', 'Device', 'Status', 'Dato', 'ID'];
+    const separator = ';';
+    const csvRows = [headers.join(separator)];
+
+    feedbackItems.forEach(item => {
+        const row = [
+            `"${(item.userName || '').replace(/"/g, '""')}"`,
+            `"${(item.context || '').replace(/"/g, '""')}"`,
+            `"${(item.text || '').replace(/"/g, '""')}"`,
+            `"${(item.device || '').replace(/"/g, '""')}"`,
+            `"${(item.status || 'new')}"`,
+            `"${item.timestamp}"`,
+            `"${item.id}"`
+        ];
+        csvRows.push(row.join(separator));
     });
     return csvRows.join('\n');
 };
@@ -209,7 +232,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.34</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.35</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -320,6 +343,7 @@ const ImportModal = ({ onClose, onImport }) => {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
             <div className="bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl p-6">
                  <h3 className="text-white font-bold text-lg mb-4">Importer Backlog (CSV)</h3>
+                 <p className="text-slate-500 text-xs mb-4">OBS: Brug <strong>semikolon (;)</strong> som separator (standard for Excel/Sheets på dansk).</p>
                  
                  <div className="flex gap-4 mb-4">
                      <button onClick={() => setMode('append')} className={`flex-1 p-3 rounded-xl border flex flex-col items-center ${mode === 'append' ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
@@ -344,7 +368,7 @@ const ImportModal = ({ onClose, onImport }) => {
                  <p className="text-slate-400 text-xs mb-2">Indsæt CSV data (inkl. overskrifter):</p>
                  <textarea 
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-300 text-xs font-mono h-32 focus:ring-2 focus:ring-blue-600 outline-none mb-4"
-                    placeholder="Titel,Status,Beskrivelse..."
+                    placeholder="Titel;Status;Beskrivelse..."
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                  />
@@ -438,9 +462,19 @@ const AdminDashboard = ({ onClose }) => {
         try {
             const csv = generateCSV(tasks);
             await navigator.clipboard.writeText(csv);
-            alert("CSV kopieret til udklipsholder! Du kan nu indsætte det i Excel/Sheets.");
+            alert("CSV (semikolon-separeret) kopieret til udklipsholder!");
         } catch (e) {
             alert("Kunne ikke eksportere: " + e.message);
+        }
+    };
+
+    const handleExportFeedbackCSV = async () => {
+        try {
+            const csv = generateFeedbackCSV(feedback);
+            await navigator.clipboard.writeText(csv);
+            alert("Feedback CSV (semikolon-separeret) kopieret til udklipsholder!");
+        } catch (e) {
+            alert("Kunne ikke eksportere feedback: " + e.message);
         }
     };
 
@@ -462,10 +496,6 @@ const AdminDashboard = ({ onClose }) => {
             parsed.forEach((row, idx) => {
                 if (!row.Titel) return;
                 
-                // If appending, check if ID exists to avoid duplicates? No, explicit append is usually desired or handled by ID in CSV
-                // But here we generate new IDs for simplicity unless we want to support updating existing by ID.
-                // For "Round Trip" editing, user might have IDs in CSV.
-                
                 let ref;
                 if (row.ID && row.ID.length > 5) { // Simple check if valid ID
                      ref = doc(db, PUBLIC_DATA_PATH, 'backlog', row.ID);
@@ -473,9 +503,6 @@ const AdminDashboard = ({ onClose }) => {
                      ref = doc(collection(db, PUBLIC_DATA_PATH, 'backlog'));
                 }
 
-                // If replacing, we just set. If appending with existing ID, we overwrite (update).
-                // If appending with no ID, we create new.
-                
                 batch.set(ref, {
                     title: row.Titel || '',
                     desc: row.Beskrivelse || '',
@@ -486,7 +513,7 @@ const AdminDashboard = ({ onClose }) => {
                     release: row.Release || '',
                     tag: row.Tag || 'APP',
                     priority: row.Prioritet || 'Medium',
-                    order: row.Order ? Number(row.Order) : -(now + idx), // Preserve order if exists, else add top
+                    order: row.Order ? Number(row.Order) : -(now + idx), 
                     createdAt: new Date().toISOString()
                 });
                 count++;
@@ -637,7 +664,7 @@ const AdminDashboard = ({ onClose }) => {
             status: 'todo',
             priority: 'Medium',
             tag: 'APP',
-            desc: `Feedback fra ${fbItem.userName} (${fbItem.context || 'App'}).\nOriginal: "${fbItem.text}"`,
+            desc: `Feedback fra ${fbItem.userName} (${fbItem.context || 'App'}).\n\nOriginal: "${fbItem.text}"\n\nDevice: ${fbItem.device || 'Ikke oplyst'}`,
             notes: '', acceptance: '', dataFields: '', release: ''
         });
         setEditingTask(null);
@@ -670,14 +697,17 @@ const AdminDashboard = ({ onClose }) => {
                         </div>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={handleExportCSV} className="bg-slate-800 text-green-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700" title="Kopier CSV til Excel">
-                            <FileDown className="w-3 h-3 mr-2"/> Eksportér CSV
+                        <button onClick={handleExportCSV} className="bg-slate-800 text-green-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700" title="Kopier Backlog CSV">
+                            <FileDown className="w-3 h-3 mr-2"/> Backlog
+                        </button>
+                        <button onClick={handleExportFeedbackCSV} className="bg-slate-800 text-purple-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700" title="Kopier Feedback CSV">
+                            <FileDown className="w-3 h-3 mr-2"/> Feedback
                         </button>
                         <button onClick={() => setIsImportOpen(true)} className="bg-slate-800 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
                             <Upload className="w-3 h-3 mr-2"/> Import
                         </button>
                         <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
-                            <Copy className="w-3 h-3 mr-2"/> Backup JSON
+                            <Copy className="w-3 h-3 mr-2"/> Backup
                         </button>
                     </div>
                 </div>
