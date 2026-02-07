@@ -3,7 +3,7 @@ import {
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw, MoreHorizontal, MoreVertical
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw, MoreHorizontal, MoreVertical, Table
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -126,11 +126,11 @@ const checkInAppBrowser = () => {
 const isMobileDevice = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 const getDeviceInfo = () => navigator.userAgent;
 
-// --- CSV PARSER & GENERATOR (DK Excel Compatible) ---
+// --- CSV PARSER & GENERATOR ---
 const parseCSV = (text) => {
     if (!text) return [];
     
-    // Auto-detect delimiter: check first line for tabs, then semi-colons, then commas
+    // Auto-detect delimiter
     const firstLine = text.split('\n')[0];
     let delimiter = ';';
     if (firstLine.includes('\t')) delimiter = '\t';
@@ -193,10 +193,11 @@ const parseCSV = (text) => {
     });
 };
 
-const generateCSV = (tasks) => {
+const generateCSV = (tasks, forSheets = false) => {
     const headers = ['Titel', 'Status', 'Beskrivelse', 'Acceptkriterier', 'Noter', 'Datafelter', 'Release', 'Tag', 'Prioritet', 'ID', 'Order'];
-    // Forcing SEMICOLON for Danish Excel compatibility
-    const separator = ';'; 
+    // For Sheets: Use TAB and replace newlines with a symbol to prevent breaking
+    // For Excel: Use SEMICOLON and keep newlines in quotes
+    const separator = forSheets ? '\t' : ';'; 
     const csvRows = [headers.join(separator)];
 
     tasks.forEach(task => {
@@ -215,19 +216,29 @@ const generateCSV = (tasks) => {
         ];
 
         const row = fields.map(field => {
-            // Convert to string, replace null/undefined with empty string
             let val = String(field || '');
-            // Escape existing double quotes by doubling them
-            val = val.replace(/"/g, '""');
-            // Wrap strictly in double quotes
-            return `"${val}"`;
+            
+            if (forSheets) {
+                // Flatten newlines for safe pasting into Sheets/Excel manually
+                val = val.replace(/\r\n|\r|\n/g, ' ¶ '); // Paragraph symbol as visual separator
+                // No need to quote if we remove newlines and use tabs (usually)
+                // But let's quote just in case there are tabs in the text
+                if (val.includes(separator)) {
+                     val = val.replace(/"/g, '""');
+                     return `"${val}"`;
+                }
+                return val;
+            } else {
+                // Standard CSV compliance for file download
+                val = val.replace(/"/g, '""');
+                return `"${val}"`;
+            }
         });
 
         csvRows.push(row.join(separator));
     });
 
-    // Add Byte Order Mark (BOM) for UTF-8 compatibility in Excel
-    return '\uFEFF' + csvRows.join('\n');
+    return (forSheets ? '' : '\uFEFF') + csvRows.join('\n');
 };
 
 const generateFeedbackCSV = (feedbackItems) => {
@@ -288,7 +299,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.50</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.55</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -491,11 +502,19 @@ const AdminDashboard = ({ onClose }) => {
         } catch (e) { alert("Fejl: " + e.message); }
     };
 
+    const handleCopyForSheets = async () => {
+         try {
+            const tsv = generateCSV(tasks, true);
+            await navigator.clipboard.writeText(tsv);
+            alert("Kopieret! Klar til indsæt i Google Sheets (uden linjeskift-fejl).");
+         } catch (e) { alert("Fejl: " + e.message); }
+    };
+
     const handleExportCSV = async () => {
         try {
-            const csv = generateCSV(tasks);
+            const csv = generateCSV(tasks, false);
             await navigator.clipboard.writeText(csv);
-            alert("CSV kopieret til udklipsholder!");
+            alert("CSV (Excel-format) kopieret til udklipsholder!");
         } catch (e) { alert("Kunne ikke eksportere: " + e.message); }
     };
 
@@ -644,34 +663,14 @@ const AdminDashboard = ({ onClose }) => {
         if (srcIdx === undefined || destIdx === undefined || srcIdx === destIdx) return;
         if (filterTag !== 'ALL') { alert("Skift til 'Alle Tags' for at bruge Drag'n Drop sortering."); return; }
 
-        // Clone list and move item locally to avoid jitter
         const newList = [...filteredTasks];
         const itemToMove = newList[srcIdx];
-        
-        // Simple Swap Logic for Firestore (Robustness over complex re-indexing)
-        // We actually want to swap the ORDERS of the items between src and dest, and everything in between? 
-        // No, simple re-order logic:
-        // We take the order value of the destination, and we basically need to shift everything.
-        // For a "Sharp system that works": Swapping adjacent is safest, but D&D suggests jumping.
-        // Let's implement a "Batch Re-index" of the current view.
         
         newList.splice(srcIdx, 1);
         newList.splice(destIdx, 0, itemToMove);
         
-        // Create batch to update orders based on new array positions
         const batch = writeBatch(db);
-        // We use the existing orders range to minimize disruption? 
-        // Or just re-assign orders based on array index (assuming we want strict ordering)
-        // Let's use a simple timestamp-based decrementing order or keep existing logic.
-        // The existing logic seems to use `order` field. 
-        // Let's just update the `order` field of ALL items in the filtered view to match their new index.
-        // To keep it performant, we only update if necessary, but for <100 items, a batch is fine.
         
-        // Strategy: Assign orders such that index 0 has highest order (or lowest, depending on sort).
-        // Current sort: `(a.order || 0) - (b.order || 0)` -> Ascending.
-        // So index 0 = lowest order value.
-        
-        // We can just grab the order values from the original list, sort them, and re-distribute them to the new list structure.
         const orders = filteredTasks.map(t => t.order || 0).sort((a,b) => a-b);
         
         newList.forEach((task, i) => {
@@ -728,8 +727,11 @@ const AdminDashboard = ({ onClose }) => {
                     
                     {/* DESKTOP ACTIONS */}
                     <div className="hidden md:flex gap-2">
+                         <button onClick={handleCopyForSheets} className="bg-emerald-900/30 text-emerald-400 border border-emerald-700/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-emerald-900/50">
+                            <Table className="w-3 h-3 mr-2"/> Kopier til Sheets
+                        </button>
                         <button onClick={handleExportCSV} className="bg-slate-800 text-green-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
-                            <FileDown className="w-3 h-3 mr-2"/> Backlog
+                            <FileDown className="w-3 h-3 mr-2"/> Excel CSV
                         </button>
                         <button onClick={handleExportFeedbackCSV} className="bg-slate-800 text-purple-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
                             <FileDown className="w-3 h-3 mr-2"/> Feedback
@@ -749,7 +751,8 @@ const AdminDashboard = ({ onClose }) => {
                          </button>
                          {showMenu && (
                              <div className="absolute right-0 top-12 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 flex flex-col gap-2 w-48 z-50">
-                                <button onClick={() => { handleExportCSV(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-green-400 text-xs font-bold flex items-center"><FileDown className="w-3 h-3 mr-2"/> Eksport Backlog</button>
+                                <button onClick={() => { handleCopyForSheets(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-emerald-400 text-xs font-bold flex items-center"><Table className="w-3 h-3 mr-2"/> Kopier til Sheets</button>
+                                <button onClick={() => { handleExportCSV(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-green-400 text-xs font-bold flex items-center"><FileDown className="w-3 h-3 mr-2"/> Eksport CSV</button>
                                 <button onClick={() => { handleExportFeedbackCSV(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-purple-400 text-xs font-bold flex items-center"><FileDown className="w-3 h-3 mr-2"/> Eksport Feedback</button>
                                 <button onClick={() => { setIsImportOpen(true); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center"><Upload className="w-3 h-3 mr-2"/> Import CSV</button>
                                 <button onClick={() => { copyDataToClipboard(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-blue-400 text-xs font-bold flex items-center"><Copy className="w-3 h-3 mr-2"/> Backup JSON</button>
@@ -758,18 +761,17 @@ const AdminDashboard = ({ onClose }) => {
                     </div>
                 </div>
                 
-                {/* GLOBAL FILTERS */}
-                <div className="flex flex-col gap-2 md:flex-row">
-                    <div className="flex gap-2 bg-slate-800/50 p-1 rounded-lg self-start">
+                {/* GLOBAL FILTERS - MOBILE OPTIMIZED */}
+                <div className="flex flex-col gap-2">
+                     <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar mask-linear">
                         {['ALL', 'APP', 'TEAM'].map(tag => (
-                            <button key={tag} onClick={() => setFilterTag(tag)} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${filterTag === tag ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>
+                            <button key={tag} onClick={() => setFilterTag(tag)} className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${filterTag === tag ? 'bg-slate-700 text-white border-slate-600 shadow' : 'bg-slate-800/50 text-slate-500 border-transparent hover:text-slate-300'}`}>
                                 {tag === 'ALL' ? 'Alle Tags' : tag}
                             </button>
                         ))}
-                    </div>
-                    <div className="flex gap-2 bg-slate-800/50 p-1 rounded-lg self-start">
+                         <div className="w-px h-6 bg-slate-800 mx-1 self-center"></div>
                         {['active', 'all', 'done'].map(status => (
-                            <button key={status} onClick={() => setStatusFilter(status)} className={`px-3 py-1 rounded-md text-xs font-bold capitalize transition-all ${statusFilter === status ? 'bg-blue-900 text-blue-100 shadow' : 'text-slate-500 hover:text-slate-300'}`}>
+                            <button key={status} onClick={() => setStatusFilter(status)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize whitespace-nowrap transition-all border ${statusFilter === status ? 'bg-blue-900 text-blue-100 border-blue-800 shadow' : 'bg-slate-800/50 text-slate-500 border-transparent hover:text-slate-300'}`}>
                                 {status === 'active' ? 'Aktive' : status === 'all' ? 'Alle' : 'Færdige'}
                             </button>
                         ))}
@@ -792,15 +794,17 @@ const AdminDashboard = ({ onClose }) => {
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             {['backlog', 'todo', 'doing', 'done'].map(status => {
                                 if (statusFilter === 'active' && status === 'done') return null;
+                                const count = filteredTasks.filter(t => t.status === status).length;
                                 return (
-                                    <div key={status} className="bg-slate-900/50 rounded-xl border border-slate-800 p-3 min-h-[300px]">
-                                        <h3 className="text-slate-400 text-xs font-bold uppercase mb-3 flex justify-between items-center px-1">
-                                            {status} <span className="bg-slate-800 px-2 rounded-full border border-slate-700">{filteredTasks.filter(t => t.status === status).length}</span>
-                                        </h3>
+                                    <div key={status} className="bg-slate-900/50 rounded-xl border border-slate-800 p-2 min-h-[300px]">
+                                        <div className="flex justify-between items-center mb-3 px-1">
+                                             <h3 className="text-slate-400 text-xs font-bold uppercase">{status}</h3>
+                                             <div className="bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-700 text-xs font-bold text-white">{count}</div>
+                                        </div>
                                         <div className="space-y-2">
                                             {filteredTasks.filter(t => t.status === status).map(task => (
-                                                <div key={task.id} className="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-sm transition-all group hover:bg-slate-700 relative">
-                                                    <div className="flex justify-between items-start mb-2 cursor-pointer" onClick={() => editTask(task)}>
+                                                <div key={task.id} className="bg-slate-800 p-2 rounded-lg border border-slate-700 shadow-sm transition-all group hover:bg-slate-700 relative hover:border-slate-600">
+                                                    <div className="flex justify-between items-start mb-1 cursor-pointer" onClick={() => editTask(task)}>
                                                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.tag === 'APP' ? 'bg-indigo-900 text-indigo-200' : 'bg-orange-900 text-orange-200'}`}>{task.tag}</span>
                                                         <div className="flex gap-1">
                                                             {task.priority === 'Critical' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse mt-1"/>}
@@ -808,10 +812,10 @@ const AdminDashboard = ({ onClose }) => {
                                                         </div>
                                                     </div>
                                                     <div className="cursor-pointer" onClick={() => editTask(task)}>
-                                                        <p className="text-sm font-bold text-white mb-1 line-clamp-2">{task.title}</p>
-                                                        <p className="text-xs text-slate-500 line-clamp-2">{task.desc}</p>
+                                                        <p className="text-sm font-bold text-white mb-1 leading-tight">{task.title}</p>
+                                                        <p className="text-xs text-slate-400 line-clamp-5 leading-relaxed">{task.desc}</p>
                                                     </div>
-                                                    <div className="flex justify-between mt-3 pt-2 border-t border-slate-700/50">
+                                                    <div className="flex justify-between mt-2 pt-2 border-t border-slate-700/50">
                                                         <button onClick={() => moveTaskStatus(task, -1)} disabled={status === 'backlog'} className={`p-1 rounded ${status === 'backlog' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowLeft className="w-3 h-3"/></button>
                                                         <button onClick={() => moveTaskStatus(task, 1)} disabled={status === 'done'} className={`p-1 rounded ${status === 'done' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowRight className="w-3 h-3"/></button>
                                                     </div>
@@ -828,7 +832,7 @@ const AdminDashboard = ({ onClose }) => {
                 {view === 'list' && (
                     <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden fade-in">
                         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
-                            <h3 className="font-bold text-white text-sm">Prioriteret Liste</h3>
+                            <h3 className="font-bold text-white text-sm">Prioriteret Liste ({filteredTasks.length})</h3>
                             <button onClick={() => { setEditingTask(null); resetForm(); setIsFormOpen(true); }} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center"><Plus className="w-3 h-3 mr-1"/> Ny</button>
                         </div>
                         <div className="divide-y divide-slate-800">
