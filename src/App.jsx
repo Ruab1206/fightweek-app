@@ -3,7 +3,7 @@ import {
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -131,6 +131,10 @@ const isMobileDevice = () => {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 };
 
+const getDeviceInfo = () => {
+    return navigator.userAgent;
+};
+
 // --- COMPONENTS ---
 
 const BrowserBlockScreen = () => {
@@ -163,7 +167,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.29</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.31</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -221,7 +225,9 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
                 userName: USER_MAPPING[user.email.toLowerCase()]?.name || user.email,
                 timestamp: new Date().toISOString(),
                 context: currentContext || 'App',
-                status: 'new'
+                device: getDeviceInfo(),
+                status: 'new',
+                order: Date.now() // For sorting
             });
             onClose();
             alert("Tak for dit input! Det er sendt til teamet.");
@@ -277,7 +283,7 @@ const AdminDashboard = ({ onClose }) => {
 
     const [form, setForm] = useState({
         title: '',
-        status: 'todo',
+        status: 'backlog', 
         priority: 'Medium',
         tag: 'APP',
         desc: '',
@@ -287,10 +293,6 @@ const AdminDashboard = ({ onClose }) => {
         release: ''
     });
 
-    // DnD Refs
-    const dragItem = useRef();
-    const dragOverItem = useRef();
-
     useEffect(() => {
         const qBacklog = query(collection(db, PUBLIC_DATA_PATH, 'backlog'));
         const unsubBacklog = onSnapshot(qBacklog, (snap) => {
@@ -299,9 +301,23 @@ const AdminDashboard = ({ onClose }) => {
             setTasks(items);
         }, (err) => console.error("Backlog Error:", err));
 
-        const qFeedback = query(collection(db, PUBLIC_DATA_PATH, 'feedback'), orderBy('timestamp', 'desc'));
+        // Get feedback (sort by order if present, else timestamp desc as fallback logic handled in UI)
+        const qFeedback = query(collection(db, PUBLIC_DATA_PATH, 'feedback'));
         const unsubFeedback = onSnapshot(qFeedback, (snap) => {
             const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            // Sort logic: use order if available, else fallback to timestamp
+            items.sort((a,b) => {
+                if (a.order && b.order) return b.order - a.order; // High order top? Or manual? 
+                // Let's stick to standard manual sort: sort asc by 'order'
+                return (a.order || 0) - (b.order || 0);
+            });
+            // However default is often new first. Let's stick to the manual reorder pattern used in Tasks
+            // If no order, we use timestamp desc
+            if (items.every(i => !i.order)) {
+                items.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+            } else {
+                 items.sort((a,b) => (a.order || 0) - (b.order || 0));
+            }
             setFeedback(items);
         }, (err) => console.error("Feedback Error:", err));
 
@@ -337,7 +353,7 @@ const AdminDashboard = ({ onClose }) => {
 
     const resetForm = () => {
         setForm({
-            title: '', status: 'todo', priority: 'Medium', tag: 'APP',
+            title: '', status: 'backlog', priority: 'Medium', tag: 'APP',
             desc: '', notes: '', acceptance: '', dataFields: '', release: ''
         });
     };
@@ -346,7 +362,7 @@ const AdminDashboard = ({ onClose }) => {
         setEditingTask(task);
         setForm({
             title: task.title || '',
-            status: task.status || 'todo',
+            status: task.status || 'backlog',
             priority: task.priority || 'Medium',
             tag: task.tag || 'APP',
             desc: task.desc || '',
@@ -359,13 +375,19 @@ const AdminDashboard = ({ onClose }) => {
     };
 
     const deleteTask = async (id) => {
-        if(confirm('Er du sikker på, at du vil slette denne opgave?')) {
+        if(confirm('Er du sikker på, at du vil slette denne opgave? Handlingen kan ikke fortrydes.')) {
             try {
                 await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
                 if (isFormOpen) setIsFormOpen(false);
             } catch (e) {
                 alert("Kunne ikke slette: " + e.message);
             }
+        }
+    };
+    
+    const deleteFeedback = async (id) => {
+        if(confirm('Er du sikker på, at du vil slette dette feedback item?')) {
+            await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', id));
         }
     };
 
@@ -381,6 +403,33 @@ const AdminDashboard = ({ onClose }) => {
                 status: statuses[newIdx]
             });
         }
+    };
+
+    // Mobile friendly reordering for Task List
+    const moveItemOrder = async (index, direction, list, collectionName) => {
+        if (list === tasks && filterTag !== 'ALL') {
+             alert("Sortering virker kun når filtret er 'Alle'");
+             return;
+        }
+
+        const targetIndex = index + direction;
+        if (targetIndex < 0 || targetIndex >= list.length) return;
+
+        const itemA = list[index];
+        const itemB = list[targetIndex];
+        
+        // Ensure order fields exist, defaulting to timestamp based fallback if needed
+        const orderA = itemA.order || 0;
+        const orderB = itemB.order || 0;
+        
+        // Simple swap if orders are different, else we might need to assign specific values
+        // To be safe in simple prototype: just swap the values currently held in memory/db
+        
+        const batch = writeBatch(db);
+        batch.update(doc(db, PUBLIC_DATA_PATH, collectionName, itemA.id), { order: orderB });
+        batch.update(doc(db, PUBLIC_DATA_PATH, collectionName, itemB.id), { order: orderA });
+        
+        await batch.commit();
     };
 
     const startConvertFeedback = (fbItem) => {
@@ -409,34 +458,25 @@ const AdminDashboard = ({ onClose }) => {
         }
     };
 
-    // --- DRAG & DROP HANDLERS ---
+    // DnD Refs
+    const dragItem = useRef();
+    const dragOverItem = useRef();
+    
     const dragStart = (e, position) => {
         dragItem.current = position;
     };
- 
     const dragEnter = (e, position) => {
         dragOverItem.current = position;
     };
- 
     const drop = async () => {
         const copyListItems = [...filteredTasks]; 
         const dragItemContent = copyListItems[dragItem.current];
         copyListItems.splice(dragItem.current, 1);
         copyListItems.splice(dragOverItem.current, 0, dragItemContent);
-        
         dragItem.current = null;
         dragOverItem.current = null;
-        
-        setTasks(prev => {
-             if (filterTag !== 'ALL') return prev;
-             return copyListItems;
-        });
-
-        if (filterTag !== 'ALL') {
-            alert("Sortering virker kun når filtret er 'Alle'");
-            return;
-        }
-
+        setTasks(prev => { if (filterTag !== 'ALL') return prev; return copyListItems; });
+        if (filterTag !== 'ALL') { alert("Sortering virker kun når filtret er 'Alle'"); return; }
         try {
             const batch = writeBatch(db);
             copyListItems.forEach((item, index) => {
@@ -447,9 +487,7 @@ const AdminDashboard = ({ onClose }) => {
                 }
             });
             await batch.commit();
-        } catch(e) {
-            console.error("Reorder failed", e);
-        }
+        } catch(e) { console.error("Reorder failed", e); }
     };
 
     return (
@@ -537,7 +575,7 @@ const AdminDashboard = ({ onClose }) => {
                     </div>
                 )}
 
-                {/* VIEW: LIST (PRIORITY DRAG N DROP) */}
+                {/* VIEW: LIST (PRIORITY ARROWS) */}
                 {view === 'list' && (
                     <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden fade-in">
                         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
@@ -546,17 +584,21 @@ const AdminDashboard = ({ onClose }) => {
                         </div>
                         <div className="divide-y divide-slate-800">
                             {filteredTasks.map((task, index) => (
-                                <div 
-                                    key={task.id} 
-                                    className="p-3 flex items-center bg-slate-900 hover:bg-slate-800 transition-colors group"
-                                    onDragStart={(e) => dragStart(e, index)}
-                                    onDragEnter={(e) => dragEnter(e, index)}
-                                    onDragEnd={drop}
-                                    draggable={filterTag === 'ALL'}
-                                >
-                                    <div className={`mr-3 text-slate-600 p-2 ${filterTag === 'ALL' ? 'cursor-grab active:cursor-grabbing hover:text-slate-400' : 'opacity-30 cursor-not-allowed'}`}>
-                                        <GripVertical className="w-5 h-5"/>
+                                <div key={task.id} className="p-3 flex items-center bg-slate-900 hover:bg-slate-800 transition-colors group">
+                                    {/* Mobile Friendly Reorder Arrows */}
+                                    <div className="flex flex-col gap-1 mr-3 text-slate-500">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); moveItemOrder(index, -1, filteredTasks, 'backlog'); }} 
+                                            disabled={index === 0 || filterTag !== 'ALL'}
+                                            className="p-1 hover:text-white disabled:opacity-30"
+                                        ><ChevronUp className="w-4 h-4"/></button>
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); moveItemOrder(index, 1, filteredTasks, 'backlog'); }}
+                                            disabled={index === filteredTasks.length - 1 || filterTag !== 'ALL'}
+                                            className="p-1 hover:text-white disabled:opacity-30"
+                                        ><ChevronDown className="w-4 h-4"/></button>
                                     </div>
+                                    
                                     <div className="flex-1 cursor-pointer" onClick={() => editTask(task)}>
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.status === 'done' ? 'bg-green-900 text-green-200' : 'bg-slate-700 text-slate-300'}`}>{task.status}</span>
@@ -581,10 +623,16 @@ const AdminDashboard = ({ onClose }) => {
                 {view === 'feedback' && (
                     <div className="space-y-3 fade-in">
                         {feedback.length === 0 && <p className="text-slate-500 text-center py-10">Ingen feedback endnu.</p>}
-                        {feedback.map(item => (
+                        {feedback.map((item, index) => (
                             <div key={item.id} className={`p-4 rounded-xl border ${item.status === 'new' ? 'bg-slate-800 border-blue-900/50' : 'bg-slate-900 border-slate-800 opacity-60'}`}>
                                 <div className="flex justify-between items-start mb-3">
                                     <div className="flex items-center gap-3">
+                                        {/* FEEDBACK PRIORITY CONTROLS */}
+                                        <div className="flex flex-col gap-0.5 mr-1 text-slate-600">
+                                            <button onClick={() => moveItemOrder(index, -1, feedback, 'feedback')} disabled={index === 0} className="hover:text-white disabled:opacity-30"><ChevronUp className="w-3 h-3"/></button>
+                                            <button onClick={() => moveItemOrder(index, 1, feedback, 'feedback')} disabled={index === feedback.length -1} className="hover:text-white disabled:opacity-30"><ChevronDown className="w-3 h-3"/></button>
+                                        </div>
+
                                         <div className="w-8 h-8 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center font-bold">
                                             {item.userName.charAt(0)}
                                         </div>
@@ -596,15 +644,24 @@ const AdminDashboard = ({ onClose }) => {
                                             </p>
                                         </div>
                                     </div>
-                                    {item.status === 'new' && (
-                                        <button onClick={() => startConvertFeedback(item)} className="text-xs bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-lg border border-blue-600/30 hover:bg-blue-600/30 font-bold transition-colors">
-                                            Opret Opgave
-                                        </button>
-                                    )}
+                                    <div className="flex items-center gap-2">
+                                        {item.status === 'new' && (
+                                            <button onClick={() => startConvertFeedback(item)} className="text-xs bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-lg border border-blue-600/30 hover:bg-blue-600/30 font-bold transition-colors">
+                                                Opret Opgave
+                                            </button>
+                                        )}
+                                        <button onClick={() => deleteFeedback(item.id)} className="p-1.5 text-slate-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                                    </div>
                                 </div>
-                                <div className="bg-slate-950 p-3 rounded-lg text-sm text-slate-300 border border-slate-800">
+                                <div className="bg-slate-950 p-3 rounded-lg text-sm text-slate-300 border border-slate-800 mb-2">
                                     {item.text}
                                 </div>
+                                {item.device && (
+                                    <div className="flex items-center text-[9px] text-slate-600 font-mono mt-1">
+                                        <Monitor className="w-3 h-3 mr-1 opacity-50"/> 
+                                        <span className="truncate max-w-xs">{item.device}</span>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -892,14 +949,20 @@ const App = () => {
   const isAdmin = userRole === 'admin' || userRole === 'coach';
 
   // Helper for Context Name
-  const getCurrentContextName = () => {
-      if (view === 'team') {
-          if (isStandardMode) return 'Standarduge - Teamet';
-          return 'Team View';
-      }
-      if (isStandardMode) return 'Standarduge - Min';
-      return 'Min Plan';
-  };
+  const getWeekLabel = () => {
+        if (currentWeek === systemWeek) return `Uge ${currentWeek} (Aktuel)`;
+        if (currentWeek > systemWeek) return `Uge ${currentWeek} (Næste)`;
+        return `Uge ${currentWeek} (Tidligere)`;
+    };
+
+    const getCurrentContextName = () => {
+        if (view === 'team') {
+            if (isStandardMode) return 'Standarduge - Teamet';
+            return `${getWeekLabel()} - Teamet`;
+        }
+        if (isStandardMode) return 'Standarduge - Min';
+        return `${getWeekLabel()} - Min Plan`;
+    };
 
   // Trigger feedback with explicit context
   const openFeedback = (ctx) => setFeedbackContext(ctx || getCurrentContextName());
