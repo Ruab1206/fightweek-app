@@ -3,7 +3,7 @@ import {
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -135,34 +135,30 @@ const getDeviceInfo = () => {
     return navigator.userAgent;
 };
 
-// --- ROBUST CSV PARSER ---
+// --- ADVANCED CSV PARSER (Excel Copy-Paste Friendly) ---
 const parseCSV = (text) => {
     if (!text) return [];
     
-    // Normalize text: Handle smart quotes and consistent newlines
-    const cleanText = text
-        .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"') // Replace smart quotes with straight quotes
-        .replace(/\r\n/g, '\n')
-        .replace(/\r/g, '\n');
-
-    // Auto-detect delimiter
-    const firstLine = cleanText.split('\n')[0];
+    // Auto-detect delimiter: check first line for tabs, then semi-colons, then commas
+    const firstLine = text.split('\n')[0];
     let delimiter = ';';
     if (firstLine.includes('\t')) delimiter = '\t';
     else if (firstLine.includes(',') && !firstLine.includes(';')) delimiter = ',';
 
-    console.log(`Parser: Using delimiter '${delimiter === '\t' ? 'TAB' : delimiter}'`);
+    console.log(`Detected delimiter: '${delimiter === '\t' ? 'TAB' : delimiter}'`);
 
     const result = [];
     let row = [];
     let current = "";
     let inQuotes = false;
     
+    // Normalize line endings
+    const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
     for (let i = 0; i < cleanText.length; i++) {
         const char = cleanText[i];
         const nextChar = cleanText[i + 1];
         
-        // Handle Quotes
         if (inQuotes) {
             if (char === '"' && nextChar === '"') {
                 current += '"';
@@ -173,12 +169,8 @@ const parseCSV = (text) => {
                 current += char;
             }
         } else {
-            // Check for start of quote (allow leading whitespace before quote)
-            if (char === '"' && current.trim() === "") {
+            if (char === '"') {
                 inQuotes = true;
-                // If there was whitespace, we discard it by resetting current, 
-                // effectively trimming leading space before the quote
-                current = ""; 
             } else if (char === delimiter) {
                 row.push(current);
                 current = "";
@@ -202,15 +194,14 @@ const parseCSV = (text) => {
 
     if (result.length === 0) return [];
     
-    // Header Processing
+    // Headers handling
     const headers = result[0].map(h => h.trim().replace(/^"|"$/g, ''));
     
     return result.slice(1).map(values => {
         const obj = {};
         headers.forEach((h, i) => {
             let val = values[i] || '';
-            // Final trim of values (removes quotes if they were wrapping the whole cell)
-            obj[h] = val.trim(); 
+            obj[h] = val.trim();
         });
         return obj;
     });
@@ -293,7 +284,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.38</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.37</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -404,7 +395,7 @@ const ImportModal = ({ onClose, onImport }) => {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
             <div className="bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl p-6">
                  <h3 className="text-white font-bold text-lg mb-4">Importer Backlog (CSV)</h3>
-                 <p className="text-slate-500 text-xs mb-4">Understøtter nu både Excel (tabs) og semikolon-format med linjeskift.</p>
+                 <p className="text-slate-500 text-xs mb-4">Understøtter nu både Excel (tabs) og semikolon-format.</p>
                  
                  <div className="flex gap-4 mb-4">
                      <button onClick={() => setMode('append')} className={`flex-1 p-3 rounded-xl border flex flex-col items-center ${mode === 'append' ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
@@ -450,7 +441,6 @@ const AdminDashboard = ({ onClose }) => {
     const [feedback, setFeedback] = useState([]);
     const [view, setView] = useState('board'); 
     const [filterTag, setFilterTag] = useState('ALL'); 
-    const [filterStatus, setFilterStatus] = useState('ACTIVE'); // 'ALL' | 'ACTIVE' | 'DONE'
     
     // Task Form State
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -493,14 +483,7 @@ const AdminDashboard = ({ onClose }) => {
         return () => { unsubBacklog(); unsubFeedback(); }
     }, []);
 
-    // FILTER LOGIC
-    const filteredTasks = tasks.filter(t => {
-        const tagMatch = filterTag === 'ALL' || t.tag === filterTag;
-        let statusMatch = true;
-        if (filterStatus === 'ACTIVE') statusMatch = t.status !== 'done';
-        if (filterStatus === 'DONE') statusMatch = t.status === 'done';
-        return tagMatch && statusMatch;
-    });
+    const filteredTasks = tasks.filter(t => filterTag === 'ALL' || t.tag === filterTag);
 
     const saveTask = async () => {
         if (!form.title) return;
@@ -574,14 +557,14 @@ const AdminDashboard = ({ onClose }) => {
                 if (s.includes('done') || s === 'færdig') return 'done';
                 if (s.includes('doing') || s === 'igang') return 'doing';
                 if (s.includes('todo') || s === 'to do') return 'todo';
-                return 'backlog'; 
+                return 'backlog'; // Fallback for 'prototypet', 'backlog', empty etc.
             };
 
             parsed.forEach((row, idx) => {
                 if (!row.Titel) return;
                 
                 let ref;
-                if (row.ID && row.ID.length > 5) { 
+                if (row.ID && row.ID.length > 5) { // Simple check if valid ID
                      ref = doc(db, PUBLIC_DATA_PATH, 'backlog', row.ID);
                 } else {
                      ref = doc(collection(db, PUBLIC_DATA_PATH, 'backlog'));
@@ -676,7 +659,7 @@ const AdminDashboard = ({ onClose }) => {
 
     const moveItemOrder = async (index, direction, list, collectionName) => {
         if (list === tasks && filterTag !== 'ALL') {
-             alert("Sortering virker kun når filtret er 'Alle' og Status er 'Alle/Aktive'");
+             alert("Sortering virker kun når filtret er 'Alle'");
              return;
         }
 
@@ -707,8 +690,8 @@ const AdminDashboard = ({ onClose }) => {
     };
 
     const dragEnd = async () => {
-        if (filterTag !== 'ALL' || filterStatus === 'DONE') {
-             alert("Sortering virker bedst med 'Alle tags' og 'Aktive'");
+        if (filterTag !== 'ALL') {
+             alert("Sortering virker kun når filtret er 'Alle'");
              dragItem.current = null;
              dragOverItem.current = null;
              return;
@@ -797,28 +780,16 @@ const AdminDashboard = ({ onClose }) => {
                 </div>
                 
                 {/* GLOBAL FILTERS */}
-                <div className="flex flex-wrap gap-3 items-center">
-                    <div className="flex gap-1 bg-slate-800/50 p-1 rounded-lg">
-                        {['ALL', 'APP', 'TEAM'].map(tag => (
-                            <button 
-                                key={tag} 
-                                onClick={() => setFilterTag(tag)}
-                                className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${filterTag === tag ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
-                            >
-                                {tag === 'ALL' ? 'Alle Tags' : tag}
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="flex gap-1 bg-slate-800/50 p-1 rounded-lg">
-                        <button onClick={() => setFilterStatus('ALL')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${filterStatus === 'ALL' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>Alle Status</button>
-                        <button onClick={() => setFilterStatus('ACTIVE')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${filterStatus === 'ACTIVE' ? 'bg-green-900/30 text-green-400 border border-green-800/50' : 'text-slate-500 hover:text-slate-300'}`}>
-                             Kun Aktive
+                <div className="flex gap-2 bg-slate-800/50 p-1 rounded-lg self-start">
+                    {['ALL', 'APP', 'TEAM'].map(tag => (
+                        <button 
+                            key={tag} 
+                            onClick={() => setFilterTag(tag)}
+                            className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${filterTag === tag ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}
+                        >
+                            {tag === 'ALL' ? 'Alle' : tag}
                         </button>
-                        <button onClick={() => setFilterStatus('DONE')} className={`px-3 py-1 rounded-md text-xs font-bold transition-all ${filterStatus === 'DONE' ? 'bg-slate-700 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>
-                             Kun Færdige
-                        </button>
-                    </div>
+                    ))}
                 </div>
             </div>
 
@@ -843,41 +814,35 @@ const AdminDashboard = ({ onClose }) => {
                             <Plus className="w-5 h-5 mr-2"/> Opret Ny Opgave
                         </button>
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            {['backlog', 'todo', 'doing', 'done'].map(status => {
-                                // Skip 'done' column if hiding inactive, unless specifically showing DONE
-                                if (status === 'done' && filterStatus === 'ACTIVE') return null;
-                                
-                                const colTasks = filteredTasks.filter(t => t.status === status);
-                                return (
-                                    <div key={status} className="bg-slate-900/50 rounded-xl border border-slate-800 p-3 min-h-[300px]">
-                                        <h3 className="text-slate-400 text-xs font-bold uppercase mb-3 flex justify-between items-center px-1">
-                                            {status} <span className="bg-slate-800 px-2 rounded-full border border-slate-700">{colTasks.length}</span>
-                                        </h3>
-                                        <div className="space-y-2">
-                                            {colTasks.map(task => (
-                                                <div key={task.id} className="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-sm transition-all group hover:bg-slate-700 relative">
-                                                    <div className="flex justify-between items-start mb-2 cursor-pointer" onClick={() => editTask(task)}>
-                                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.tag === 'APP' ? 'bg-indigo-900 text-indigo-200' : 'bg-orange-900 text-orange-200'}`}>{task.tag}</span>
-                                                        <div className="flex gap-1">
-                                                            {task.priority === 'Critical' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse mt-1"/>}
-                                                            <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} className="text-slate-600 hover:text-red-500 p-0.5"><Trash2 className="w-3 h-3"/></button>
-                                                        </div>
-                                                    </div>
-                                                    <div className="cursor-pointer" onClick={() => editTask(task)}>
-                                                        <p className="text-sm font-bold text-white mb-1 line-clamp-2">{task.title}</p>
-                                                        <p className="text-xs text-slate-500 line-clamp-2">{task.desc}</p>
-                                                    </div>
-                                                    {/* Kanban Arrows */}
-                                                    <div className="flex justify-between mt-3 pt-2 border-t border-slate-700/50">
-                                                        <button onClick={() => moveTaskStatus(task, -1)} disabled={status === 'backlog'} className={`p-1 rounded ${status === 'backlog' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowLeft className="w-3 h-3"/></button>
-                                                        <button onClick={() => moveTaskStatus(task, 1)} disabled={status === 'done'} className={`p-1 rounded ${status === 'done' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowRight className="w-3 h-3"/></button>
+                            {['backlog', 'todo', 'doing', 'done'].map(status => (
+                                <div key={status} className="bg-slate-900/50 rounded-xl border border-slate-800 p-3 min-h-[300px]">
+                                    <h3 className="text-slate-400 text-xs font-bold uppercase mb-3 flex justify-between items-center px-1">
+                                        {status} <span className="bg-slate-800 px-2 rounded-full border border-slate-700">{filteredTasks.filter(t => t.status === status).length}</span>
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {filteredTasks.filter(t => t.status === status).map(task => (
+                                            <div key={task.id} className="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-sm transition-all group hover:bg-slate-700 relative">
+                                                <div className="flex justify-between items-start mb-2 cursor-pointer" onClick={() => editTask(task)}>
+                                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.tag === 'APP' ? 'bg-indigo-900 text-indigo-200' : 'bg-orange-900 text-orange-200'}`}>{task.tag}</span>
+                                                    <div className="flex gap-1">
+                                                        {task.priority === 'Critical' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse mt-1"/>}
+                                                        <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} className="text-slate-600 hover:text-red-500 p-0.5"><Trash2 className="w-3 h-3"/></button>
                                                     </div>
                                                 </div>
-                                            ))}
-                                        </div>
+                                                <div className="cursor-pointer" onClick={() => editTask(task)}>
+                                                    <p className="text-sm font-bold text-white mb-1 line-clamp-2">{task.title}</p>
+                                                    <p className="text-xs text-slate-500 line-clamp-2">{task.desc}</p>
+                                                </div>
+                                                {/* Kanban Arrows */}
+                                                <div className="flex justify-between mt-3 pt-2 border-t border-slate-700/50">
+                                                    <button onClick={() => moveTaskStatus(task, -1)} disabled={status === 'backlog'} className={`p-1 rounded ${status === 'backlog' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowLeft className="w-3 h-3"/></button>
+                                                    <button onClick={() => moveTaskStatus(task, 1)} disabled={status === 'done'} className={`p-1 rounded ${status === 'done' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowRight className="w-3 h-3"/></button>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                );
-                            })}
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
@@ -894,7 +859,7 @@ const AdminDashboard = ({ onClose }) => {
                                 <div 
                                     key={task.id} 
                                     className="p-3 flex items-center bg-slate-900 hover:bg-slate-800 transition-colors group"
-                                    draggable={filterTag === 'ALL' && filterStatus !== 'DONE'} 
+                                    draggable={filterTag === 'ALL'} // Only draggable if not filtered
                                     onDragStart={(e) => dragStart(e, index)}
                                     onDragEnter={(e) => dragEnter(e, index)}
                                     onDragEnd={dragEnd}
@@ -1078,6 +1043,572 @@ const AdminDashboard = ({ onClose }) => {
                     onCancel={() => setAdminConfirm(null)}
                 />
             )}
+        </div>
+    );
+};
+
+// --- MAIN APP COMPONENT ---
+const App = () => {
+  // Auth State
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [loginError, setLoginError] = useState(null);
+  const [isBrowserBlocked, setIsBrowserBlocked] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // App State
+  const [activeFighter, setActiveFighter] = useState('Karl');
+  const [isLocked, setIsLocked] = useState(true);
+  const [systemWeek] = useState(getISOWeek()); 
+  const [currentWeek, setCurrentWeek] = useState(getISOWeek()); 
+  const [view, setView] = useState('personal'); 
+  const [isStandardMode, setIsStandardMode] = useState(false);
+  const [scheduleData, setScheduleData] = useState({}); 
+  const [teamData, setTeamData] = useState({}); 
+  const [lastUpdated, setLastUpdated] = useState(null);
+  
+  // UI States
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingDay, setEditingDay] = useState(null);
+  const [editingSession, setEditingSession] = useState(null); 
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  const [feedbackContext, setFeedbackContext] = useState(null); // String or null
+  const [adminOpen, setAdminOpen] = useState(false);
+
+  // Auth & Init
+  useEffect(() => {
+    const mobile = isMobileDevice();
+    setIsMobile(mobile);
+    if (checkInAppBrowser()) {
+        setIsBrowserBlocked(true);
+        setAuthLoading(false); 
+        return; 
+    }
+    getRedirectResult(auth).catch((error) => {
+        if (error.code !== 'auth/popup-closed-by-user') setLoginError(error.message);
+    });
+
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
+      setAuthLoading(false);
+      if (u) {
+        const email = u.email ? u.email.toLowerCase() : '';
+        const userProfile = USER_MAPPING[email];
+        if (userProfile) {
+            setUser(u);
+            setAccessDenied(false);
+            if (userProfile.role === 'coach' || userProfile.role === 'admin') {
+                setIsLocked(false);
+                setActiveFighter('Karl'); 
+            } else {
+                setActiveFighter(userProfile.name);
+                setIsLocked(true);
+            }
+        } else {
+            setAccessDenied(true);
+            setUser(u);
+        }
+      } else {
+        setUser(null);
+      }
+    });
+    return () => unsubAuth();
+  }, []);
+
+  // Handlers (Login, CRUD, Logic)
+  const handleSmartLogin = async () => {
+      setLoginError(null);
+      const provider = new GoogleAuthProvider();
+      try { isMobile ? await signInWithRedirect(auth, provider) : await signInWithPopup(auth, provider); } 
+      catch (error) { setLoginError(error.message); }
+  };
+
+  const handleLogout = () => { signOut(auth); setAccessDenied(false); setLoginError(null); };
+
+  // Data Sync Hooks (Personal & Team)
+  useEffect(() => {
+    if (!user || accessDenied || isBrowserBlocked) return;
+    const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
+    const collectionPath = isStandardMode ? 'templates' : 'weeks';
+    
+    const docRef = doc(db, ROOT_COLLECTION, activeFighter, collectionPath, docId);
+    const unsubPersonal = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setScheduleData(data);
+        if (data.lastUpdated) setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+      } else { setScheduleData({}); setLastUpdated('Aldrig'); }
+    });
+
+    const unsubsTeam = [];
+    FIGHTERS.forEach(fighter => {
+        const fRef = doc(db, ROOT_COLLECTION, fighter, collectionPath, docId);
+        const unsub = onSnapshot(fRef, (snap) => {
+            if (snap.exists()) setTeamData(prev => ({...prev, [fighter]: snap.data()}));
+            else setTeamData(prev => ({...prev, [fighter]: {}}));
+        });
+        unsubsTeam.push(unsub);
+    });
+    return () => { unsubPersonal(); unsubsTeam.forEach(u => u()); };
+  }, [user, activeFighter, currentWeek, isStandardMode, accessDenied, isBrowserBlocked]);
+
+  const saveToDb = async (newData) => {
+      const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
+      const collectionPath = isStandardMode ? 'templates' : 'weeks';
+      const docRef = doc(db, ROOT_COLLECTION, activeFighter, collectionPath, docId);
+      newData.lastUpdated = new Date().toISOString();
+      await setDoc(docRef, newData);
+  };
+
+  // Helper Wrappers for Modals
+  const handleSaveSession = async (session) => {
+    const newData = JSON.parse(JSON.stringify(scheduleData));
+    if (!newData[editingDay]) newData[editingDay] = [];
+    if (session.id) {
+        const idx = newData[editingDay].findIndex(s => s.id === session.id);
+        if (idx > -1) newData[editingDay][idx] = session;
+        else newData[editingDay].push(session);
+    } else {
+        session.id = Date.now();
+        newData[editingDay].push(session);
+    }
+    newData[editingDay].sort((a,b) => a.start.localeCompare(b.start));
+    setScheduleData(newData); 
+    await saveToDb(newData); 
+    setModalOpen(false);
+  };
+
+  const handleDeleteSession = async (sessionId) => {
+    const newData = JSON.parse(JSON.stringify(scheduleData));
+    if (newData[editingDay]) {
+        newData[editingDay] = newData[editingDay].filter(s => s.id !== sessionId);
+        await saveToDb(newData);
+    }
+    setModalOpen(false);
+  };
+
+  const handleToggleRestDay = (day) => {
+    const executeToggle = async () => {
+        const newData = JSON.parse(JSON.stringify(scheduleData));
+        let currentSessions = newData[day] || [];
+        const isRest = currentSessions.some(s => s.isRestDay);
+        if (isRest) {
+            newData[day] = currentSessions.filter(s => !s.isRestDay);
+        } else {
+            currentSessions = currentSessions.map(s => {
+                if (s.status !== 'cancelled' && !s.isRestDay) {
+                    return { ...s, status: 'cancelled', cancellationReason: 'Hviledag', cancellationTime: new Date().toISOString() };
+                }
+                return s;
+            });
+            currentSessions.push({ isRestDay: true, id: Date.now() });
+            newData[day] = currentSessions;
+        }
+        await saveToDb(newData);
+        setConfirmDialog(null);
+    };
+    const currentSessions = scheduleData[day] || [];
+    const isRest = currentSessions.some(s => s.isRestDay);
+    if (!isRest && currentSessions.filter(s => s.status !== 'cancelled' && !s.isRestDay).length > 0) {
+        setConfirmDialog({ title: "Bekræft Hviledag", message: `Du har planlagte pas. Vil du aflyse dem?`, onConfirm: executeToggle });
+    } else { executeToggle(); }
+  };
+
+  const handleAddClick = (day) => {
+      const sessions = scheduleData[day] || [];
+      if (sessions.some(s => s.isRestDay)) {
+          setConfirmDialog({
+              title: "Fjern Hviledag?", message: "Dette er en hviledag. Vil du fjerne hviledagen og oprette et pas?",
+              onConfirm: async () => {
+                  const newData = JSON.parse(JSON.stringify(scheduleData));
+                  newData[day] = (newData[day] || []).filter(s => !s.isRestDay);
+                  await saveToDb(newData);
+                  setConfirmDialog(null);
+                  setTimeout(() => { setEditingDay(day); setEditingSession(null); setModalOpen(true); }, 100);
+              }
+          });
+      } else { setEditingDay(day); setEditingSession(null); setModalOpen(true); }
+  };
+
+  const handleImportStandard = () => {
+    setConfirmDialog({
+        title: "Hent Standarduge", message: "Dette vil overskrive hele ugen. Er du sikker?",
+        onConfirm: async () => {
+            const standardSnap = await getDoc(doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard'));
+            if (standardSnap.exists()) await saveToDb(standardSnap.data());
+            else alert("Ingen standarduge fundet.");
+            setConfirmDialog(null);
+        }
+    });
+  };
+
+  // --- RENDERING ---
+  if (isBrowserBlocked) return <BrowserBlockScreen />;
+  if (authLoading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loader...</div>;
+  if (!user) return <LoginScreen onLoginPopup={() => handleSmartLogin()} onLoginRedirect={() => handleSmartLogin()} error={loginError} />;
+  if (accessDenied) return <div className="text-white text-center p-10">Ingen adgang <button onClick={handleLogout}>Log ud</button></div>;
+
+  const isReadOnly = !isStandardMode && currentWeek < systemWeek;
+  const userRole = USER_MAPPING[user.email.toLowerCase()]?.role;
+  const isAdmin = userRole === 'admin' || userRole === 'coach';
+
+  // Helper for Context Name
+  const getWeekLabel = () => {
+        if (currentWeek === systemWeek) return `Uge ${currentWeek} (Aktuel)`;
+        if (currentWeek > systemWeek) return `Uge ${currentWeek} (Næste)`;
+        return `Uge ${currentWeek} (Tidligere)`;
+    };
+
+    const getCurrentContextName = () => {
+        if (view === 'team') {
+            if (isStandardMode) return 'Standarduge - Teamet';
+            return `${getWeekLabel()} - Teamet`;
+        }
+        if (isStandardMode) return 'Standarduge - Min';
+        return `${getWeekLabel()} - Min Plan`;
+    };
+
+  // Trigger feedback with explicit context
+  const openFeedback = (ctx) => setFeedbackContext(ctx || getCurrentContextName());
+
+  return (
+    <div className="bg-slate-950 text-slate-200 min-h-screen pb-24 font-sans selection:bg-blue-500/30">
+      {/* HEADER */}
+      <div className="bg-slate-900 p-4 shadow-lg border-b border-slate-800 sticky top-0 z-20">
+        <div className="flex justify-between items-center max-w-md mx-auto">
+          <div className="flex items-center space-x-2">
+            <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-900/20">
+              <ShieldCheck className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-white font-bold text-lg leading-tight">FightWeek</h1>
+              <p className="text-blue-400 text-xs font-bold uppercase tracking-wide">
+                 {isAdmin ? 'Admin / Coach' : 'Fighter'}
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+                <button onClick={() => setAdminOpen(true)} className="p-2 bg-slate-800 rounded-lg text-yellow-500 border border-yellow-900/30 shadow-sm">
+                    <ClipboardList className="w-5 h-5" />
+                </button>
+            )}
+            {isLocked ? (
+              <div className="flex items-center bg-slate-800/50 px-3 py-1.5 rounded-lg border border-slate-700/50">
+                <User className="w-3 h-3 text-slate-400 mr-2" />
+                <span className="text-sm font-bold text-white">{activeFighter}</span>
+              </div>
+            ) : (
+              <div className="relative group">
+                <select value={activeFighter} onChange={(e) => setActiveFighter(e.target.value)} className="appearance-none bg-slate-800 text-white pl-4 pr-10 py-2 rounded-lg border border-slate-700 text-sm font-bold">
+                  {FIGHTERS.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-400"><ChevronDown className="w-4 h-4" /></div>
+              </div>
+            )}
+            <button onClick={handleLogout} className="p-2 text-slate-500 hover:text-white"><LogOut className="w-5 h-5" /></button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-md mx-auto relative pt-4 min-h-[85vh]">
+        {/* Banner: Standard Mode */}
+        {isStandardMode && (
+          <div className={`mx-4 mb-4 rounded-xl p-3 flex items-start space-x-3 fade-in ${view === 'team' ? 'bg-indigo-900/30 border-indigo-700/50' : 'bg-yellow-900/30 border-yellow-700/50'}`}>
+              <Info className={`w-5 h-5 mt-0.5 ${view === 'team' ? 'text-indigo-400' : 'text-yellow-500'}`} />
+              <div>
+                <p className={`text-sm font-bold ${view === 'team' ? 'text-indigo-200' : 'text-yellow-200'}`}>{view === 'team' ? 'Teamets Standarduger' : 'Redigerer Standarduge'}</p>
+                <p className="text-xs opacity-80 mt-1">{view === 'team' ? 'Her ser du teamets faste grundplan.' : 'Dette er din skabelon. Klik "Gem" når du er færdig.'}</p>
+              </div>
+          </div>
+        )}
+
+        {/* Controls (Week Selector) */}
+        <div className="mx-4 mb-4 space-y-3">
+          <div className="flex items-center justify-between bg-slate-800 p-2 rounded-xl border border-slate-700 shadow-md">
+            <button onClick={() => { setCurrentWeek(currentWeek - 1); setIsStandardMode(false); }} className={`p-2 hover:bg-slate-700 rounded-lg text-slate-400 ${currentWeek <= 1 ? 'invisible' : ''}`}><ChevronLeft className="w-6 h-6" /></button>
+            <div className="text-center">
+              <span className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">{currentWeek === systemWeek ? "Aktuel Uge" : currentWeek < systemWeek ? "Tidligere Uge" : "Næste Uge"}</span>
+              <div className="text-white font-bold text-xl">Uge {currentWeek}</div>
+            </div>
+            <button onClick={() => { setCurrentWeek(currentWeek + 1); setIsStandardMode(false); }} className={`p-2 hover:bg-slate-700 rounded-lg text-slate-400 ${currentWeek >= systemWeek + 1 ? 'invisible' : ''}`}><ChevronRight className="w-6 h-6" /></button>
+          </div>
+
+          <div className="flex justify-between items-center px-1">
+            <div className="flex items-center space-x-1 text-[10px] text-slate-500 font-medium">
+                {!isStandardMode && lastUpdated && <><Clock className="w-3 h-3" /><span>Opdateret: {lastUpdated}</span></>}
+                {isReadOnly && <span className="flex items-center text-slate-400 ml-2"><History className="w-3 h-3 mr-1"/> Historik</span>}
+            </div>
+            {!isReadOnly && (
+                <div className="flex space-x-2">
+                    <button onClick={() => setIsStandardMode(!isStandardMode)} className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors flex items-center ${isStandardMode ? 'bg-yellow-900/50 text-yellow-100 border-yellow-700' : 'bg-slate-800 text-slate-300 border-slate-700'}`}>
+                        {isStandardMode ? <><X className="w-3 h-3 mr-1.5"/> Luk Standard</> : <><Globe className="w-3 h-3 mr-1.5"/> {view === 'personal' ? 'Rediger standarduge' : 'Se standarduger'}</>}
+                    </button>
+                    {view === 'personal' && !isStandardMode && (
+                        <button onClick={handleImportStandard} className="text-xs font-bold px-3 py-1.5 rounded-lg border bg-blue-900/20 text-blue-400 border-blue-800/50 flex items-center">
+                            <ChevronDown className="w-3 h-3 mr-1.5"/> Hent Standard
+                        </button>
+                    )}
+                </div>
+            )}
+          </div>
+        </div>
+
+        {/* VIEWS */}
+        {view === 'personal' ? (
+          <div className="px-4 space-y-3 pb-32 fade-in">
+             {DAYS.map(day => {
+                const sessions = scheduleData[day] || [];
+                const isRestDay = sessions.some(s => s.isRestDay);
+                const visibleSessions = sessions.filter(s => !s.isRestDay);
+                return (
+                    <div key={day} className={`mb-3 rounded-2xl p-4 border transition-all shadow-md ${isRestDay ? 'bg-slate-900/30 border-slate-800' : 'bg-slate-900 border-slate-800'}`}>
+                        <div className="flex justify-between items-center mb-3">
+                            <div className="flex items-center space-x-2">
+                                <h3 className={`text-white font-bold text-lg ${isReadOnly ? 'text-slate-400' : ''}`}>{day}</h3>
+                                {isRestDay && <span className="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">HVILEDAG</span>}
+                            </div>
+                            <div className="flex space-x-1">
+                                 <button disabled={isReadOnly} onClick={() => handleToggleRestDay(day)} className={`p-1.5 rounded-full transition-colors ${isRestDay ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-500 hover:text-slate-300'} ${isReadOnly ? 'opacity-0' : ''}`}><Bed className="w-4 h-4" /></button>
+                                 <button disabled={isReadOnly} onClick={() => handleAddClick(day)} className={`bg-blue-600/10 hover:bg-blue-600/20 text-blue-400 rounded-full p-1.5 transition-colors ${isReadOnly ? 'opacity-0' : ''}`}><Plus className="w-5 h-5" /></button>
+                            </div>
+                        </div>
+                        {visibleSessions.length === 0 && !isRestDay && <div className="text-slate-600 text-sm font-medium py-3 text-center border-2 border-dashed border-slate-800/50 rounded-xl">Ingen pas planlagt</div>}
+                        {visibleSessions.map(s => {
+                            const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
+                            const isCancelled = s.status === 'cancelled';
+                            return (
+                                <div key={s.id} onClick={() => !isReadOnly && (setEditingDay(day), setEditingSession(s), setModalOpen(true))} className={`relative flex items-center justify-between p-3 rounded-xl mb-2 border shadow-sm transition-all ${isCancelled ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-slate-800 border-slate-700/50'} ${!isReadOnly ? 'cursor-pointer active:scale-[0.98]' : ''}`}>
+                                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl ${isCancelled ? 'bg-red-900' : cat.color}`}></div>
+                                    <div className="flex-1 pl-3">
+                                        <div className="flex justify-between items-start">
+                                            <h4 className={`font-bold text-sm leading-tight mb-1 ${isCancelled ? 'line-through text-slate-500' : 'text-white'}`}>{s.name}</h4>
+                                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 border border-slate-600">{s.category}</span>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <div className="flex items-center text-slate-400 text-xs space-x-3 font-medium">
+                                                <span className="flex items-center"><Clock className="w-3 h-3 mr-1"/> {s.start} - {s.end}</span>
+                                                <span className="flex items-center"><MapPin className="w-3 h-3 mr-1"/> {s.location}</span>
+                                            </div>
+                                            {isCancelled && <div className="mt-1 text-[10px] text-red-400 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Aflyst {formatCancellationTime(s.cancellationTime)}: {s.cancellationReason}</div>}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+             })}
+          </div>
+        ) : (
+             <TeamSchedule days={DAYS} teamData={teamData} />
+        )}
+      </div>
+
+      {/* FOOTER & OVERLAYS */}
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 pb-safe z-50">
+        <div className="max-w-md mx-auto flex justify-between items-center p-2 px-6">
+            <NavButton icon={Calendar} label="Min Plan" active={view === 'personal'} onClick={() => setView('personal')} />
+            <button onClick={() => openFeedback()} className="flex flex-col items-center justify-center p-2 text-slate-500 hover:text-blue-400">
+                <div className="bg-slate-800 p-2 rounded-full mb-1 border border-slate-700"><MessageSquarePlus className="w-5 h-5" /></div>
+            </button>
+            <NavButton icon={User} label="Teamet" active={view === 'team'} onClick={() => setView('team')} />
+        </div>
+      </div>
+
+      {modalOpen && <SessionModal day={editingDay} initialData={editingSession} onClose={() => setModalOpen(false)} onSave={handleSaveSession} onDelete={handleDeleteSession} isStandardMode={isStandardMode} onFeedback={(ctx) => openFeedback(ctx)} />}
+      {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
+      
+      {/* NEW SYSTEM MODALS */}
+      {feedbackContext && <FeedbackModal user={user} currentContext={feedbackContext} onClose={() => setFeedbackContext(null)} />}
+      {adminOpen && <AdminDashboard onClose={() => setAdminOpen(false)} />}
+    </div>
+  );
+};
+
+// --- HELPER COMPONENTS ---
+const NavButton = ({ icon: Icon, label, active, onClick }) => (
+    <button onClick={onClick} className={`flex flex-col items-center justify-center p-2 rounded-xl w-16 transition-colors ${active ? 'text-blue-500' : 'text-slate-500'}`}>
+        <Icon className="w-6 h-6 mb-1" />
+        <span className="text-[10px] font-bold uppercase tracking-wide">{label}</span>
+    </button>
+);
+
+const TeamSchedule = ({ days, teamData }) => {
+    const [selectedDay, setSelectedDay] = useState('Mandag');
+    const timeSlots = {};
+    Object.keys(teamData).forEach(fighter => {
+        const data = teamData[fighter];
+        if (!data) return; 
+        const sessions = data[selectedDay] || [];
+        sessions.forEach(s => {
+            if (s.isRestDay) return;
+            const timeKey = s.start || 'TBA';
+            if (!timeSlots[timeKey]) timeSlots[timeKey] = [];
+            timeSlots[timeKey].push({ ...s, fighter });
+        });
+    });
+    const sortedTimes = Object.keys(timeSlots).sort();
+
+    return (
+        <div className="fade-in">
+             <div className="bg-slate-900/50 mx-4 mb-4 rounded-xl p-2 flex space-x-2 overflow-x-auto hide-scroll">
+                 {days.map(d => (
+                     <button key={d} onClick={() => setSelectedDay(d)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-bold transition-all border ${selectedDay === d ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>{d}</button>
+                 ))}
+             </div>
+             <div className="px-4 space-y-4 pb-32">
+                 {sortedTimes.length === 0 && <div className="flex flex-col items-center justify-center py-20 text-slate-500 border-2 border-dashed border-slate-800 rounded-2xl"><User className="w-10 h-10 mb-2 opacity-50"/><p>Ingen fælles træning</p></div>}
+                 {sortedTimes.map(time => {
+                     const sessions = timeSlots[time];
+                     return (
+                        <div key={time} className="bg-slate-900 rounded-xl overflow-hidden border border-slate-800 shadow-lg">
+                            <div className="bg-slate-800/80 p-3 flex justify-between items-center border-b border-slate-800">
+                                <div className="flex items-center text-blue-400 font-bold font-mono text-lg">{time}</div>
+                                <div className="flex items-center text-slate-500 text-[10px] font-medium uppercase bg-slate-950 px-2 py-1 rounded"><MapPin className="w-3 h-3 mr-1"/> {sessions[0].location}</div>
+                            </div>
+                            <div className="p-3 grid grid-cols-2 gap-2">
+                                {sessions.map((s, i) => {
+                                    const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
+                                    const isCancelled = s.status === 'cancelled';
+                                    return (
+                                        <div key={i} className="bg-slate-800/50 p-2.5 rounded border border-slate-700/50 flex items-center justify-between">
+                                            <div className="flex items-center w-full">
+                                                <span className={`w-1.5 h-6 rounded-full ${isCancelled ? 'bg-slate-700' : cat.color} mr-2.5 shadow-sm`}></span>
+                                                <div className={`flex-1 ${isCancelled ? 'opacity-50 line-through' : ''}`}>
+                                                    <div className="text-white text-xs font-bold leading-tight">{s.fighter}</div>
+                                                    <div className="text-slate-400 text-[10px]">{s.name}</div>
+                                                </div>
+                                                {isCancelled && <span className="text-[9px] text-red-400 bg-red-900/50 px-1 rounded ml-auto">AFLYST</span>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                     );
+                 })}
+             </div>
+        </div>
+    );
+};
+
+const SessionModal = ({ day, initialData, onClose, onSave, onDelete, isStandardMode, onFeedback }) => {
+    const [tab, setTab] = useState(initialData ? 'adhoc' : 'favorites');
+    const [form, setForm] = useState({
+        name: initialData?.name || '',
+        category: initialData?.category || 'MMA',
+        start: initialData?.start || '17:00',
+        end: initialData?.end || '18:30',
+        location: initialData?.location || 'Rumble',
+        cancel: initialData?.status === 'cancelled',
+        reason: initialData?.cancellationReason || ''
+    });
+
+    const isExisting = !!initialData; 
+    const submit = () => {
+        onSave({
+            id: initialData?.id,
+            ...form,
+            status: form.cancel ? 'cancelled' : 'active',
+            cancellationReason: form.cancel ? form.reason : null,
+            cancellationTime: form.cancel ? (initialData?.cancellationTime || new Date().toISOString()) : null
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 fade-in">
+             <div className="bg-slate-900 w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50 shrink-0">
+                    <h3 className="text-white font-bold text-lg flex items-center"><span className="w-1 h-6 bg-blue-500 rounded-full mr-3"></span> {day}</h3>
+                    <div className="flex gap-2">
+                        {/* FEEDBACK BUTTON IN MODAL */}
+                        {isExisting && (
+                            <button onClick={() => onFeedback(`Session: ${initialData.name} (${day})`)} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white border border-slate-700">
+                                <MessageSquarePlus className="w-5 h-5"/>
+                            </button>
+                        )}
+                        <button onClick={onClose} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+                    </div>
+                </div>
+                {!initialData && (
+                    <div className="flex p-2 bg-slate-800/30 gap-2 shrink-0">
+                        <button onClick={() => setTab('favorites')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tab === 'favorites' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>Vælg Eksisterende</button>
+                        <button onClick={() => setTab('adhoc')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tab === 'adhoc' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>Opret Ny</button>
+                    </div>
+                )}
+                <div className="p-5 space-y-6 overflow-y-auto">
+                    {tab === 'favorites' && !initialData ? (
+                        <div className="space-y-2">
+                             {GLOBAL_TEMPLATES.filter(t => t.day === day).map(t => {
+                                 const cat = CATEGORIES.find(c => c.label === t.category) || CATEGORIES[6];
+                                 return (
+                                     <button key={t.id} onClick={() => onSave({...t, id: null})} className={`w-full text-left bg-slate-950 p-3 rounded-xl border ${cat.border} border-l-4 hover:bg-slate-900 transition-colors`}>
+                                         <div className="font-bold text-sm text-white">{t.name}</div>
+                                         <div className="text-xs text-slate-500">{t.start}-{t.end} • {t.location}</div>
+                                     </button>
+                                 );
+                             })}
+                             {GLOBAL_TEMPLATES.filter(t => t.day === day).length === 0 && <p className="text-slate-500 text-xs italic text-center">Ingen faste pas denne dag.</p>}
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {isExisting && <div className="p-3 bg-yellow-900/20 border border-yellow-700/50 rounded-lg text-xs text-yellow-200 mb-2">Du kan kun slette eller aflyse dette pas. For at ændre tid/sted, slet og opret på ny.</div>}
+                            <div>
+                                <label className="block text-slate-400 text-xs uppercase font-bold mb-3">Kategori</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {CATEGORIES.map(cat => (
+                                        <button key={cat.label} disabled={isExisting} onClick={() => setForm({...form, category: cat.label})} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${form.category === cat.label ? `${cat.color} text-white border-transparent` : 'bg-slate-900 border-slate-700 text-slate-400'} ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}>{cat.label}</button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Navn</label>
+                                <input disabled={isExisting} type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Start</label>
+                                    <input disabled={isExisting} type="time" value={form.start} onChange={e => setForm({...form, start: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
+                                </div>
+                                <div>
+                                    <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Slut</label>
+                                    <input disabled={isExisting} type="time" value={form.end} onChange={e => setForm({...form, end: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Lokation</label>
+                                <div className="relative">
+                                    <MapPin className="absolute left-3 top-3.5 w-4 h-4 text-slate-500" />
+                                    <select disabled={isExisting} value={form.location} onChange={e => setForm({...form, location: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:ring-2 focus:ring-blue-600 outline-none appearance-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                        <option value="Rumble">Rumble</option>
+                                        <option value="Burnell">Burnell</option>
+                                        <option value="Roskilde">Roskilde</option>
+                                        <option value="Andet">Andet</option>
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500"><ChevronDown className="w-4 h-4" /></div>
+                                </div>
+                            </div>
+                            {isExisting && !isStandardMode && (
+                                <div className="pt-4 border-t border-slate-800">
+                                    <label className="flex items-center space-x-2 cursor-pointer mb-3">
+                                        <input type="checkbox" checked={form.cancel} onChange={e => setForm({...form, cancel: e.target.checked})} className="w-5 h-5 rounded border-slate-600 text-red-600 bg-slate-800"/>
+                                        <span className="text-sm font-bold text-slate-300">Aflys Træning</span>
+                                    </label>
+                                    {form.cancel && (
+                                        <input type="text" placeholder="Årsag (fx Sygdom)" value={form.reason} onChange={e => setForm({...form, reason: e.target.value})} className="w-full bg-red-950/30 border border-red-900/50 text-red-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-600 outline-none"/>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+                <div className="p-4 border-t border-slate-800 bg-slate-800/50 flex space-x-3 shrink-0">
+                    {initialData && <button onClick={() => onDelete(initialData.id)} className="py-3.5 px-4 rounded-xl font-bold text-slate-400 bg-slate-800 hover:bg-slate-700 transition-colors"><Trash2 className="w-5 h-5"/></button>}
+                    <button onClick={submit} className={`flex-1 py-3.5 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex justify-center items-center ${form.cancel ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>{form.cancel ? 'Gem & Aflys' : 'Gem'}</button>
+                </div>
+             </div>
         </div>
     );
 };
