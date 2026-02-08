@@ -416,7 +416,10 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => {
     // TRANSLATE FIREBASE ERRORS
     const getFriendlyError = (msg) => {
         if (!msg) return null;
-        if (msg.includes("popup-closed-by-user")) return "Login afbrudt af bruger.";
+        // Check both raw and standard error codes
+        if (msg.includes("popup-closed-by-user") || msg.includes("cancelled-popup-request")) {
+             return "Popup driller på mobilen. Brug 'Alternativ Login' nedenfor.";
+        }
         if (msg.includes("network-request-failed")) return "Netværksfejl. Tjek din forbindelse.";
         if (msg.includes("operation-not-supported")) return "Login metode ikke understøttet her.";
         if (msg.includes("unauthorized-domain")) return "Domæne ikke godkendt (Kontakt Admin).";
@@ -424,11 +427,12 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => {
     };
     
     const friendlyError = getFriendlyError(error);
+    const isPopupError = friendlyError && friendlyError.includes("Alternativ Login");
 
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
         <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-          <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.70</div>
+          <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.71</div>
           <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
             <ShieldCheck className="w-8 h-8 text-white" />
           </div>
@@ -447,7 +451,10 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => {
             Log ind med Google (Popup)
           </button>
 
-          <button onClick={onLoginRedirect} className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2">
+          <button 
+            onClick={onLoginRedirect} 
+            className={`flex items-center justify-center w-full mt-2 transition-all ${isPopupError ? 'bg-blue-600/20 text-blue-400 py-3 rounded-lg font-bold border border-blue-500 animate-pulse' : 'text-slate-500 text-xs hover:text-blue-400 underline'}`}
+          >
             <MousePointerClick className="w-3 h-3 mr-1" />
             Alternativ Login (Redirect)
           </button>
