@@ -1,9 +1,10 @@
 /**
- * FIGHTWEEK APP v1.74
+ * FIGHTWEEK APP v1.75
  * -------------------
- * - Login: Robust model fra v1.66 (Popup + Redirect support)
- * - Struktur: Opryddet v1.73
- * - Design: Aflyste pas beholder farve (opacity 50%)
+ * - Login: Tekst rettet (fjernet "Popup")
+ * - Admin: Fuldt dashboard genindført (Backlog, CSV, Genveje)
+ * - Feedback: Placeholder tekst tilføjet
+ * - Core: v1.74 logik bevaret
  */
 
 // --- SEKTION 1: IMPORTS ---
@@ -14,7 +15,7 @@ import {
   History, Globe, LogOut, ClipboardList, MessageSquarePlus, 
   MoreHorizontal, Sparkles, CheckSquare, Square, Search, 
   ArrowUpCircle, ArrowDownCircle, CornerDownLeft, Keyboard, Save, 
-  Layout, List, Upload, FileDown, Table, RefreshCw, Terminal, Check, Copy, Smartphone, HelpCircle, MousePointerClick
+  Layout, List, Upload, FileDown, Table, RefreshCw, Terminal, Check, Copy, Smartphone, HelpCircle, MousePointerClick, GripVertical, Edit2, Filter, Monitor
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
@@ -24,8 +25,8 @@ import {
 import { 
   getAuth, 
   signInWithPopup,
-  signInWithRedirect, // Tilføjet fra fungerende kode
-  getRedirectResult,  // Tilføjet fra fungerende kode 
+  signInWithRedirect,
+  getRedirectResult, 
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged,
@@ -107,7 +108,7 @@ const db = getFirestore(app);
 const ROOT_COLLECTION = `artifacts/production/users`; 
 const PUBLIC_DATA_PATH = `artifacts/production/public/data`; 
 
-// --- SEKTION 3: HJÆLPEFUNKTIONER ---
+// --- SEKTION 3: HJÆLPEFUNKTIONER (CSV & Dates) ---
 
 const formatCancellationTime = (isoString) => {
     if (!isoString) return '';
@@ -153,6 +154,18 @@ const getWeekDateMap = (weekNumber) => {
     return map;
 };
 
+// Returns { "Mandag": "12/2", ... } for compact view
+const getCompactWeekDateMap = (weekNumber) => {
+    const map = {};
+    DAYS.forEach(day => {
+        const date = getDateForWeekDay(weekNumber, day);
+        if (date) {
+            map[day] = `${date.getDate()}/${date.getMonth() + 1}`;
+        }
+    });
+    return map;
+};
+
 const addMinutes = (timeStr, minutes) => {
     if (!timeStr) return '';
     const [h, m] = timeStr.split(':').map(Number);
@@ -171,6 +184,140 @@ const checkInAppBrowser = () => {
 
 const isMobileDevice = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 const getDeviceInfo = () => navigator.userAgent;
+
+// --- CSV PARSER & GENERATOR (GENDANNET) ---
+const parseCSV = (text) => {
+    if (!text) return [];
+    const firstLine = text.split('\n')[0];
+    let delimiter = ';';
+    if (firstLine.includes('\t')) delimiter = '\t';
+    else if (firstLine.includes(',') && !firstLine.includes(';')) delimiter = ',';
+
+    const result = [];
+    let row = [];
+    let current = "";
+    let inQuotes = false;
+    
+    const cleanText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    for (let i = 0; i < cleanText.length; i++) {
+        const char = cleanText[i];
+        const nextChar = cleanText[i + 1];
+        
+        if (inQuotes) {
+            if (char === '"' && nextChar === '"') {
+                current += '"';
+                i++; 
+            } else if (char === '"') {
+                inQuotes = false;
+            } else {
+                current += char;
+            }
+        } else {
+            if (char === '"') {
+                inQuotes = true;
+            } else if (char === delimiter) {
+                row.push(current);
+                current = "";
+            } else if (char === '\n') {
+                row.push(current);
+                if (row.length > 1 || (row.length === 1 && row[0] !== '')) {
+                     result.push(row);
+                }
+                row = [];
+                current = "";
+            } else {
+                current += char;
+            }
+        }
+    }
+    if (current || row.length > 0) {
+        row.push(current);
+        if (row.length > 1 || (row.length === 1 && row[0] !== '')) result.push(row);
+    }
+
+    if (result.length === 0) return [];
+    
+    const headers = result[0].map(h => h.trim().replace(/^"|"$/g, ''));
+    
+    return result.slice(1).map(values => {
+        const obj = {};
+        headers.forEach((h, i) => {
+            let val = values[i] || '';
+            obj[h] = val.trim();
+        });
+        return obj;
+    });
+};
+
+const generateCSV = (tasks, forSheets = false) => {
+    const headers = ['Titel', 'Status', 'Beskrivelse', 'Acceptkriterier', 'Noter', 'Datafelter', 'Release', 'Tag', 'Prioritet', 'ID', 'Order'];
+    const separator = forSheets ? '\t' : ';'; 
+    const csvRows = [headers.join(separator)];
+
+    tasks.forEach(task => {
+        const fields = [
+            task.title,
+            task.status || 'backlog',
+            task.desc,
+            task.acceptance,
+            task.notes,
+            task.dataFields,
+            task.release,
+            task.tag || 'APP',
+            task.priority || 'Medium',
+            task.id,
+            task.order || 0
+        ];
+
+        const row = fields.map(field => {
+            let val = String(field || '');
+            
+            if (forSheets) {
+                val = val.replace(/\r\n|\r|\n/g, ' ¶ '); 
+                if (val.includes(separator)) {
+                     val = val.replace(/"/g, '""');
+                     return `"${val}"`;
+                }
+                return val;
+            } else {
+                val = val.replace(/"/g, '""');
+                return `"${val}"`;
+            }
+        });
+
+        csvRows.push(row.join(separator));
+    });
+
+    return (forSheets ? '' : '\uFEFF') + csvRows.join('\n');
+};
+
+const generateFeedbackCSV = (feedbackItems) => {
+    const headers = ['Bruger', 'Kontekst', 'Tekst', 'Device', 'Status', 'Dato', 'ID'];
+    const separator = ';';
+    const csvRows = [headers.join(separator)];
+
+    feedbackItems.forEach(item => {
+        const fields = [
+            item.userName,
+            item.context,
+            item.text,
+            item.device,
+            item.status || 'new',
+            item.timestamp,
+            item.id
+        ];
+
+        const row = fields.map(field => {
+            let val = String(field || '').replace(/"/g, '""');
+            return `"${val}"`;
+        });
+        csvRows.push(row.join(separator));
+    });
+    
+    return '\uFEFF' + csvRows.join('\n');
+};
+
 
 // --- SEKTION 4: KOMPONENTER ---
 
@@ -220,7 +367,7 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
         <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-          <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.74</div>
+          <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.75</div>
           <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
             <ShieldCheck className="w-8 h-8 text-white" />
           </div>
@@ -236,7 +383,7 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => {
 
           <button onClick={onLoginPopup} className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mb-4">
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-            Log ind med Google (Popup)
+            Log ind med Google
           </button>
 
           <button onClick={onLoginRedirect} className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2">
@@ -261,6 +408,72 @@ const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
     </div>
   </div>
 );
+
+const ShortcutModal = ({ onClose }) => (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4 fade-in" onClick={onClose}>
+        <div className="bg-slate-900 w-full max-w-md rounded-2xl border border-slate-700 shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-white font-bold text-lg flex items-center"><Keyboard className="w-5 h-5 mr-2 text-blue-500"/>Tastatur Genveje</h3>
+                <button onClick={onClose} className="p-1 text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                <div>
+                    <h4 className="text-slate-500 font-bold uppercase text-xs mb-2">Navigation</h4>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Ned / Op</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">J / K</span></div>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Åbn opgave</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">Enter</span></div>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Vælg opgave</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">X</span></div>
+                </div>
+                <div>
+                    <h4 className="text-slate-500 font-bold uppercase text-xs mb-2">Redigering</h4>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Gem (i kort)</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">⌘ + Enter</span></div>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Flyt op/ned</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">⇧J / ⇧K</span></div>
+                </div>
+                <div className="col-span-2 mt-2">
+                    <h4 className="text-slate-500 font-bold uppercase text-xs mb-2">Power Tools</h4>
+                      <div className="flex justify-between py-1 border-b border-slate-800"><span>Kopier til AI</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">I</span></div>
+                      <div className="flex justify-between py-1 border-b border-slate-800"><span>Ny Opgave</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">N</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
+const ImportModal = ({ onClose, onImport }) => {
+    const [text, setText] = useState('');
+    const [mode, setMode] = useState('append'); 
+
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+            <div className="bg-slate-900 w-full max-w-lg rounded-2xl border border-slate-700 shadow-2xl p-6">
+                 <h3 className="text-white font-bold text-lg mb-4">Importer Backlog (CSV)</h3>
+                 <p className="text-slate-500 text-xs mb-4">Understøtter Excel (tabs) og semikolon-format.</p>
+                 <div className="flex gap-4 mb-4">
+                     <button onClick={() => setMode('append')} className={`flex-1 p-3 rounded-xl border flex flex-col items-center ${mode === 'append' ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                         <Plus className="w-6 h-6 mb-2"/>
+                         <span className="font-bold text-sm">Tilføj til liste</span>
+                     </button>
+                     <button onClick={() => setMode('replace')} className={`flex-1 p-3 rounded-xl border flex flex-col items-center ${mode === 'replace' ? 'bg-red-900/30 border-red-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                         <RefreshCw className="w-6 h-6 mb-2"/>
+                         <span className="font-bold text-sm">Erstat liste</span>
+                     </button>
+                 </div>
+                 <textarea 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-300 text-xs font-mono h-32 focus:ring-2 focus:ring-blue-600 outline-none mb-4"
+                    placeholder="Titel;Status;Beskrivelse..."
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                  />
+                 <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="text-slate-400 px-4 py-2 text-sm font-bold">Annuller</button>
+                    <button onClick={() => onImport(text, mode)} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center text-white ${mode === 'replace' ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'}`}>
+                        <Upload className="w-4 h-4 mr-2"/> {mode === 'replace' ? 'Erstat Data' : 'Importer'}
+                    </button>
+                 </div>
+            </div>
+        </div>
+    );
+};
 
 // --- SEKTION 5: HOVEDAPPLIKATION (LOGIC) ---
 const App = () => {
@@ -586,9 +799,7 @@ const App = () => {
                             const isCancelled = s.status === 'cancelled';
                             return (
                                 <div key={s.id} onClick={() => !isReadOnly && (setEditingDay(day), setEditingSession(s), setModalOpen(true))} className={`relative flex items-center justify-between p-3 rounded-xl mb-2 border shadow-sm transition-all ${isCancelled ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-slate-800 border-slate-700/50'} ${!isReadOnly ? 'cursor-pointer active:scale-[0.98]' : ''}`}>
-                                    {/* FEATURE: DESIGN FIX - Lodret streg beholder farve men bliver gennemsigtig ved aflysning */}
                                     <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl ${cat.color} ${isCancelled ? 'opacity-50' : ''}`}></div>
-                                    
                                     <div className="flex-1 pl-3">
                                         <div className="flex justify-between items-start">
                                             <h4 className={`font-bold text-sm leading-tight mb-1 ${isCancelled ? 'line-through text-slate-500' : 'text-white'}`}>{s.name}</h4>
@@ -737,141 +948,924 @@ const TeamSchedule = ({ days, teamData, currentWeek, isStandardMode }) => {
     );
 };
 
-const SessionModal = ({ day, initialData, existingSessions, onClose, onSave, onDelete, isStandardMode, onFeedback }) => {
-    const [tab, setTab] = useState(initialData ? 'adhoc' : 'favorites');
+// Admin Dashboard Component - GENINDFØRT
+const AdminDashboard = ({ onClose, onShowToast }) => {
+    const [tasks, setTasks] = useState([]);
+    const [feedback, setFeedback] = useState([]);
+    const [view, setView] = useState('board'); 
+    
+    const [filterTag, setFilterTag] = useState('ALL'); 
+    const [statusFilter, setStatusFilter] = useState('active'); 
+    const [searchQuery, setSearchQuery] = useState('');
+    
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [focusedIndex, setFocusedIndex] = useState(-1);
+    const searchInputRef = useRef(null);
+
+    const [isFormOpen, setIsFormOpen] = useState(false);
+    const [isImportOpen, setIsImportOpen] = useState(false);
+    const [showShortcuts, setShowShortcuts] = useState(false);
+    const [editingTask, setEditingTask] = useState(null);
+    const [linkedFeedbackId, setLinkedFeedbackId] = useState(null);
+    const [adminConfirm, setAdminConfirm] = useState(null);
+    const [showMenu, setShowMenu] = useState(false); 
+
     const [form, setForm] = useState({
-        name: initialData?.name || '',
-        category: initialData?.category || 'MMA',
-        start: initialData?.start || '17:00',
-        end: initialData?.end || '18:30',
-        location: initialData?.location || 'Rumble',
-        cancel: initialData?.status === 'cancelled',
-        reason: initialData?.cancellationReason || ''
+        title: '', status: 'backlog', priority: 'Medium', tag: 'APP',
+        desc: '', notes: '', acceptance: '', dataFields: '', release: '', order: 0
     });
 
-    const isExisting = !!initialData;
-    const handleStartChange = (e) => {
-        const newStart = e.target.value;
-        const newEnd = addMinutes(newStart, 90);
-        setForm({ ...form, start: newStart, end: newEnd });
+    const isMobile = isMobileDevice();
+    const dragItem = useRef();
+    const dragOverItem = useRef();
+
+    useEffect(() => {
+        const qBacklog = query(collection(db, PUBLIC_DATA_PATH, 'backlog'));
+        const unsubBacklog = onSnapshot(qBacklog, (snap) => {
+            const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            items.sort((a,b) => (a.order || 0) - (b.order || 0));
+            setTasks(items);
+        });
+
+        const qFeedback = query(collection(db, PUBLIC_DATA_PATH, 'feedback'));
+        const unsubFeedback = onSnapshot(qFeedback, (snap) => {
+            const items = snap.docs.map(d => ({id: d.id, ...d.data()}));
+            items.sort((a,b) => (a.order || 0) - (b.order || 0));
+            setFeedback(items);
+        });
+
+        return () => { unsubBacklog(); unsubFeedback(); }
+    }, []);
+    
+    const uniqueReleases = useMemo(() => {
+        const releases = new Set();
+        tasks.forEach(t => { if(t.release) releases.add(t.release); });
+        return Array.from(releases).sort();
+    }, [tasks]);
+
+    const filteredTasks = useMemo(() => {
+        let result = tasks.filter(t => {
+            const tagMatch = filterTag === 'ALL' || t.tag === filterTag;
+            let statusMatch = true;
+            if (statusFilter === 'active') statusMatch = t.status !== 'done';
+            if (statusFilter === 'done') statusMatch = t.status === 'done';
+            return tagMatch && statusMatch;
+        });
+
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            result = result.filter(t => 
+                t.title.toLowerCase().includes(q) || 
+                (t.desc && t.desc.toLowerCase().includes(q)) ||
+                (t.release && t.release.toLowerCase().includes(q))
+            );
+        }
+        return result;
+    }, [tasks, filterTag, statusFilter, searchQuery]);
+
+    // Bulk Move Status
+    const bulkMoveStatus = async (direction, targetStatus = null) => {
+        const itemsToProcess = selectedIds.size > 0 
+            ? tasks.filter(t => selectedIds.has(t.id)) 
+            : (focusedIndex >= 0 && filteredTasks[focusedIndex] ? [filteredTasks[focusedIndex]] : []);
+
+        if (itemsToProcess.length === 0) return;
+
+        const statuses = ['backlog', 'todo', 'doing', 'done'];
+        const batch = writeBatch(db);
+        let count = 0;
+
+        itemsToProcess.forEach(task => {
+            let newStatus = targetStatus;
+            if (!newStatus) {
+                const currentIdx = statuses.indexOf(task.status || 'backlog');
+                let newIdx = currentIdx + direction;
+                if (newIdx < 0) newIdx = 0;
+                if (newIdx >= statuses.length) newIdx = statuses.length - 1;
+                newStatus = statuses[newIdx];
+            }
+            if (newStatus !== task.status) {
+                const ref = doc(db, PUBLIC_DATA_PATH, 'backlog', task.id);
+                batch.update(ref, { status: newStatus });
+                count++;
+            }
+        });
+
+        if (count > 0) {
+            await batch.commit();
+            clearSelection(); 
+        }
     };
 
-    const submit = () => {
-        onSave({
-            id: initialData?.id,
-            ...form,
-            status: form.cancel ? 'cancelled' : 'active',
-            cancellationReason: form.cancel ? form.reason : null,
-            cancellationTime: form.cancel ? (initialData?.cancellationTime || new Date().toISOString()) : null
+    // --- KEYBOARD SHORTCUTS ---
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (adminConfirm) {
+                 if (e.key === 'Escape') { e.preventDefault(); setAdminConfirm(null); }
+                 return;
+            }
+
+            if (isFormOpen) {
+                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                     e.preventDefault();
+                     saveTask();
+                     return;
+                 }
+                 if (e.key === 'Escape') {
+                     e.preventDefault();
+                     const isNew = !editingTask;
+                     const hasChanges = isNew 
+                        ? (form.title || form.desc || form.notes || form.acceptance) 
+                        : (
+                            form.title !== (editingTask.title || '') || 
+                            form.status !== (editingTask.status || 'backlog') ||
+                            form.desc !== (editingTask.desc || '')
+                          );
+                     
+                     if (hasChanges) {
+                         setAdminConfirm({
+                             title: "Ugemte ændringer",
+                             message: "Du har ændringer, der ikke er gemt. Vil du lukke uden at gemme?",
+                             onConfirm: () => { setIsFormOpen(false); setAdminConfirm(null); }
+                         });
+                     } else {
+                         setIsFormOpen(false);
+                     }
+                 }
+                 return; 
+            }
+
+            if (isImportOpen) return;
+            if (document.activeElement === searchInputRef.current) {
+                if (e.key === 'Escape') {
+                    searchInputRef.current.blur();
+                    e.preventDefault();
+                }
+                return;
+            }
+
+            if (e.key === 'æ') { e.preventDefault(); searchInputRef.current?.focus(); return; }
+            if (e.key === '?' || (e.shiftKey && e.key === '+')) { e.preventDefault(); setShowShortcuts(prev => !prev); return; }
+            if (showShortcuts && e.key === 'Escape') { setShowShortcuts(false); return; }
+            if (e.key === 'i') { e.preventDefault(); handleCopyForAI(); return; }
+
+            if (view !== 'list') return; 
+
+            switch(e.key) {
+                case 'J': // Shift+j
+                    e.preventDefault();
+                    let indexToMoveJ = focusedIndex;
+                    if (selectedIds.size === 1) {
+                        const id = [...selectedIds][0];
+                        const foundIndex = filteredTasks.findIndex(t => t.id === id);
+                        if (foundIndex !== -1) indexToMoveJ = foundIndex;
+                    }
+                    if (indexToMoveJ < filteredTasks.length - 1 && indexToMoveJ >= 0) {
+                        moveItemOrder(indexToMoveJ, 1, filteredTasks, 'backlog');
+                         setFocusedIndex(indexToMoveJ + 1);
+                    }
+                    break;
+                case 'K': // Shift+k
+                    e.preventDefault();
+                    let indexToMoveK = focusedIndex;
+                    if (selectedIds.size === 1) {
+                        const id = [...selectedIds][0];
+                        const foundIndex = filteredTasks.findIndex(t => t.id === id);
+                        if (foundIndex !== -1) indexToMoveK = foundIndex;
+                    }
+                    if (indexToMoveK > 0) {
+                        moveItemOrder(indexToMoveK, -1, filteredTasks, 'backlog');
+                         setFocusedIndex(indexToMoveK - 1);
+                    }
+                    break;
+                case 'j': e.preventDefault(); setFocusedIndex(prev => Math.min(prev + 1, filteredTasks.length - 1)); break;
+                case 'k': e.preventDefault(); setFocusedIndex(prev => Math.max(prev - 1, 0)); break;
+                case 'x': 
+                    if (focusedIndex >= 0 && filteredTasks[focusedIndex]) {
+                         e.preventDefault();
+                         toggleSelection(filteredTasks[focusedIndex].id);
+                    }
+                    break;
+                case 'o': 
+                case 'Enter':
+                    if (focusedIndex >= 0 && filteredTasks[focusedIndex]) {
+                         e.preventDefault();
+                         editTask(filteredTasks[focusedIndex]);
+                    }
+                    break;
+                case 'c': 
+                    if (selectedIds.size > 0) deleteSelected();
+                    else if (focusedIndex >= 0) deleteTask(filteredTasks[focusedIndex].id);
+                    break;
+                case 'Escape':
+                    if (selectedIds.size > 0) clearSelection();
+                    setFocusedIndex(-1);
+                    break;
+                case 'f': e.preventDefault(); bulkMoveStatus(1); break;
+                case 'a': e.preventDefault(); bulkMoveStatus(-1); break;
+                case 'd': e.preventDefault(); bulkMoveStatus(0, 'done'); break;
+                case 't': e.preventDefault(); moveSelectedTo('top'); break;
+                case 'b': e.preventDefault(); moveSelectedTo('bottom'); break;
+                case 'n': 
+                      e.preventDefault();
+                      setEditingTask(null); 
+                      resetForm();
+                      let newOrder = -Date.now(); 
+                      if (focusedIndex >= 0 && filteredTasks[focusedIndex]) {
+                          const currentItem = filteredTasks[focusedIndex];
+                          const nextItem = filteredTasks[focusedIndex + 1];
+                          if (nextItem) newOrder = (currentItem.order + nextItem.order) / 2;
+                          else newOrder = currentItem.order + 1000; 
+                      }
+                      setForm(prev => ({ ...prev, order: newOrder }));
+                      setIsFormOpen(true);
+                      break;
+                default: break;
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isFormOpen, isImportOpen, adminConfirm, view, filteredTasks, focusedIndex, selectedIds, showShortcuts, form, editingTask]);
+
+    useEffect(() => {
+        if (focusedIndex >= 0 && view === 'list') {
+            const el = document.getElementById(`task-${filteredTasks[focusedIndex]?.id}`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }, [focusedIndex]);
+
+
+    const toggleSelection = (id) => {
+        const newSet = new Set(selectedIds);
+        if (newSet.has(id)) newSet.delete(id);
+        else newSet.add(id);
+        setSelectedIds(newSet);
+    };
+
+    const clearSelection = () => setSelectedIds(new Set());
+
+    const deleteSelected = async () => {
+        if (selectedIds.size === 0) return;
+        setAdminConfirm({
+            title: `Slet ${selectedIds.size} opgaver?`,
+            message: "Er du sikker? Dette kan ikke fortrydes.",
+            onConfirm: async () => {
+                const batch = writeBatch(db);
+                selectedIds.forEach(id => {
+                    batch.delete(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
+                });
+                await batch.commit();
+                clearSelection();
+                setAdminConfirm(null);
+            }
+        });
+    };
+
+    const moveSelectedTo = async (position) => {
+        const itemsToMove = selectedIds.size > 0 
+            ? tasks.filter(t => selectedIds.has(t.id)) 
+            : (focusedIndex >= 0 && filteredTasks[focusedIndex] ? [filteredTasks[focusedIndex]] : []);
+        
+        if (itemsToMove.length === 0) return;
+        
+        const allOrders = tasks.map(t => t.order || 0);
+        let targetOrder = position === 'top' ? Math.min(...allOrders) - 1000 : Math.max(...allOrders) + 1000;
+
+        const batch = writeBatch(db);
+        let counter = 0;
+        
+        itemsToMove.forEach(task => {
+            const ref = doc(db, PUBLIC_DATA_PATH, 'backlog', task.id);
+            batch.update(ref, { order: targetOrder + (position === 'top' ? -counter : counter) });
+            counter++;
+        });
+
+        await batch.commit();
+        clearSelection();
+    };
+
+    const saveTask = async () => {
+        if (!form.title) return;
+        try {
+            if (editingTask) {
+                await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', editingTask.id), form);
+            } else {
+                await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), {
+                    ...form,
+                    order: form.order !== 0 ? form.order : -Date.now(), 
+                    createdAt: new Date().toISOString()
+                });
+                if (linkedFeedbackId) {
+                    await updateDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', linkedFeedbackId), { status: 'converted' });
+                }
+            }
+            setIsFormOpen(false);
+            setEditingTask(null);
+            setLinkedFeedbackId(null);
+            resetForm();
+        } catch (e) { alert("Fejl: " + e.message); }
+    };
+
+    const handleCopyForSheets = async () => {
+         try {
+            const items = selectedIds.size > 0 ? tasks.filter(t => selectedIds.has(t.id)) : tasks;
+            const tsv = generateCSV(items, true);
+            await navigator.clipboard.writeText(tsv);
+            onShowToast(`${items.length} opgaver kopieret til Sheets!`);
+         } catch (e) { alert("Fejl: " + e.message); }
+    };
+
+    const handleExportCSV = async () => {
+        try {
+            const items = selectedIds.size > 0 ? tasks.filter(t => selectedIds.has(t.id)) : tasks;
+            const csv = generateCSV(items, false);
+            await navigator.clipboard.writeText(csv);
+            onShowToast(`${items.length} opgaver kopieret som CSV!`);
+        } catch (e) { alert("Kunne ikke eksportere: " + e.message); }
+    };
+    
+    const handleCopyForAI = async (singleTask = null) => {
+        try {
+            let itemsToExport = [];
+            if (singleTask && singleTask.id) {
+                itemsToExport = [singleTask];
+            } else {
+                itemsToExport = selectedIds.size > 0 
+                    ? tasks.filter(t => selectedIds.has(t.id))
+                    : (focusedIndex >= 0 && filteredTasks[focusedIndex] ? [filteredTasks[focusedIndex]] : []);
+            }
+            
+            if (itemsToExport.length === 0) return;
+
+            const formatAcceptance = (text) => {
+                if (!text) return '(Ingen)';
+                const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+                const hasNumbering = lines.length > 0 && /^\d+[\.)]/.test(lines[0]);
+                if (!hasNumbering && lines.length > 0) return lines.map((l, i) => `${i+1}. ${l}`).join('\n');
+                return text;
+            };
+
+            const text = itemsToExport.map(t => `
+OPGAVE: ${t.title}
+STATUS: ${t.status}
+BESKRIVELSE: ${t.desc || '(Ingen)'}
+ACCEPTKRITERIER: 
+${formatAcceptance(t.acceptance)}
+NOTER: ${t.notes || ''}
+--------------------------------------------------
+`).join('\n');
+            
+            await navigator.clipboard.writeText(text);
+            onShowToast(`${itemsToExport.length} opgaver kopieret til AI-format!`);
+            if (singleTask) return; 
+            clearSelection();
+        } catch (e) { alert("Fejl: " + e.message); }
+    };
+
+    const handleExportFeedbackCSV = async () => {
+        try {
+            const csv = generateFeedbackCSV(feedback);
+            await navigator.clipboard.writeText(csv);
+            onShowToast("Feedback CSV kopieret!");
+        } catch (e) { alert("Fejl: " + e.message); }
+    };
+
+    const handleImportCSV = async (csvText, mode) => {
+        try {
+            const parsed = parseCSV(csvText);
+            if (!parsed || parsed.length === 0) { alert("Ingen gyldige data."); return; }
+            const batch = writeBatch(db);
+            let count = 0;
+            const now = Date.now();
+            
+            if (mode === 'replace') {
+                const snapshot = await getDocs(collection(db, PUBLIC_DATA_PATH, 'backlog'));
+                snapshot.forEach(doc => batch.delete(doc.ref));
+            }
+            
+            const mapStatus = (s) => {
+                s = (s || '').toLowerCase();
+                if (s.includes('done') || s === 'færdig') return 'done';
+                if (s.includes('doing') || s === 'igang') return 'doing';
+                if (s.includes('todo') || s === 'to do') return 'todo';
+                return 'backlog';
+            };
+
+            parsed.forEach((row, idx) => {
+                if (!row.Titel) return;
+                let ref = (row.ID && row.ID.length > 5) ? doc(db, PUBLIC_DATA_PATH, 'backlog', row.ID) : doc(collection(db, PUBLIC_DATA_PATH, 'backlog'));
+                batch.set(ref, {
+                    title: row.Titel || '',
+                    desc: row.Beskrivelse || '',
+                    acceptance: row.Acceptkriterier || '',
+                    notes: row.Noter || '',
+                    dataFields: row['Datafelter'] || '',
+                    status: mapStatus(row.Status),
+                    release: row.Release || '',
+                    tag: row.Tag || 'APP',
+                    priority: row.Prioritet || 'Medium',
+                    order: row.Order ? Number(row.Order) : -(now + idx), 
+                    createdAt: new Date().toISOString()
+                });
+                count++;
+            });
+            await batch.commit();
+            setIsImportOpen(false);
+            onShowToast(`Importerede ${count} opgaver.`);
+        } catch (e) { alert("Fejl: " + e.message); }
+    };
+
+    const resetForm = () => {
+        setForm({
+            title: '', status: 'backlog', priority: 'Medium', tag: 'APP',
+            desc: '', notes: '', acceptance: '', dataFields: '', release: '', order: 0
+        });
+    };
+
+    const editTask = (task) => {
+        setEditingTask(task);
+        setForm({
+            title: task.title || '',
+            status: task.status || 'backlog',
+            priority: task.priority || 'Medium',
+            tag: task.tag || 'APP',
+            desc: task.desc || '',
+            notes: task.notes || '',
+            acceptance: task.acceptance || '',
+            dataFields: task.dataFields || '',
+            release: task.release || '',
+            order: task.order || 0
+        });
+        setIsFormOpen(true);
+    };
+
+    const deleteTask = (id) => {
+        setAdminConfirm({
+            title: "Slet Opgave?",
+            message: "Er du sikker? Handlingen kan ikke fortrydes.",
+            onConfirm: async () => {
+                await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
+                if (isFormOpen) setIsFormOpen(false);
+                setAdminConfirm(null);
+            }
         });
     };
     
-    const existingNames = existingSessions.map(s => s.name);
-    const availableTemplates = GLOBAL_TEMPLATES.filter(t => t.day === day && !existingNames.includes(t.name));
+    const deleteFeedback = (id) => {
+         setAdminConfirm({
+            title: "Slet Feedback?",
+            message: "Er du sikker? Dette kan ikke fortrydes.",
+            onConfirm: async () => {
+                await deleteDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', id));
+                setAdminConfirm(null);
+            }
+        });
+    };
 
+    const moveTaskStatus = async (task, direction) => {
+        const statuses = ['backlog', 'todo', 'doing', 'done'];
+        const currentIdx = statuses.indexOf(task.status);
+        let newIdx = currentIdx + direction;
+        if (newIdx < 0) newIdx = 0;
+        if (newIdx >= statuses.length) newIdx = statuses.length - 1;
+        if (newIdx !== currentIdx) {
+            await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', task.id), { status: statuses[newIdx] });
+            if (selectedIds.has(task.id)) toggleSelection(task.id); 
+        }
+    };
+
+    const moveItemOrder = async (index, direction, list, collectionName) => {
+        if (filterTag !== 'ALL' && !searchQuery) { alert("Sortering kræver 'Alle' tags og ingen søgning"); return; }
+        const targetIndex = index + direction;
+        if (targetIndex < 0 || targetIndex >= list.length) return;
+        const itemA = list[index];
+        const itemB = list[targetIndex];
+        const batch = writeBatch(db);
+        batch.update(doc(db, PUBLIC_DATA_PATH, collectionName, itemA.id), { order: itemB.order || 0 });
+        batch.update(doc(db, PUBLIC_DATA_PATH, collectionName, itemB.id), { order: itemA.order || 0 });
+        await batch.commit();
+    };
+
+    const handleDragStart = (e, index) => {
+        if (isMobile) return; 
+        dragItem.current = index;
+        e.dataTransfer.effectAllowed = "move";
+        e.target.style.opacity = "0.5";
+    };
+
+    const handleDragEnter = (e, index) => {
+        if (isMobile) return;
+        dragOverItem.current = index;
+        e.preventDefault();
+    };
+
+    const handleDragEnd = async (e) => {
+        if (isMobile) return;
+        e.target.style.opacity = "1";
+        const srcIdx = dragItem.current;
+        const destIdx = dragOverItem.current;
+
+        if (srcIdx === undefined || destIdx === undefined || srcIdx === destIdx) return;
+        if (filterTag !== 'ALL' || searchQuery) { alert("Slå filtre/søgning fra for at bruge Drag'n Drop sortering."); return; }
+
+        const newList = [...filteredTasks];
+        const itemToMove = newList[srcIdx];
+        
+        newList.splice(srcIdx, 1);
+        newList.splice(destIdx, 0, itemToMove);
+        
+        const batch = writeBatch(db);
+        const orders = filteredTasks.map(t => t.order || 0).sort((a,b) => a-b);
+        
+        newList.forEach((task, i) => {
+            if (task.order !== orders[i]) {
+                const ref = doc(db, PUBLIC_DATA_PATH, 'backlog', task.id);
+                batch.update(ref, { order: orders[i] });
+            }
+        });
+
+        try { await batch.commit(); } catch(err) { console.error("Reorder failed", err); alert("Kunne ikke gemme sortering."); }
+        
+        dragItem.current = null;
+        dragOverItem.current = null;
+    };
+
+
+    const startConvertFeedback = (fbItem) => {
+        setForm({
+            title: fbItem.text, status: 'todo', priority: 'Medium', tag: 'APP',
+            desc: `Feedback fra ${fbItem.userName} (${fbItem.context || 'App'}).\n\nOriginal: "${fbItem.text}"\n\nDevice: ${fbItem.device || '?' }`,
+            notes: '', acceptance: '', dataFields: '', release: '', order: 0
+        });
+        setEditingTask(null);
+        setLinkedFeedbackId(fbItem.id);
+        setIsFormOpen(true);
+        setView('board'); 
+    }
+
+    const copyDataToClipboard = async () => {
+        try {
+            const data = { backlog: tasks, feedback: feedback, exportedAt: new Date().toISOString() };
+            await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+            onShowToast("Data kopieret!");
+        } catch (e) { alert("Fejl: " + e.message); }
+    };
+    
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 fade-in">
-             <div className="bg-slate-900 w-full max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50 shrink-0">
-                    <h3 className="text-white font-bold text-lg flex items-center"><span className="w-1 h-6 bg-blue-500 rounded-full mr-3"></span> {day}</h3>
-                    <div className="flex gap-2">
-                        {isExisting && (
-                            <button onClick={() => onFeedback(`Session: ${initialData.name} (${day})`)} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white border border-slate-700">
-                                <MessageSquarePlus className="w-5 h-5"/>
+        <div className="fixed inset-0 bg-slate-950 z-[60] overflow-y-auto pb-safe">
+            {/* HEADER - RESPONSIVE */}
+            <div className="bg-slate-900 border-b border-slate-800 p-4 sticky top-0 z-10 flex flex-col gap-4 shadow-md">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center">
+                        <button onClick={onClose} className="mr-3 p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"><ArrowLeft className="w-5 h-5"/></button>
+                        <div>
+                            <h2 className="text-white font-bold text-lg">Admin Center</h2>
+                            <p className="text-xs text-slate-500 hidden md:block">RTE Dashboard</p>
+                        </div>
+                    </div>
+                    
+                    {/* DESKTOP ACTIONS */}
+                    <div className="hidden md:flex gap-2">
+                         {selectedIds.size > 0 ? (
+                            <>
+                                <button onClick={() => handleCopyForAI()} className="bg-indigo-600 text-white border border-indigo-500 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-indigo-500 shadow-lg animate-pulse">
+                                    <Sparkles className="w-3 h-3 mr-2"/> Kopier {selectedIds.size} til AI
+                                </button>
+                                <button onClick={() => moveSelectedTo('top')} className="bg-slate-800 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:text-white hover:bg-slate-700">
+                                    <ArrowUpCircle className="w-3 h-3 mr-2"/> Top
+                                </button>
+                                <button onClick={() => moveSelectedTo('bottom')} className="bg-slate-800 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:text-white hover:bg-slate-700">
+                                    <ArrowDownCircle className="w-3 h-3 mr-2"/> Bund
+                                </button>
+                                <button onClick={() => deleteSelected()} className="bg-red-900/30 text-red-400 border border-red-700/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-red-900/50">
+                                    <Trash2 className="w-3 h-3 mr-2"/> Slet {selectedIds.size}
+                                </button>
+                                <button onClick={() => clearSelection()} className="bg-slate-800 text-slate-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:text-white">
+                                    <X className="w-3 h-3 mr-2"/> Ryd
+                                </button>
+                            </>
+                         ) : (
+                             <>
+                                <button onClick={handleCopyForSheets} className="bg-emerald-900/30 text-emerald-400 border border-emerald-700/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-emerald-900/50">
+                                    <Table className="w-3 h-3 mr-2"/> Sheets
+                                </button>
+                                <button onClick={handleExportCSV} className="bg-slate-800 text-green-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
+                                    <FileDown className="w-3 h-3 mr-2"/> Excel CSV
+                                </button>
+                                <button onClick={handleExportFeedbackCSV} className="bg-slate-800 text-purple-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
+                                    <FileDown className="w-3 h-3 mr-2"/> Feedback
+                                </button>
+                                <button onClick={() => setIsImportOpen(true)} className="bg-slate-800 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
+                                    <Upload className="w-3 h-3 mr-2"/> Import
+                                </button>
+                                <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
+                                    <Copy className="w-3 h-3 mr-2"/> Backup
+                                </button>
+                             </>
+                         )}
+                    </div>
+
+                    {/* MOBILE ACTIONS MENU */}
+                    <div className="md:hidden relative">
+                         <button onClick={() => setShowMenu(!showMenu)} className="p-2 bg-slate-800 rounded-lg text-white border border-slate-700">
+                             <MoreHorizontal className="w-6 h-6" />
+                         </button>
+                         {showMenu && (
+                             <div className="absolute right-0 top-12 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 flex flex-col gap-2 w-48 z-50">
+                                {selectedIds.size > 0 ? (
+                                    <>
+                                        <button onClick={() => { handleCopyForAI(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-indigo-400 text-xs font-bold flex items-center"><Sparkles className="w-3 h-3 mr-2"/> Kopier {selectedIds.size} til AI</button>
+                                        <button onClick={() => { moveSelectedTo('top'); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center"><ArrowUpCircle className="w-3 h-3 mr-2"/> Flyt til Top</button>
+                                        <button onClick={() => { moveSelectedTo('bottom'); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center"><ArrowDownCircle className="w-3 h-3 mr-2"/> Flyt til Bund</button>
+                                        <button onClick={() => { deleteSelected(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-red-400 text-xs font-bold flex items-center"><Trash2 className="w-3 h-3 mr-2"/> Slet {selectedIds.size}</button>
+                                        <button onClick={() => { clearSelection(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-400 text-xs font-bold flex items-center"><X className="w-3 h-3 mr-2"/> Ryd Valg</button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button onClick={() => { handleCopyForSheets(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-emerald-400 text-xs font-bold flex items-center"><Table className="w-3 h-3 mr-2"/> Kopier til Sheets</button>
+                                        <button onClick={() => { handleExportCSV(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-green-400 text-xs font-bold flex items-center"><FileDown className="w-3 h-3 mr-2"/> Eksport CSV</button>
+                                        <button onClick={() => { handleExportFeedbackCSV(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-purple-400 text-xs font-bold flex items-center"><FileDown className="w-3 h-3 mr-2"/> Eksport Feedback</button>
+                                        <button onClick={() => { setIsImportOpen(true); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center"><Upload className="w-3 h-3 mr-2"/> Import CSV</button>
+                                        <button onClick={() => { copyDataToClipboard(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-blue-400 text-xs font-bold flex items-center"><Copy className="w-3 h-3 mr-2"/> Backup JSON</button>
+                                    </>
+                                )}
+                             </div>
+                         )}
+                    </div>
+                </div>
+                
+                {/* SEARCH & FILTERS */}
+                <div className="flex flex-col gap-2">
+                     <div className="relative">
+                        <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                        <input 
+                            ref={searchInputRef}
+                            type="text" 
+                            placeholder="Søg i backlog... (æ)" 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full bg-slate-950/50 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-white focus:ring-2 focus:ring-blue-600 outline-none placeholder:text-slate-600"
+                        />
+                        {searchQuery && (
+                            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-2.5 text-slate-500 hover:text-white">
+                                <X className="w-4 h-4" />
                             </button>
                         )}
-                        <button onClick={onClose} className="p-2 bg-slate-800 rounded-full text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+                     </div>
+                     <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar mask-linear">
+                        {['ALL', 'APP', 'TEAM'].map(tag => (
+                            <button key={tag} onClick={() => setFilterTag(tag)} className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${filterTag === tag ? 'bg-slate-700 text-white border-slate-600 shadow' : 'bg-slate-800/50 text-slate-500 border-transparent hover:text-slate-300'}`}>
+                                {tag === 'ALL' ? 'Alle Tags' : tag}
+                            </button>
+                        ))}
+                         <div className="w-px h-6 bg-slate-800 mx-1 self-center"></div>
+                        {['active', 'all', 'done'].map(status => (
+                            <button key={status} onClick={() => setStatusFilter(status)} className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize whitespace-nowrap transition-all border ${statusFilter === status ? 'bg-blue-900 text-blue-100 border-blue-800 shadow' : 'bg-slate-800/50 text-slate-500 border-transparent hover:text-slate-300'}`}>
+                                {status === 'active' ? 'Aktive' : status === 'all' ? 'Alle' : 'Færdige'}
+                            </button>
+                        ))}
                     </div>
                 </div>
-                {!initialData && (
-                    <div className="flex p-2 bg-slate-800/30 gap-2 shrink-0">
-                        <button onClick={() => setTab('favorites')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tab === 'favorites' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>Vælg Eksisterende</button>
-                        <button onClick={() => setTab('adhoc')} className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${tab === 'adhoc' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>Opret Ny</button>
+            </div>
+
+            <div className="p-4 max-w-6xl mx-auto">
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex space-x-2 bg-slate-900 p-1 rounded-xl inline-flex">
+                        <button onClick={() => setView('board')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'board' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><Layout className="w-4 h-4 mr-2"/> Board</button>
+                        <button onClick={() => setView('list')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'list' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><List className="w-4 h-4 mr-2"/> Liste</button>
+                        <button onClick={() => setView('feedback')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><MessageSquarePlus className="w-4 h-4 mr-2"/> Inbox ({feedback.filter(f => f.status === 'new').length})</button>
+                    </div>
+                    {view === 'list' && <div className="hidden md:flex items-center text-slate-500 text-[10px] gap-2"><CornerDownLeft className="w-3 h-3"/> <span>Naviger: <b>J</b>/<b>K</b> &bull; Flyt: <b>⇧J</b>/<b>⇧K</b> &bull; Status: <b>A</b>/<b>F</b> &bull; Vælg: <b>X</b> &bull; Ny: <b>N</b> &bull; Hjælp: <b>?</b></span></div>}
+                </div>
+
+                {view === 'board' && (
+                    <div className="space-y-6 fade-in">
+                        <button onClick={() => { setEditingTask(null); resetForm(); setIsFormOpen(true); }} className="w-full py-3 bg-slate-800 border border-dashed border-slate-600 rounded-xl text-slate-400 hover:text-white hover:border-slate-400 flex justify-center items-center">
+                            <Plus className="w-5 h-5 mr-2"/> Opret Ny Opgave
+                        </button>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            {['backlog', 'todo', 'doing', 'done'].map(status => {
+                                if (statusFilter === 'active' && status === 'done') return null;
+                                const count = filteredTasks.filter(t => t.status === status).length;
+                                return (
+                                    <div key={status} className="bg-slate-900/50 rounded-xl border border-slate-800 p-2 min-h-[300px]">
+                                        <div className="flex justify-between items-center mb-3 px-1">
+                                             <h3 className="text-slate-400 text-xs font-bold uppercase">{status}</h3>
+                                             <div className="bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-700 text-xs font-bold text-white">{count}</div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            {filteredTasks.filter(t => t.status === status).map(task => {
+                                                const isSelected = selectedIds.has(task.id);
+                                                return (
+                                                <div key={task.id} className={`bg-slate-800 p-2 rounded-lg border shadow-sm transition-all group hover:bg-slate-700 relative ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-900/20' : 'border-slate-700 hover:border-slate-600'}`}>
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <div className="flex items-center gap-2">
+                                                             <button onClick={(e) => { e.stopPropagation(); toggleSelection(task.id); }} className={`p-1 rounded ${isSelected ? 'text-blue-400' : 'text-slate-600 hover:text-slate-300'}`}>
+                                                                {isSelected ? <CheckSquare className="w-4 h-4"/> : <Square className="w-4 h-4"/>}
+                                                             </button>
+                                                             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.tag === 'APP' ? 'bg-indigo-900 text-indigo-200' : 'bg-orange-900 text-orange-200'}`}>{task.tag}</span>
+                                                        </div>
+                                                        <div className="flex gap-1">
+                                                            {task.priority === 'Critical' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse mt-1"/>}
+                                                            <button onClick={(e) => { e.stopPropagation(); handleCopyForAI(task); }} className="text-slate-600 hover:text-indigo-400 p-0.5" title="Kopier til AI"><Sparkles className="w-3 h-3"/></button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="cursor-pointer" onClick={() => editTask(task)}>
+                                                        <p className="text-sm font-bold text-white mb-1 leading-tight">{task.title}</p>
+                                                        <p className="text-xs text-slate-400 line-clamp-5 leading-relaxed">{task.desc}</p>
+                                                    </div>
+                                                    <div className="flex justify-between mt-2 pt-2 border-t border-slate-700/50">
+                                                        <button onClick={() => moveTaskStatus(task, -1)} disabled={status === 'backlog'} className={`p-1 rounded ${status === 'backlog' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowLeft className="w-3 h-3"/></button>
+                                                        <button onClick={() => moveTaskStatus(task, 1)} disabled={status === 'done'} className={`p-1 rounded ${status === 'done' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowRight className="w-3 h-3"/></button>
+                                                    </div>
+                                                </div>
+                                            )})}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 )}
-                <div className="p-5 space-y-6 overflow-y-auto">
-                    {tab === 'favorites' && !initialData ? (
-                        <div className="space-y-2">
-                             {availableTemplates.map(t => {
-                                 const cat = CATEGORIES.find(c => c.label === t.category) || CATEGORIES[6];
-                                 return (
-                                     <button key={t.id} onClick={() => onSave({...t, id: null})} className={`w-full text-left bg-slate-950 p-3 rounded-xl border ${cat.border} border-l-4 hover:bg-slate-900 transition-colors`}>
-                                         <div className="font-bold text-sm text-white">{t.name}</div>
-                                         <div className="text-xs text-slate-500">{t.start}-{t.end} • {t.location}</div>
-                                     </button>
-                                 );
-                             })}
-                             {availableTemplates.length === 0 && <p className="text-slate-500 text-xs italic text-center">Ingen flere faste pas at vælge.</p>}
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {isExisting && <div className="p-3 bg-yellow-900/20 border border-yellow-700/50 rounded-lg text-xs text-yellow-200 mb-2">Du kan kun slette eller aflyse dette pas. For at ændre tid/sted, slet og opret på ny.</div>}
-                            <div>
-                                <label className="block text-slate-400 text-xs uppercase font-bold mb-3">Kategori</label>
-                                <div className="flex flex-wrap gap-2">
-                                    {CATEGORIES.map(cat => (
-                                        <button key={cat.label} disabled={isExisting} onClick={() => setForm({...form, category: cat.label})} className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${form.category === cat.label ? `${cat.color} text-white border-transparent` : 'bg-slate-900 border-slate-700 text-slate-400'} ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}>{cat.label}</button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Navn</label>
-                                <input disabled={isExisting} type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Start</label>
-                                    <input disabled={isExisting} type="time" value={form.start} onChange={handleStartChange} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
-                                </div>
-                                <div>
-                                    <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Slut</label>
-                                    <input disabled={isExisting} type="time" value={form.end} onChange={e => setForm({...form, end: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-3 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-600 outline-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}/>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-slate-400 text-xs uppercase font-bold mb-2">Lokation</label>
-                                <div className="relative">
-                                    <MapPin className="absolute left-3 top-3.5 w-4 h-4 text-slate-500" />
-                                    <select disabled={isExisting} value={form.location} onChange={e => setForm({...form, location: e.target.value})} className={`w-full bg-slate-950 border border-slate-800 text-white rounded-xl pl-10 pr-4 py-3 text-sm focus:ring-2 focus:ring-blue-600 outline-none appearance-none ${isExisting ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                        <option value="Rumble">Rumble</option>
-                                        <option value="Burnell">Burnell</option>
-                                        <option value="Roskilde">Roskilde</option>
-                                        <option value="Andet">Andet</option>
-                                    </select>
-                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-500"><ChevronDown className="w-4 h-4" /></div>
-                                </div>
-                            </div>
-                            {isExisting && !isStandardMode && (
-                                <div className="pt-4 border-t border-slate-800">
-                                    <label className="flex items-center space-x-2 cursor-pointer mb-3">
-                                        <input type="checkbox" checked={form.cancel} onChange={e => setForm({...form, cancel: e.target.checked})} className="w-5 h-5 rounded border-slate-600 text-red-600 bg-slate-800"/>
-                                        <span className="text-sm font-bold text-slate-300">Aflys Træning</span>
-                                    </label>
-                                    {form.cancel && (
-                                        <input type="text" placeholder="Årsag (fx Sygdom)" value={form.reason} onChange={e => setForm({...form, reason: e.target.value})} className="w-full bg-red-950/30 border border-red-900/50 text-red-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-600 outline-none"/>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-                <div className="p-4 border-t border-slate-800 bg-slate-800/50 flex space-x-3 shrink-0">
-                    {initialData && <button onClick={() => onDelete(initialData.id)} className="py-3.5 px-4 rounded-xl font-bold text-slate-400 bg-slate-800 hover:bg-slate-700 transition-colors"><Trash2 className="w-5 h-5"/></button>}
-                    <button onClick={submit} className={`flex-1 py-3.5 rounded-xl font-bold shadow-lg transition-all active:scale-95 flex justify-center items-center ${form.cancel ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>{form.cancel ? 'Gem & Aflys' : 'Gem'}</button>
-                </div>
-             </div>
-        </div>
-    );
-};
 
-// Admin Dashboard Component
-const AdminDashboard = ({ onClose, onShowToast }) => {
-    return (
-        <div className="fixed inset-0 bg-slate-950 z-[60] flex items-center justify-center">
-             <div className="text-center p-8">
-                <h2 className="text-white text-xl font-bold mb-4">Admin Dashboard</h2>
-                <button onClick={onClose} className="bg-slate-800 text-white px-4 py-2 rounded-lg">Luk</button>
-             </div>
+                {view === 'list' && (
+                    <div className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden fade-in">
+                        <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
+                            <h3 className="font-bold text-white text-sm">Prioriteret Liste ({filteredTasks.length})</h3>
+                            <button onClick={() => { setEditingTask(null); resetForm(); setIsFormOpen(true); }} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center"><Plus className="w-3 h-3 mr-1"/> Ny</button>
+                        </div>
+                        <div className="divide-y divide-slate-800">
+                            {filteredTasks.map((task, index) => {
+                                const isSelected = selectedIds.has(task.id);
+                                const isFocused = index === focusedIndex;
+                                return (
+                                <div 
+                                    id={`task-${task.id}`}
+                                    key={task.id} 
+                                    className={`p-3 flex items-center transition-all group border-l-4 ${isSelected ? 'bg-blue-900/20 border-l-blue-500' : isFocused ? 'bg-slate-800 border-l-blue-400/50' : 'bg-slate-900 border-l-transparent hover:bg-slate-800'}`}
+                                    draggable={!isMobile}
+                                    onDragStart={(e) => handleDragStart(e, index)}
+                                    onDragEnter={(e) => handleDragEnter(e, index)}
+                                    onDragEnd={handleDragEnd}
+                                    onDragOver={(e) => e.preventDefault()}
+                                >
+                                    <div className="mr-3 flex items-center gap-2">
+                                        <button onClick={(e) => { e.stopPropagation(); toggleSelection(task.id); }} className={`p-1 rounded ${isSelected ? 'text-blue-400' : 'text-slate-600 hover:text-slate-300'}`}>
+                                            {isSelected ? <CheckSquare className="w-4 h-4"/> : <Square className="w-4 h-4"/>}
+                                        </button>
+                                        
+                                        <div className="text-slate-600 cursor-grab flex flex-col items-center">
+                                            {isMobile ? (
+                                                <div className="flex flex-col gap-1">
+                                                    <button onClick={(e) => { e.stopPropagation(); moveItemOrder(index, -1, filteredTasks, 'backlog'); }} disabled={index === 0 || filterTag !== 'ALL' || searchQuery} className="p-1 hover:text-white disabled:opacity-30"><ChevronUp className="w-4 h-4"/></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); moveItemOrder(index, 1, filteredTasks, 'backlog'); }} disabled={index === filteredTasks.length - 1 || filterTag !== 'ALL' || searchQuery} className="p-1 hover:text-white disabled:opacity-30"><ChevronDown className="w-4 h-4"/></button>
+                                                </div>
+                                            ) : (
+                                                <GripVertical className="w-5 h-5 hover:text-white" />
+                                            )}
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex-1 cursor-pointer" onClick={() => editTask(task)}>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.status === 'done' ? 'bg-green-900 text-green-200' : 'bg-slate-700 text-slate-300'}`}>{task.status}</span>
+                                            <span className="text-white font-bold text-sm">{task.title}</span>
+                                        </div>
+                                        <div className="flex gap-4 text-xs text-slate-500">
+                                            <span>{task.tag}</span>
+                                            {task.release && <span className="text-blue-400">Release: {task.release}</span>}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={(e) => { e.stopPropagation(); handleCopyForAI(task); }} className="p-2 text-slate-500 hover:text-indigo-400" title="Kopier til AI"><Sparkles className="w-4 h-4"/></button>
+                                        <button onClick={() => editTask(task)} className="p-2 text-slate-500 hover:text-blue-400"><Edit2 className="w-4 h-4"/></button>
+                                        <button onClick={() => deleteTask(task.id)} className="p-2 text-slate-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                                    </div>
+                                </div>
+                            )})}
+                        </div>
+                    </div>
+                )}
+
+                {view === 'feedback' && (
+                    <div className="space-y-3 fade-in">
+                        {feedback.length === 0 && <p className="text-slate-500 text-center py-10">Ingen feedback endnu.</p>}
+                        {feedback.map((item, index) => (
+                            <div key={item.id} className={`p-4 rounded-xl border ${item.status === 'new' ? 'bg-slate-800 border-blue-900/50' : 'bg-slate-900 border-slate-800 opacity-60'}`}>
+                                <div className="flex justify-between items-start mb-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex flex-col gap-0.5 mr-1 text-slate-600">
+                                            <button onClick={() => moveItemOrder(index, -1, feedback, 'feedback')} disabled={index === 0} className="hover:text-white disabled:opacity-30"><ChevronUp className="w-3 h-3"/></button>
+                                            <button onClick={() => moveItemOrder(index, 1, feedback, 'feedback')} disabled={index === feedback.length -1} className="hover:text-white disabled:opacity-30"><ChevronDown className="w-3 h-3"/></button>
+                                        </div>
+                                        <div className="w-8 h-8 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center font-bold">{item.userName.charAt(0)}</div>
+                                        <div>
+                                            <p className="text-sm font-bold text-white">{item.userName}</p>
+                                            <p className="text-[10px] text-slate-500 flex items-center gap-2">
+                                                <span>{new Date(item.timestamp).toLocaleString()}</span>
+                                                <span className="bg-slate-800 px-1.5 rounded text-slate-400 border border-slate-700">{item.context || 'App'}</span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {item.status === 'new' && (
+                                            <button onClick={() => startConvertFeedback(item)} className="text-xs bg-blue-600/20 text-blue-400 px-3 py-1.5 rounded-lg border border-blue-600/30 hover:bg-blue-600/30 font-bold transition-colors">Opret Opgave</button>
+                                        )}
+                                        <button onClick={() => deleteFeedback(item.id)} className="p-1.5 text-slate-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
+                                    </div>
+                                </div>
+                                <div className="bg-slate-950 p-3 rounded-lg text-sm text-slate-300 border border-slate-800 mb-2">{item.text}</div>
+                                {item.device && (
+                                    <div className="mt-2 pt-2 border-t border-slate-800/50">
+                                        <div className="flex items-start text-[9px] text-slate-600 font-mono">
+                                            <Terminal className="w-3 h-3 mr-1.5 mt-0.5 opacity-50 shrink-0"/> 
+                                            <span className="break-all opacity-70 leading-relaxed">{item.device}</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {isFormOpen && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                    <div className="bg-slate-900 w-full max-w-2xl rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
+                            <h3 className="text-white font-bold text-lg">{editingTask ? 'Rediger Opgave' : 'Ny Opgave'}</h3>
+                            <button onClick={() => setIsFormOpen(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+                        </div>
+                        <div className="p-6 overflow-y-auto space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Titel</label>
+                                    <input type="text" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.title} onChange={e => setForm({...form, title: e.target.value})} autoFocus/>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Status</label>
+                                    <select className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.status} onChange={e => setForm({...form, status: e.target.value})}>
+                                        <option value="backlog">Backlog / Idé</option>
+                                        <option value="todo">To Do</option>
+                                        <option value="doing">Doing</option>
+                                        <option value="done">Done</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tag</label>
+                                    <select className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.tag} onChange={e => setForm({...form, tag: e.target.value})}>
+                                        <option value="APP">App Feature</option>
+                                        <option value="TEAM">Team Opgave</option>
+                                    </select>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Beskrivelse</label>
+                                    <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.desc} onChange={e => setForm({...form, desc: e.target.value})}/>
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Acceptkriterier</label>
+                                    <textarea rows="3" placeholder="Skriv kriterier her. De nummereres automatisk ved AI eksport." className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.acceptance} onChange={e => setForm({...form, acceptance: e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Noter</label>
+                                    <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.notes} onChange={e => setForm({...form, notes: e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Datafelter</label>
+                                    <textarea rows="2" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.dataFields} onChange={e => setForm({...form, dataFields: e.target.value})}/>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Prioritet</label>
+                                    <select className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.priority} onChange={e => setForm({...form, priority: e.target.value})}>
+                                        <option>Critical</option>
+                                        <option>High</option>
+                                        <option>Medium</option>
+                                        <option>Low</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Release</label>
+                                    <input type="text" list="releases" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.release} onChange={e => setForm({...form, release: e.target.value})}/>
+                                    <datalist id="releases">
+                                        {uniqueReleases.map(r => <option key={r} value={r}/>)}
+                                    </datalist>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-4 border-t border-slate-800 bg-slate-800/50 flex justify-between">
+                            {editingTask ? <button onClick={() => deleteTask(editingTask.id)} className="text-red-400 hover:text-red-300 px-4 py-2 text-sm font-bold flex items-center"><Trash2 className="w-4 h-4 mr-2"/> Slet</button> : <div/>}
+                            <div className="flex gap-3">
+                                <button onClick={() => setIsFormOpen(false)} className="text-slate-400 hover:text-white px-4 py-2 font-bold text-sm">Annuller</button>
+                                <button onClick={saveTask} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold text-sm flex items-center gap-2"><Save className="w-4 h-4"/> Gem Opgave</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
+            {showShortcuts && <ShortcutModal onClose={() => setShowShortcuts(false)} />}
+            {isImportOpen && <ImportModal onClose={() => setIsImportOpen(false)} onImport={handleImportCSV} />}
+            {adminConfirm && <ConfirmModal title={adminConfirm.title} message={adminConfirm.message} onConfirm={adminConfirm.onConfirm} onCancel={() => setAdminConfirm(null)} />}
         </div>
     );
 };
@@ -882,7 +1876,7 @@ const FeedbackModal = ({ user, currentContext, onClose, onShowToast }) => {
         if(!text) return;
         try {
             await addDoc(collection(db, PUBLIC_DATA_PATH, 'feedback'), {
-                text, user: user.email, timestamp: new Date().toISOString(), context: currentContext || 'App', status: 'new'
+                text, user: user.email, timestamp: new Date().toISOString(), context: currentContext || 'App', status: 'new', device: getDeviceInfo(), userName: USER_MAPPING[user.email.toLowerCase()]?.name || user.email
             });
             onShowToast("Tak for feedback!");
             onClose();
@@ -892,7 +1886,13 @@ const FeedbackModal = ({ user, currentContext, onClose, onShowToast }) => {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
             <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-700 p-6">
                 <h3 className="text-white font-bold mb-2">Send Feedback</h3>
-                <textarea className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm mb-4" rows="4" value={text} onChange={e=>setText(e.target.value)}></textarea>
+                <textarea 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-sm mb-4 focus:ring-2 focus:ring-blue-600 outline-none" 
+                    rows="4" 
+                    placeholder="Skriv her, hvis du har feedback til træningen, teamet eller app'en."
+                    value={text} 
+                    onChange={e=>setText(e.target.value)}
+                ></textarea>
                 <div className="flex justify-end gap-2">
                     <button onClick={onClose} className="text-slate-400 px-4 py-2 text-sm">Luk</button>
                     <button onClick={send} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold">Send</button>
