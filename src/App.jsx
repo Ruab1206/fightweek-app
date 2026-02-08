@@ -346,12 +346,13 @@ const ShortcutModal = ({ onClose }) => (
                 <div>
                     <h4 className="text-slate-500 font-bold uppercase text-xs mb-2">Organisering</h4>
                     <div className="flex justify-between py-1 border-b border-slate-800"><span>Flyt op/ned</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">⇧J / ⇧K</span></div>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Top / Bund</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">T / B</span></div>
                     <div className="flex justify-between py-1 border-b border-slate-800"><span>Status (H/V)</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">F / A</span></div>
-                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Ny Opgave (her)</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">N</span></div>
-                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Slet valgte</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">C</span></div>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Ny Opgave</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">N</span></div>
                 </div>
                 <div className="col-span-2 mt-2">
-                    <h4 className="text-slate-500 font-bold uppercase text-xs mb-2">Globalt</h4>
+                    <h4 className="text-slate-500 font-bold uppercase text-xs mb-2">Power Tools</h4>
+                     <div className="flex justify-between py-1 border-b border-slate-800"><span>Kopier til AI</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">I</span></div>
                      <div className="flex justify-between py-1 border-b border-slate-800"><span>Søg</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">Æ</span></div>
                      <div className="flex justify-between py-1 border-b border-slate-800"><span>Genveje (dette vindue)</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">?</span></div>
                 </div>
@@ -393,7 +394,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.63</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.64</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -641,8 +642,35 @@ const AdminDashboard = ({ onClose }) => {
     // --- KEYBOARD SHORTCUTS ---
     useEffect(() => {
         const handleKeyDown = (e) => {
-            // Disable shortcuts if form is open, or user is typing in search
-            if (isFormOpen || isImportOpen || adminConfirm) return;
+            // Handle Modal Actions
+            if (adminConfirm) {
+                 if (e.key === 'Escape') { e.preventDefault(); setAdminConfirm(null); }
+                 return;
+            }
+
+            if (isFormOpen) {
+                 if (e.key === 'Escape') {
+                     e.preventDefault();
+                     // Dirty Check Logic
+                     const isNew = !editingTask;
+                     const hasChanges = isNew 
+                        ? (form.title || form.desc) 
+                        : (form.title !== editingTask.title || form.desc !== editingTask.desc || form.status !== editingTask.status);
+                     
+                     if (hasChanges) {
+                         setAdminConfirm({
+                             title: "Ugemte ændringer",
+                             message: "Du har ændringer, der ikke er gemt. Vil du lukke uden at gemme?",
+                             onConfirm: () => { setIsFormOpen(false); setAdminConfirm(null); }
+                         });
+                     } else {
+                         setIsFormOpen(false);
+                     }
+                 }
+                 return; // Block other shortcuts
+            }
+
+            if (isImportOpen) return;
             if (document.activeElement === searchInputRef.current) {
                 if (e.key === 'Escape') {
                     searchInputRef.current.blur();
@@ -728,6 +756,18 @@ const AdminDashboard = ({ onClose }) => {
                     e.preventDefault();
                     bulkMoveStatus(0, 'done');
                     break;
+                case 'i': // AI Copy
+                    e.preventDefault();
+                    handleCopyForAI();
+                    break;
+                case 't': // Top
+                    e.preventDefault();
+                    moveSelectedTo('top');
+                    break;
+                case 'b': // Bottom
+                    e.preventDefault();
+                    moveSelectedTo('bottom');
+                    break;
                 case 'n': // New Task
                      e.preventDefault();
                      setEditingTask(null); 
@@ -757,7 +797,7 @@ const AdminDashboard = ({ onClose }) => {
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isFormOpen, isImportOpen, adminConfirm, view, filteredTasks, focusedIndex, selectedIds, showShortcuts]);
+    }, [isFormOpen, isImportOpen, adminConfirm, view, filteredTasks, focusedIndex, selectedIds, showShortcuts, form, editingTask]);
 
     // Scroll focused item into view
     useEffect(() => {
@@ -797,7 +837,11 @@ const AdminDashboard = ({ onClose }) => {
 
     // FEATURE: Move to Top/Bottom (Bulk)
     const moveSelectedTo = async (position) => {
-        if (selectedIds.size === 0) return;
+        const itemsToMove = selectedIds.size > 0 
+            ? tasks.filter(t => selectedIds.has(t.id)) 
+            : (focusedIndex >= 0 && filteredTasks[focusedIndex] ? [filteredTasks[focusedIndex]] : []);
+        
+        if (itemsToMove.length === 0) return;
         
         // Find extreme order value
         let targetOrder = 0;
@@ -812,14 +856,18 @@ const AdminDashboard = ({ onClose }) => {
 
         const batch = writeBatch(db);
         let counter = 0;
-        // Process selected IDs
-        selectedIds.forEach(id => {
-            const ref = doc(db, PUBLIC_DATA_PATH, 'backlog', id);
+        
+        itemsToMove.forEach(task => {
+            const ref = doc(db, PUBLIC_DATA_PATH, 'backlog', task.id);
             batch.update(ref, { order: targetOrder + (position === 'top' ? -counter : counter) });
             counter++;
         });
 
         await batch.commit();
+        if (selectedIds.size === 0) {
+            // If moved focused item, re-focusing is hard as index changes, but we try to scroll
+            // Actually, keep focusedIndex logic simple for now.
+        }
         clearSelection();
     };
 
@@ -868,13 +916,15 @@ const AdminDashboard = ({ onClose }) => {
     const handleCopyForAI = async (singleTask = null) => {
         try {
             let itemsToExport = [];
-            if (singleTask) {
+            if (singleTask && singleTask.id) {
                 itemsToExport = [singleTask];
             } else {
                 itemsToExport = selectedIds.size > 0 
                     ? tasks.filter(t => selectedIds.has(t.id))
-                    : filteredTasks;
+                    : (focusedIndex >= 0 && filteredTasks[focusedIndex] ? [filteredTasks[focusedIndex]] : []);
             }
+            
+            if (itemsToExport.length === 0) return;
 
             const formatAcceptance = (text) => {
                 if (!text) return '(Ingen)';
