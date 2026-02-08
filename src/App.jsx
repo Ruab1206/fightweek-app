@@ -3,7 +3,7 @@ import {
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw, MoreHorizontal, MoreVertical, Table, Sparkles, CheckSquare, Square, Search, ArrowUpCircle, ArrowDownCircle, CornerDownLeft, Keyboard
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw, MoreHorizontal, MoreVertical, Table, Sparkles, CheckSquare, Square, Search, ArrowUpCircle, ArrowDownCircle, CornerDownLeft, Keyboard, Save
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -344,17 +344,17 @@ const ShortcutModal = ({ onClose }) => (
                     <div className="flex justify-between py-1 border-b border-slate-800"><span>Ryd valg</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">Esc</span></div>
                 </div>
                 <div>
-                    <h4 className="text-slate-500 font-bold uppercase text-xs mb-2">Organisering</h4>
+                    <h4 className="text-slate-500 font-bold uppercase text-xs mb-2">Redigering</h4>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Gem (i kort)</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">⌘ + Enter</span></div>
                     <div className="flex justify-between py-1 border-b border-slate-800"><span>Flyt op/ned</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">⇧J / ⇧K</span></div>
                     <div className="flex justify-between py-1 border-b border-slate-800"><span>Top / Bund</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">T / B</span></div>
                     <div className="flex justify-between py-1 border-b border-slate-800"><span>Status (H/V)</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">F / A</span></div>
-                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Ny Opgave</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">N</span></div>
                 </div>
                 <div className="col-span-2 mt-2">
                     <h4 className="text-slate-500 font-bold uppercase text-xs mb-2">Power Tools</h4>
                      <div className="flex justify-between py-1 border-b border-slate-800"><span>Kopier til AI</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">I</span></div>
+                     <div className="flex justify-between py-1 border-b border-slate-800"><span>Ny Opgave</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">N</span></div>
                      <div className="flex justify-between py-1 border-b border-slate-800"><span>Søg</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">Æ</span></div>
-                     <div className="flex justify-between py-1 border-b border-slate-800"><span>Genveje (dette vindue)</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">?</span></div>
                 </div>
             </div>
             <div className="mt-6 text-center text-xs text-slate-500">
@@ -394,7 +394,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.64</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.65</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -649,13 +649,32 @@ const AdminDashboard = ({ onClose }) => {
             }
 
             if (isFormOpen) {
+                 // SHORTCUT: Ctrl+Enter or Cmd+Enter to SAVE
+                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                     e.preventDefault();
+                     saveTask();
+                     return;
+                 }
+                 
+                 // SHORTCUT: Escape to CLOSE (with dirty check)
                  if (e.key === 'Escape') {
                      e.preventDefault();
                      // Dirty Check Logic
                      const isNew = !editingTask;
+                     // Robust check for changes including all fields
                      const hasChanges = isNew 
-                        ? (form.title || form.desc) 
-                        : (form.title !== editingTask.title || form.desc !== editingTask.desc || form.status !== editingTask.status);
+                        ? (form.title || form.desc || form.notes || form.acceptance) 
+                        : (
+                            form.title !== (editingTask.title || '') || 
+                            form.status !== (editingTask.status || 'backlog') ||
+                            form.desc !== (editingTask.desc || '') ||
+                            form.notes !== (editingTask.notes || '') ||
+                            form.acceptance !== (editingTask.acceptance || '') ||
+                            form.priority !== (editingTask.priority || 'Medium') ||
+                            form.tag !== (editingTask.tag || 'APP') ||
+                            form.release !== (editingTask.release || '') ||
+                            form.dataFields !== (editingTask.dataFields || '')
+                          );
                      
                      if (hasChanges) {
                          setAdminConfirm({
@@ -692,6 +711,13 @@ const AdminDashboard = ({ onClose }) => {
             }
             if (showShortcuts && e.key === 'Escape') {
                 setShowShortcuts(false);
+                return;
+            }
+
+            // GLOBAL: AI Copy - moved outside 'list' view check
+            if (e.key === 'i') { 
+                e.preventDefault();
+                handleCopyForAI();
                 return;
             }
 
@@ -755,10 +781,6 @@ const AdminDashboard = ({ onClose }) => {
                 case 'd': // Done
                     e.preventDefault();
                     bulkMoveStatus(0, 'done');
-                    break;
-                case 'i': // AI Copy
-                    e.preventDefault();
-                    handleCopyForAI();
                     break;
                 case 't': // Top
                     e.preventDefault();
@@ -924,7 +946,13 @@ const AdminDashboard = ({ onClose }) => {
                     : (focusedIndex >= 0 && filteredTasks[focusedIndex] ? [filteredTasks[focusedIndex]] : []);
             }
             
-            if (itemsToExport.length === 0) return;
+            if (itemsToExport.length === 0) {
+                // FALLBACK: If nothing is selected or focused, copy ALL visible filtered tasks
+                // itemsToExport = filteredTasks;
+                // Actually, let's keep it safe. If user has no selection, do nothing to avoid accidental huge clipboard.
+                // alert("Vælg en opgave først (J/K eller X)");
+                return;
+            }
 
             const formatAcceptance = (text) => {
                 if (!text) return '(Ingen)';
@@ -1495,7 +1523,7 @@ NOTER: ${t.notes || ''}
                             {editingTask ? <button onClick={() => deleteTask(editingTask.id)} className="text-red-400 hover:text-red-300 px-4 py-2 text-sm font-bold flex items-center"><Trash2 className="w-4 h-4 mr-2"/> Slet</button> : <div/>}
                             <div className="flex gap-3">
                                 <button onClick={() => setIsFormOpen(false)} className="text-slate-400 hover:text-white px-4 py-2 font-bold text-sm">Annuller</button>
-                                <button onClick={saveTask} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold text-sm">Gem Opgave</button>
+                                <button onClick={saveTask} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-xl font-bold text-sm flex items-center gap-2"><Save className="w-4 h-4"/> Gem Opgave</button>
                             </div>
                         </div>
                     </div>
