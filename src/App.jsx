@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw, MoreHorizontal, MoreVertical, Table, Sparkles, CheckSquare, Square
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw, MoreHorizontal, MoreVertical, Table, Sparkles, CheckSquare, Square, Search, ArrowUpCircle, ArrowDownCircle, CornerDownLeft, Keyboard
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -327,6 +327,42 @@ const generateFeedbackCSV = (feedbackItems) => {
 
 // --- COMPONENTS ---
 
+const ShortcutModal = ({ onClose }) => (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4 fade-in" onClick={onClose}>
+        <div className="bg-slate-900 w-full max-w-md rounded-2xl border border-slate-700 shadow-2xl p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+                <h3 className="text-white font-bold text-lg flex items-center"><Keyboard className="w-5 h-5 mr-2 text-blue-500"/>Tastatur Genveje</h3>
+                <button onClick={onClose} className="p-1 text-slate-400 hover:text-white"><X className="w-5 h-5"/></button>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                <div>
+                    <h4 className="text-slate-500 font-bold uppercase text-xs mb-2">Navigation</h4>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Ned / Op</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">J / K</span></div>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Åbn opgave</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">Enter</span></div>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Vælg opgave</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">X</span></div>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Ryd valg</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">Esc</span></div>
+                </div>
+                <div>
+                    <h4 className="text-slate-500 font-bold uppercase text-xs mb-2">Organisering</h4>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Flyt op/ned</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">⇧J / ⇧K</span></div>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Status (H/V)</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">F / A</span></div>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Ny Opgave (her)</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">N</span></div>
+                    <div className="flex justify-between py-1 border-b border-slate-800"><span>Slet valgte</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">C</span></div>
+                </div>
+                <div className="col-span-2 mt-2">
+                    <h4 className="text-slate-500 font-bold uppercase text-xs mb-2">Globalt</h4>
+                     <div className="flex justify-between py-1 border-b border-slate-800"><span>Søg</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">Æ</span></div>
+                     <div className="flex justify-between py-1 border-b border-slate-800"><span>Genveje (dette vindue)</span> <span className="font-mono bg-slate-800 px-1.5 rounded text-white">?</span></div>
+                </div>
+            </div>
+            <div className="mt-6 text-center text-xs text-slate-500">
+                Tryk <span className="font-bold text-slate-400">?</span> overalt for at se denne oversigt.
+            </div>
+        </div>
+    </div>
+);
+
 const BrowserBlockScreen = () => {
     const [copied, setCopied] = useState(false);
     const copyLink = () => {
@@ -357,7 +393,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.60</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.63</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -385,7 +421,7 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
 );
 
 const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
-  <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4 fade-in">
+  <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80] flex items-center justify-center p-4 fade-in">
     <div className="bg-slate-900 w-full max-w-sm rounded-2xl border border-slate-700 shadow-2xl overflow-hidden p-6 text-center">
       <div className="mx-auto w-12 h-12 bg-blue-900/30 rounded-full flex items-center justify-center mb-4">
         <HelpCircle className="w-6 h-6 text-blue-500" />
@@ -491,16 +527,22 @@ const AdminDashboard = ({ onClose }) => {
     const [feedback, setFeedback] = useState([]);
     const [view, setView] = useState('board'); 
     
-    // Filters
+    // Filters & Search
     const [filterTag, setFilterTag] = useState('ALL'); 
     const [statusFilter, setStatusFilter] = useState('active'); 
+    const [searchQuery, setSearchQuery] = useState('');
     
     // Selection State
     const [selectedIds, setSelectedIds] = useState(new Set());
+    
+    // Focus for Keyboard Nav
+    const [focusedIndex, setFocusedIndex] = useState(-1);
+    const searchInputRef = useRef(null);
 
     // Task Form State
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isImportOpen, setIsImportOpen] = useState(false);
+    const [showShortcuts, setShowShortcuts] = useState(false);
     const [editingTask, setEditingTask] = useState(null);
     const [linkedFeedbackId, setLinkedFeedbackId] = useState(null);
     const [adminConfirm, setAdminConfirm] = useState(null);
@@ -508,7 +550,7 @@ const AdminDashboard = ({ onClose }) => {
 
     const [form, setForm] = useState({
         title: '', status: 'backlog', priority: 'Medium', tag: 'APP',
-        desc: '', notes: '', acceptance: '', dataFields: '', release: ''
+        desc: '', notes: '', acceptance: '', dataFields: '', release: '', order: 0
     });
 
     const isMobile = isMobileDevice();
@@ -532,14 +574,199 @@ const AdminDashboard = ({ onClose }) => {
 
         return () => { unsubBacklog(); unsubFeedback(); }
     }, []);
+    
+    // FEATURE: Unique releases for datalist
+    const uniqueReleases = useMemo(() => {
+        const releases = new Set();
+        tasks.forEach(t => { if(t.release) releases.add(t.release); });
+        return Array.from(releases).sort();
+    }, [tasks]);
 
-    const filteredTasks = tasks.filter(t => {
-        const tagMatch = filterTag === 'ALL' || t.tag === filterTag;
-        let statusMatch = true;
-        if (statusFilter === 'active') statusMatch = t.status !== 'done';
-        if (statusFilter === 'done') statusMatch = t.status === 'done';
-        return tagMatch && statusMatch;
-    });
+    const filteredTasks = useMemo(() => {
+        let result = tasks.filter(t => {
+            const tagMatch = filterTag === 'ALL' || t.tag === filterTag;
+            let statusMatch = true;
+            if (statusFilter === 'active') statusMatch = t.status !== 'done';
+            if (statusFilter === 'done') statusMatch = t.status === 'done';
+            return tagMatch && statusMatch;
+        });
+
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            result = result.filter(t => 
+                t.title.toLowerCase().includes(q) || 
+                (t.desc && t.desc.toLowerCase().includes(q)) ||
+                (t.release && t.release.toLowerCase().includes(q))
+            );
+        }
+        return result;
+    }, [tasks, filterTag, statusFilter, searchQuery]);
+
+    // FEATURE: Bulk Move Status
+    const bulkMoveStatus = async (direction, targetStatus = null) => {
+        const itemsToProcess = selectedIds.size > 0 
+            ? tasks.filter(t => selectedIds.has(t.id)) 
+            : (focusedIndex >= 0 && filteredTasks[focusedIndex] ? [filteredTasks[focusedIndex]] : []);
+
+        if (itemsToProcess.length === 0) return;
+
+        const statuses = ['backlog', 'todo', 'doing', 'done'];
+        const batch = writeBatch(db);
+        let count = 0;
+
+        itemsToProcess.forEach(task => {
+            let newStatus = targetStatus;
+            
+            if (!newStatus) {
+                const currentIdx = statuses.indexOf(task.status || 'backlog');
+                let newIdx = currentIdx + direction;
+                // Clamp
+                if (newIdx < 0) newIdx = 0;
+                if (newIdx >= statuses.length) newIdx = statuses.length - 1;
+                newStatus = statuses[newIdx];
+            }
+
+            if (newStatus !== task.status) {
+                const ref = doc(db, PUBLIC_DATA_PATH, 'backlog', task.id);
+                batch.update(ref, { status: newStatus });
+                count++;
+            }
+        });
+
+        if (count > 0) {
+            await batch.commit();
+        }
+    };
+
+    // --- KEYBOARD SHORTCUTS ---
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            // Disable shortcuts if form is open, or user is typing in search
+            if (isFormOpen || isImportOpen || adminConfirm) return;
+            if (document.activeElement === searchInputRef.current) {
+                if (e.key === 'Escape') {
+                    searchInputRef.current.blur();
+                    e.preventDefault();
+                }
+                return;
+            }
+
+            // Global Shortcuts
+            if (e.key === 'æ') {
+                e.preventDefault();
+                searchInputRef.current?.focus();
+                return;
+            }
+            if (e.key === '?' || (e.shiftKey && e.key === '+')) { 
+                e.preventDefault();
+                setShowShortcuts(prev => !prev);
+                return;
+            }
+            if (showShortcuts && e.key === 'Escape') {
+                setShowShortcuts(false);
+                return;
+            }
+
+            if (view !== 'list') return; 
+
+            switch(e.key) {
+                case 'J': // Shift+j
+                    e.preventDefault();
+                    if (focusedIndex < filteredTasks.length - 1) {
+                        moveItemOrder(focusedIndex, 1, filteredTasks, 'backlog');
+                        setFocusedIndex(prev => prev + 1); // Follow item
+                    }
+                    break;
+                case 'K': // Shift+k
+                    e.preventDefault();
+                    if (focusedIndex > 0) {
+                        moveItemOrder(focusedIndex, -1, filteredTasks, 'backlog');
+                        setFocusedIndex(prev => prev - 1); // Follow item
+                    }
+                    break;
+                case 'j': 
+                    e.preventDefault();
+                    setFocusedIndex(prev => Math.min(prev + 1, filteredTasks.length - 1));
+                    break;
+                case 'k': 
+                    e.preventDefault();
+                    setFocusedIndex(prev => Math.max(prev - 1, 0));
+                    break;
+                case 'x': 
+                    if (focusedIndex >= 0 && filteredTasks[focusedIndex]) {
+                         e.preventDefault();
+                         toggleSelection(filteredTasks[focusedIndex].id);
+                    }
+                    break;
+                case 'o': 
+                case 'Enter':
+                    if (focusedIndex >= 0 && filteredTasks[focusedIndex]) {
+                         e.preventDefault();
+                         editTask(filteredTasks[focusedIndex]);
+                    }
+                    break;
+                case 'c': 
+                    if (selectedIds.size > 0) {
+                         deleteSelected();
+                    } else if (focusedIndex >= 0) {
+                        deleteTask(filteredTasks[focusedIndex].id);
+                    }
+                    break;
+                case 'Escape':
+                    if (selectedIds.size > 0) clearSelection();
+                    setFocusedIndex(-1);
+                    break;
+                case 'f': // Forward (Right)
+                    e.preventDefault();
+                    bulkMoveStatus(1);
+                    break;
+                case 'a': // Back (Left)
+                    e.preventDefault();
+                    bulkMoveStatus(-1);
+                    break;
+                case 'd': // Done
+                    e.preventDefault();
+                    bulkMoveStatus(0, 'done');
+                    break;
+                case 'n': // New Task
+                     e.preventDefault();
+                     setEditingTask(null); 
+                     resetForm();
+                     
+                     // 3. FEATURE: CALCULATE SMART ORDER
+                     let newOrder = -Date.now(); // Default top
+                     if (focusedIndex >= 0 && filteredTasks[focusedIndex]) {
+                         const currentItem = filteredTasks[focusedIndex];
+                         const nextItem = filteredTasks[focusedIndex + 1];
+                         
+                         if (nextItem) {
+                             // Insert between current and next
+                             newOrder = (currentItem.order + nextItem.order) / 2;
+                         } else {
+                             // Insert at bottom (larger value than current)
+                             newOrder = currentItem.order + 1000; 
+                         }
+                     }
+                     setForm(prev => ({ ...prev, order: newOrder }));
+                     
+                     setIsFormOpen(true);
+                     break;
+                default: break;
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isFormOpen, isImportOpen, adminConfirm, view, filteredTasks, focusedIndex, selectedIds, showShortcuts]);
+
+    // Scroll focused item into view
+    useEffect(() => {
+        if (focusedIndex >= 0 && view === 'list') {
+            const el = document.getElementById(`task-${filteredTasks[focusedIndex]?.id}`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }, [focusedIndex]);
+
 
     // Selection Handlers
     const toggleSelection = (id) => {
@@ -568,6 +795,34 @@ const AdminDashboard = ({ onClose }) => {
         });
     };
 
+    // FEATURE: Move to Top/Bottom (Bulk)
+    const moveSelectedTo = async (position) => {
+        if (selectedIds.size === 0) return;
+        
+        // Find extreme order value
+        let targetOrder = 0;
+        const allOrders = tasks.map(t => t.order || 0);
+        if (position === 'top') {
+            const minOrder = Math.min(...allOrders);
+            targetOrder = minOrder - 1000;
+        } else {
+            const maxOrder = Math.max(...allOrders);
+            targetOrder = maxOrder + 1000;
+        }
+
+        const batch = writeBatch(db);
+        let counter = 0;
+        // Process selected IDs
+        selectedIds.forEach(id => {
+            const ref = doc(db, PUBLIC_DATA_PATH, 'backlog', id);
+            batch.update(ref, { order: targetOrder + (position === 'top' ? -counter : counter) });
+            counter++;
+        });
+
+        await batch.commit();
+        clearSelection();
+    };
+
     const saveTask = async () => {
         if (!form.title) return;
         try {
@@ -576,8 +831,9 @@ const AdminDashboard = ({ onClose }) => {
             } else {
                 await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), {
                     ...form,
-                    createdAt: new Date().toISOString(),
-                    order: -Date.now() 
+                    // If custom order is set (from 'n' shortcut), use it. Else default top.
+                    order: form.order !== 0 ? form.order : -Date.now(), 
+                    createdAt: new Date().toISOString()
                 });
                 if (linkedFeedbackId) {
                     await updateDoc(doc(db, PUBLIC_DATA_PATH, 'feedback', linkedFeedbackId), { status: 'converted' });
@@ -620,11 +876,24 @@ const AdminDashboard = ({ onClose }) => {
                     : filteredTasks;
             }
 
+            const formatAcceptance = (text) => {
+                if (!text) return '(Ingen)';
+                // If text already has numbering, leave it. If it has newlines but no numbers, add numbers.
+                const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+                const hasNumbering = lines.length > 0 && /^\d+[\.)]/.test(lines[0]);
+                
+                if (!hasNumbering && lines.length > 0) {
+                    return lines.map((l, i) => `${i+1}. ${l}`).join('\n');
+                }
+                return text;
+            };
+
             const text = itemsToExport.map(t => `
 OPGAVE: ${t.title}
 STATUS: ${t.status}
 BESKRIVELSE: ${t.desc || '(Ingen)'}
-ACCEPTKRITERIER: ${t.acceptance || '(Ingen)'}
+ACCEPTKRITERIER: 
+${formatAcceptance(t.acceptance)}
 NOTER: ${t.notes || ''}
 --------------------------------------------------
 `).join('\n');
@@ -692,7 +961,7 @@ NOTER: ${t.notes || ''}
     const resetForm = () => {
         setForm({
             title: '', status: 'backlog', priority: 'Medium', tag: 'APP',
-            desc: '', notes: '', acceptance: '', dataFields: '', release: ''
+            desc: '', notes: '', acceptance: '', dataFields: '', release: '', order: 0
         });
     };
 
@@ -707,7 +976,8 @@ NOTER: ${t.notes || ''}
             notes: task.notes || '',
             acceptance: task.acceptance || '',
             dataFields: task.dataFields || '',
-            release: task.release || ''
+            release: task.release || '',
+            order: task.order || 0
         });
         setIsFormOpen(true);
     };
@@ -747,7 +1017,7 @@ NOTER: ${t.notes || ''}
     };
 
     const moveItemOrder = async (index, direction, list, collectionName) => {
-        if (filterTag !== 'ALL') { alert("Sortering kræver 'Alle' tags"); return; }
+        if (filterTag !== 'ALL' && !searchQuery) { alert("Sortering kræver 'Alle' tags og ingen søgning"); return; }
         const targetIndex = index + direction;
         if (targetIndex < 0 || targetIndex >= list.length) return;
         const itemA = list[index];
@@ -779,7 +1049,7 @@ NOTER: ${t.notes || ''}
         const destIdx = dragOverItem.current;
 
         if (srcIdx === undefined || destIdx === undefined || srcIdx === destIdx) return;
-        if (filterTag !== 'ALL') { alert("Skift til 'Alle Tags' for at bruge Drag'n Drop sortering."); return; }
+        if (filterTag !== 'ALL' || searchQuery) { alert("Slå filtre/søgning fra for at bruge Drag'n Drop sortering."); return; }
 
         const newList = [...filteredTasks];
         const itemToMove = newList[srcIdx];
@@ -814,7 +1084,7 @@ NOTER: ${t.notes || ''}
         setForm({
             title: fbItem.text, status: 'todo', priority: 'Medium', tag: 'APP',
             desc: `Feedback fra ${fbItem.userName} (${fbItem.context || 'App'}).\n\nOriginal: "${fbItem.text}"\n\nDevice: ${fbItem.device || '?' }`,
-            notes: '', acceptance: '', dataFields: '', release: ''
+            notes: '', acceptance: '', dataFields: '', release: '', order: 0
         });
         setEditingTask(null);
         setLinkedFeedbackId(fbItem.id);
@@ -850,11 +1120,17 @@ NOTER: ${t.notes || ''}
                                 <button onClick={() => handleCopyForAI()} className="bg-indigo-600 text-white border border-indigo-500 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-indigo-500 shadow-lg animate-pulse">
                                     <Sparkles className="w-3 h-3 mr-2"/> Kopier {selectedIds.size} til AI
                                 </button>
+                                <button onClick={() => moveSelectedTo('top')} className="bg-slate-800 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:text-white hover:bg-slate-700">
+                                    <ArrowUpCircle className="w-3 h-3 mr-2"/> Top
+                                </button>
+                                <button onClick={() => moveSelectedTo('bottom')} className="bg-slate-800 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:text-white hover:bg-slate-700">
+                                    <ArrowDownCircle className="w-3 h-3 mr-2"/> Bund
+                                </button>
                                 <button onClick={() => deleteSelected()} className="bg-red-900/30 text-red-400 border border-red-700/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-red-900/50">
                                     <Trash2 className="w-3 h-3 mr-2"/> Slet {selectedIds.size}
                                 </button>
                                 <button onClick={() => clearSelection()} className="bg-slate-800 text-slate-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:text-white">
-                                    <X className="w-3 h-3 mr-2"/> Ryd Valg
+                                    <X className="w-3 h-3 mr-2"/> Ryd
                                 </button>
                             </>
                          ) : (
@@ -888,6 +1164,8 @@ NOTER: ${t.notes || ''}
                                 {selectedIds.size > 0 ? (
                                     <>
                                         <button onClick={() => { handleCopyForAI(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-indigo-400 text-xs font-bold flex items-center"><Sparkles className="w-3 h-3 mr-2"/> Kopier {selectedIds.size} til AI</button>
+                                        <button onClick={() => { moveSelectedTo('top'); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center"><ArrowUpCircle className="w-3 h-3 mr-2"/> Flyt til Top</button>
+                                        <button onClick={() => { moveSelectedTo('bottom'); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center"><ArrowDownCircle className="w-3 h-3 mr-2"/> Flyt til Bund</button>
                                         <button onClick={() => { deleteSelected(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-red-400 text-xs font-bold flex items-center"><Trash2 className="w-3 h-3 mr-2"/> Slet {selectedIds.size}</button>
                                         <button onClick={() => { clearSelection(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-400 text-xs font-bold flex items-center"><X className="w-3 h-3 mr-2"/> Ryd Valg</button>
                                     </>
@@ -905,8 +1183,24 @@ NOTER: ${t.notes || ''}
                     </div>
                 </div>
                 
-                {/* GLOBAL FILTERS - MOBILE OPTIMIZED */}
+                {/* SEARCH & FILTERS */}
                 <div className="flex flex-col gap-2">
+                     <div className="relative">
+                        <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                        <input 
+                            ref={searchInputRef}
+                            type="text" 
+                            placeholder="Søg i backlog... (æ)" 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full bg-slate-950/50 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-white focus:ring-2 focus:ring-blue-600 outline-none placeholder:text-slate-600"
+                        />
+                        {searchQuery && (
+                            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-2.5 text-slate-500 hover:text-white">
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                     </div>
                      <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar mask-linear">
                         {['ALL', 'APP', 'TEAM'].map(tag => (
                             <button key={tag} onClick={() => setFilterTag(tag)} className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${filterTag === tag ? 'bg-slate-700 text-white border-slate-600 shadow' : 'bg-slate-800/50 text-slate-500 border-transparent hover:text-slate-300'}`}>
@@ -924,10 +1218,13 @@ NOTER: ${t.notes || ''}
             </div>
 
             <div className="p-4 max-w-6xl mx-auto">
-                <div className="flex space-x-2 mb-6 bg-slate-900 p-1 rounded-xl inline-flex">
-                    <button onClick={() => setView('board')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'board' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><Layout className="w-4 h-4 mr-2"/> Board</button>
-                    <button onClick={() => setView('list')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'list' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><List className="w-4 h-4 mr-2"/> Liste</button>
-                    <button onClick={() => setView('feedback')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><MessageSquarePlus className="w-4 h-4 mr-2"/> Inbox ({feedback.filter(f => f.status === 'new').length})</button>
+                <div className="flex justify-between items-center mb-6">
+                    <div className="flex space-x-2 bg-slate-900 p-1 rounded-xl inline-flex">
+                        <button onClick={() => setView('board')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'board' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><Layout className="w-4 h-4 mr-2"/> Board</button>
+                        <button onClick={() => setView('list')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'list' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><List className="w-4 h-4 mr-2"/> Liste</button>
+                        <button onClick={() => setView('feedback')} className={`px-4 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${view === 'feedback' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><MessageSquarePlus className="w-4 h-4 mr-2"/> Inbox ({feedback.filter(f => f.status === 'new').length})</button>
+                    </div>
+                    {view === 'list' && <div className="hidden md:flex items-center text-slate-500 text-[10px] gap-2"><CornerDownLeft className="w-3 h-3"/> <span>Naviger: <b>J</b>/<b>K</b> &bull; Flyt: <b>⇧J</b>/<b>⇧K</b> &bull; Status: <b>A</b>/<b>F</b> &bull; Vælg: <b>X</b> &bull; Ny: <b>N</b> &bull; Hjælp: <b>?</b></span></div>}
                 </div>
 
                 {view === 'board' && (
@@ -989,10 +1286,12 @@ NOTER: ${t.notes || ''}
                         <div className="divide-y divide-slate-800">
                             {filteredTasks.map((task, index) => {
                                 const isSelected = selectedIds.has(task.id);
+                                const isFocused = index === focusedIndex;
                                 return (
                                 <div 
+                                    id={`task-${task.id}`}
                                     key={task.id} 
-                                    className={`p-3 flex items-center transition-colors group ${isSelected ? 'bg-blue-900/20' : 'bg-slate-900 hover:bg-slate-800'}`}
+                                    className={`p-3 flex items-center transition-all group border-l-4 ${isSelected ? 'bg-blue-900/20 border-l-blue-500' : isFocused ? 'bg-slate-800 border-l-blue-400/50' : 'bg-slate-900 border-l-transparent hover:bg-slate-800'}`}
                                     draggable={!isMobile}
                                     onDragStart={(e) => handleDragStart(e, index)}
                                     onDragEnter={(e) => handleDragEnter(e, index)}
@@ -1007,8 +1306,8 @@ NOTER: ${t.notes || ''}
                                         <div className="text-slate-600 cursor-grab flex flex-col items-center">
                                             {isMobile ? (
                                                 <div className="flex flex-col gap-1">
-                                                    <button onClick={(e) => { e.stopPropagation(); moveItemOrder(index, -1, filteredTasks, 'backlog'); }} disabled={index === 0 || filterTag !== 'ALL'} className="p-1 hover:text-white disabled:opacity-30"><ChevronUp className="w-4 h-4"/></button>
-                                                    <button onClick={(e) => { e.stopPropagation(); moveItemOrder(index, 1, filteredTasks, 'backlog'); }} disabled={index === filteredTasks.length - 1 || filterTag !== 'ALL'} className="p-1 hover:text-white disabled:opacity-30"><ChevronDown className="w-4 h-4"/></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); moveItemOrder(index, -1, filteredTasks, 'backlog'); }} disabled={index === 0 || filterTag !== 'ALL' || searchQuery} className="p-1 hover:text-white disabled:opacity-30"><ChevronUp className="w-4 h-4"/></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); moveItemOrder(index, 1, filteredTasks, 'backlog'); }} disabled={index === filteredTasks.length - 1 || filterTag !== 'ALL' || searchQuery} className="p-1 hover:text-white disabled:opacity-30"><ChevronDown className="w-4 h-4"/></button>
                                                 </div>
                                             ) : (
                                                 <GripVertical className="w-5 h-5 hover:text-white" />
@@ -1114,7 +1413,7 @@ NOTER: ${t.notes || ''}
                                 </div>
                                 <div className="col-span-2">
                                     <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Acceptkriterier</label>
-                                    <textarea rows="3" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.acceptance} onChange={e => setForm({...form, acceptance: e.target.value})}/>
+                                    <textarea rows="3" placeholder="Skriv kriterier her. De nummereres automatisk ved AI eksport." className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.acceptance} onChange={e => setForm({...form, acceptance: e.target.value})}/>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Noter</label>
@@ -1135,7 +1434,10 @@ NOTER: ${t.notes || ''}
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Release</label>
-                                    <input type="text" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.release} onChange={e => setForm({...form, release: e.target.value})}/>
+                                    <input type="text" list="releases" className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-white focus:ring-2 focus:ring-blue-600 outline-none" value={form.release} onChange={e => setForm({...form, release: e.target.value})}/>
+                                    <datalist id="releases">
+                                        {uniqueReleases.map(r => <option key={r} value={r}/>)}
+                                    </datalist>
                                 </div>
                             </div>
                         </div>
@@ -1150,6 +1452,7 @@ NOTER: ${t.notes || ''}
                 </div>
             )}
             
+            {showShortcuts && <ShortcutModal onClose={() => setShowShortcuts(false)} />}
             {isImportOpen && <ImportModal onClose={() => setIsImportOpen(false)} onImport={handleImportCSV} />}
             {adminConfirm && <ConfirmModal title={adminConfirm.title} message={adminConfirm.message} onConfirm={adminConfirm.onConfirm} onCancel={() => setAdminConfirm(null)} />}
         </div>
