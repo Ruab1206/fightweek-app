@@ -415,7 +415,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.68</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.69</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -1640,7 +1640,11 @@ const App = () => {
         } else { setAccessDenied(true); setUser(u); }
       } else { setUser(null); }
     });
-    return () => unsubAuth();
+
+    // Fallback if Firebase hangs (common in some mobile/preview environments)
+    const timeout = setTimeout(() => setAuthLoading(false), 4000);
+
+    return () => { unsubAuth(); clearTimeout(timeout); };
   }, []);
 
   // Update dates when week changes
@@ -2031,11 +2035,12 @@ const TeamSchedule = ({ days, teamData, currentWeek, isStandardMode }) => {
                                     return (
                                         <div key={key} className="mb-3 last:mb-0 bg-slate-950/30 rounded-xl p-3 border border-slate-800">
                                             <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-800/50">
-                                                <div className="flex items-center text-blue-400 font-bold font-mono">
-                                                    <Clock className="w-4 h-4 mr-2"/> {time}
+                                                <div className="flex items-center text-white font-bold font-mono text-lg">
+                                                    <Clock className="w-5 h-5 mr-2 text-blue-500"/> {time}
                                                 </div>
-                                                <div className="flex items-center text-slate-500 text-xs font-bold uppercase tracking-wider">
-                                                    <MapPin className="w-3 h-3 mr-1"/> {location}
+                                                <div className="flex items-center bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
+                                                    <MapPin className="w-3 h-3 mr-1 text-slate-400"/> 
+                                                    <span className="text-xs font-bold text-slate-200 uppercase">{location}</span>
                                                 </div>
                                             </div>
                                             
@@ -2052,7 +2057,12 @@ const TeamSchedule = ({ days, teamData, currentWeek, isStandardMode }) => {
                                                                     <div className={`text-[10px] ${isCancelled ? 'text-slate-500 line-through' : 'text-slate-400'}`}>{s.name}</div>
                                                                 </div>
                                                              </div>
-                                                             {isCancelled && <span className="text-[9px] font-bold text-red-400 bg-red-900/20 px-2 py-1 rounded">AFLYST</span>}
+                                                             {isCancelled && (
+                                                                <div className="flex flex-col items-end">
+                                                                    <span className="text-[9px] font-bold text-red-400 bg-red-900/20 px-2 py-0.5 rounded">AFLYST</span>
+                                                                    {s.cancellationReason && <span className="text-[9px] text-red-400/70 italic mt-0.5 max-w-[80px] truncate">{s.cancellationReason}</span>}
+                                                                </div>
+                                                             )}
                                                          </div>
                                                      );
                                                 })}
