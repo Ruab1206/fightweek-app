@@ -3,7 +3,7 @@ import {
   ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, Lock, HelpCircle, Smartphone, ExternalLink, Copy, Check, MousePointerClick,
-  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw, MoreHorizontal, MoreVertical, Table
+  ClipboardList, MessageSquarePlus, Download, ArrowRight, ArrowLeft, Tag, Share2, List, Layout, GripVertical, Edit2, Filter, ChevronUp, Monitor, Terminal, Upload, FileDown, RefreshCw, MoreHorizontal, MoreVertical, Table, Sparkles, CheckSquare, Square
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -357,7 +357,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.59</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.60</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -495,6 +495,9 @@ const AdminDashboard = ({ onClose }) => {
     const [filterTag, setFilterTag] = useState('ALL'); 
     const [statusFilter, setStatusFilter] = useState('active'); 
     
+    // Selection State
+    const [selectedIds, setSelectedIds] = useState(new Set());
+
     // Task Form State
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isImportOpen, setIsImportOpen] = useState(false);
@@ -538,6 +541,33 @@ const AdminDashboard = ({ onClose }) => {
         return tagMatch && statusMatch;
     });
 
+    // Selection Handlers
+    const toggleSelection = (id) => {
+        const newSet = new Set(selectedIds);
+        if (newSet.has(id)) newSet.delete(id);
+        else newSet.add(id);
+        setSelectedIds(newSet);
+    };
+
+    const clearSelection = () => setSelectedIds(new Set());
+
+    const deleteSelected = async () => {
+        if (selectedIds.size === 0) return;
+        setAdminConfirm({
+            title: `Slet ${selectedIds.size} opgaver?`,
+            message: "Er du sikker? Dette kan ikke fortrydes.",
+            onConfirm: async () => {
+                const batch = writeBatch(db);
+                selectedIds.forEach(id => {
+                    batch.delete(doc(db, PUBLIC_DATA_PATH, 'backlog', id));
+                });
+                await batch.commit();
+                clearSelection();
+                setAdminConfirm(null);
+            }
+        });
+    };
+
     const saveTask = async () => {
         if (!form.title) return;
         try {
@@ -562,18 +592,48 @@ const AdminDashboard = ({ onClose }) => {
 
     const handleCopyForSheets = async () => {
          try {
-            const tsv = generateCSV(tasks, true);
+            const items = selectedIds.size > 0 ? tasks.filter(t => selectedIds.has(t.id)) : tasks;
+            const tsv = generateCSV(items, true);
             await navigator.clipboard.writeText(tsv);
-            alert("Kopieret! Klar til indsæt i Google Sheets (uden linjeskift-fejl).");
+            alert(`${items.length} opgaver kopieret til Sheets!`);
          } catch (e) { alert("Fejl: " + e.message); }
     };
 
     const handleExportCSV = async () => {
         try {
-            const csv = generateCSV(tasks, false);
+            const items = selectedIds.size > 0 ? tasks.filter(t => selectedIds.has(t.id)) : tasks;
+            const csv = generateCSV(items, false);
             await navigator.clipboard.writeText(csv);
-            alert("CSV (Excel-format) kopieret til udklipsholder!");
+            alert(`${items.length} opgaver kopieret som CSV!`);
         } catch (e) { alert("Kunne ikke eksportere: " + e.message); }
+    };
+    
+    // NEW: Copy formatted text for AI prompting
+    const handleCopyForAI = async (singleTask = null) => {
+        try {
+            let itemsToExport = [];
+            if (singleTask) {
+                itemsToExport = [singleTask];
+            } else {
+                itemsToExport = selectedIds.size > 0 
+                    ? tasks.filter(t => selectedIds.has(t.id))
+                    : filteredTasks;
+            }
+
+            const text = itemsToExport.map(t => `
+OPGAVE: ${t.title}
+STATUS: ${t.status}
+BESKRIVELSE: ${t.desc || '(Ingen)'}
+ACCEPTKRITERIER: ${t.acceptance || '(Ingen)'}
+NOTER: ${t.notes || ''}
+--------------------------------------------------
+`).join('\n');
+            
+            await navigator.clipboard.writeText(text);
+            alert(`${itemsToExport.length} opgaver kopieret til AI-format!`);
+            if (singleTask) return; // Don't clear selection if specific task copy
+            clearSelection();
+        } catch (e) { alert("Fejl: " + e.message); }
     };
 
     const handleExportFeedbackCSV = async () => {
@@ -785,21 +845,37 @@ const AdminDashboard = ({ onClose }) => {
                     
                     {/* DESKTOP ACTIONS */}
                     <div className="hidden md:flex gap-2">
-                         <button onClick={handleCopyForSheets} className="bg-emerald-900/30 text-emerald-400 border border-emerald-700/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-emerald-900/50">
-                            <Table className="w-3 h-3 mr-2"/> Kopier til Sheets
-                        </button>
-                        <button onClick={handleExportCSV} className="bg-slate-800 text-green-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
-                            <FileDown className="w-3 h-3 mr-2"/> Excel CSV
-                        </button>
-                        <button onClick={handleExportFeedbackCSV} className="bg-slate-800 text-purple-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
-                            <FileDown className="w-3 h-3 mr-2"/> Feedback
-                        </button>
-                        <button onClick={() => setIsImportOpen(true)} className="bg-slate-800 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
-                            <Upload className="w-3 h-3 mr-2"/> Import
-                        </button>
-                        <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
-                            <Copy className="w-3 h-3 mr-2"/> Backup
-                        </button>
+                         {selectedIds.size > 0 ? (
+                            <>
+                                <button onClick={() => handleCopyForAI()} className="bg-indigo-600 text-white border border-indigo-500 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-indigo-500 shadow-lg animate-pulse">
+                                    <Sparkles className="w-3 h-3 mr-2"/> Kopier {selectedIds.size} til AI
+                                </button>
+                                <button onClick={() => deleteSelected()} className="bg-red-900/30 text-red-400 border border-red-700/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-red-900/50">
+                                    <Trash2 className="w-3 h-3 mr-2"/> Slet {selectedIds.size}
+                                </button>
+                                <button onClick={() => clearSelection()} className="bg-slate-800 text-slate-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:text-white">
+                                    <X className="w-3 h-3 mr-2"/> Ryd Valg
+                                </button>
+                            </>
+                         ) : (
+                             <>
+                                <button onClick={handleCopyForSheets} className="bg-emerald-900/30 text-emerald-400 border border-emerald-700/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-emerald-900/50">
+                                    <Table className="w-3 h-3 mr-2"/> Sheets
+                                </button>
+                                <button onClick={handleExportCSV} className="bg-slate-800 text-green-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
+                                    <FileDown className="w-3 h-3 mr-2"/> Excel CSV
+                                </button>
+                                <button onClick={handleExportFeedbackCSV} className="bg-slate-800 text-purple-400 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
+                                    <FileDown className="w-3 h-3 mr-2"/> Feedback
+                                </button>
+                                <button onClick={() => setIsImportOpen(true)} className="bg-slate-800 text-slate-300 border border-slate-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center hover:bg-slate-700">
+                                    <Upload className="w-3 h-3 mr-2"/> Import
+                                </button>
+                                <button onClick={copyDataToClipboard} className="bg-blue-600/20 text-blue-400 border border-blue-600/50 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
+                                    <Copy className="w-3 h-3 mr-2"/> Backup
+                                </button>
+                             </>
+                         )}
                     </div>
 
                     {/* MOBILE ACTIONS MENU */}
@@ -809,11 +885,21 @@ const AdminDashboard = ({ onClose }) => {
                          </button>
                          {showMenu && (
                              <div className="absolute right-0 top-12 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 flex flex-col gap-2 w-48 z-50">
-                                <button onClick={() => { handleCopyForSheets(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-emerald-400 text-xs font-bold flex items-center"><Table className="w-3 h-3 mr-2"/> Kopier til Sheets</button>
-                                <button onClick={() => { handleExportCSV(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-green-400 text-xs font-bold flex items-center"><FileDown className="w-3 h-3 mr-2"/> Eksport CSV</button>
-                                <button onClick={() => { handleExportFeedbackCSV(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-purple-400 text-xs font-bold flex items-center"><FileDown className="w-3 h-3 mr-2"/> Eksport Feedback</button>
-                                <button onClick={() => { setIsImportOpen(true); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center"><Upload className="w-3 h-3 mr-2"/> Import CSV</button>
-                                <button onClick={() => { copyDataToClipboard(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-blue-400 text-xs font-bold flex items-center"><Copy className="w-3 h-3 mr-2"/> Backup JSON</button>
+                                {selectedIds.size > 0 ? (
+                                    <>
+                                        <button onClick={() => { handleCopyForAI(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-indigo-400 text-xs font-bold flex items-center"><Sparkles className="w-3 h-3 mr-2"/> Kopier {selectedIds.size} til AI</button>
+                                        <button onClick={() => { deleteSelected(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-red-400 text-xs font-bold flex items-center"><Trash2 className="w-3 h-3 mr-2"/> Slet {selectedIds.size}</button>
+                                        <button onClick={() => { clearSelection(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-400 text-xs font-bold flex items-center"><X className="w-3 h-3 mr-2"/> Ryd Valg</button>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button onClick={() => { handleCopyForSheets(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-emerald-400 text-xs font-bold flex items-center"><Table className="w-3 h-3 mr-2"/> Kopier til Sheets</button>
+                                        <button onClick={() => { handleExportCSV(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-green-400 text-xs font-bold flex items-center"><FileDown className="w-3 h-3 mr-2"/> Eksport CSV</button>
+                                        <button onClick={() => { handleExportFeedbackCSV(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-purple-400 text-xs font-bold flex items-center"><FileDown className="w-3 h-3 mr-2"/> Eksport Feedback</button>
+                                        <button onClick={() => { setIsImportOpen(true); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center"><Upload className="w-3 h-3 mr-2"/> Import CSV</button>
+                                        <button onClick={() => { copyDataToClipboard(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-blue-400 text-xs font-bold flex items-center"><Copy className="w-3 h-3 mr-2"/> Backup JSON</button>
+                                    </>
+                                )}
                              </div>
                          )}
                     </div>
@@ -860,13 +946,20 @@ const AdminDashboard = ({ onClose }) => {
                                              <div className="bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-700 text-xs font-bold text-white">{count}</div>
                                         </div>
                                         <div className="space-y-2">
-                                            {filteredTasks.filter(t => t.status === status).map(task => (
-                                                <div key={task.id} className="bg-slate-800 p-2 rounded-lg border border-slate-700 shadow-sm transition-all group hover:bg-slate-700 relative hover:border-slate-600">
-                                                    <div className="flex justify-between items-start mb-1 cursor-pointer" onClick={() => editTask(task)}>
-                                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.tag === 'APP' ? 'bg-indigo-900 text-indigo-200' : 'bg-orange-900 text-orange-200'}`}>{task.tag}</span>
+                                            {filteredTasks.filter(t => t.status === status).map(task => {
+                                                const isSelected = selectedIds.has(task.id);
+                                                return (
+                                                <div key={task.id} className={`bg-slate-800 p-2 rounded-lg border shadow-sm transition-all group hover:bg-slate-700 relative ${isSelected ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-900/20' : 'border-slate-700 hover:border-slate-600'}`}>
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <div className="flex items-center gap-2">
+                                                             <button onClick={(e) => { e.stopPropagation(); toggleSelection(task.id); }} className={`p-1 rounded ${isSelected ? 'text-blue-400' : 'text-slate-600 hover:text-slate-300'}`}>
+                                                                {isSelected ? <CheckSquare className="w-4 h-4"/> : <Square className="w-4 h-4"/>}
+                                                             </button>
+                                                             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${task.tag === 'APP' ? 'bg-indigo-900 text-indigo-200' : 'bg-orange-900 text-orange-200'}`}>{task.tag}</span>
+                                                        </div>
                                                         <div className="flex gap-1">
                                                             {task.priority === 'Critical' && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse mt-1"/>}
-                                                            <button onClick={(e) => { e.stopPropagation(); deleteTask(task.id); }} className="text-slate-600 hover:text-red-500 p-0.5"><Trash2 className="w-3 h-3"/></button>
+                                                            <button onClick={(e) => { e.stopPropagation(); handleCopyForAI(task); }} className="text-slate-600 hover:text-indigo-400 p-0.5" title="Kopier til AI"><Sparkles className="w-3 h-3"/></button>
                                                         </div>
                                                     </div>
                                                     <div className="cursor-pointer" onClick={() => editTask(task)}>
@@ -878,7 +971,7 @@ const AdminDashboard = ({ onClose }) => {
                                                         <button onClick={() => moveTaskStatus(task, 1)} disabled={status === 'done'} className={`p-1 rounded ${status === 'done' ? 'text-slate-700' : 'text-slate-400 hover:text-white hover:bg-slate-600'}`}><ArrowRight className="w-3 h-3"/></button>
                                                     </div>
                                                 </div>
-                                            ))}
+                                            )})}
                                         </div>
                                     </div>
                                 );
@@ -894,26 +987,33 @@ const AdminDashboard = ({ onClose }) => {
                             <button onClick={() => { setEditingTask(null); resetForm(); setIsFormOpen(true); }} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center"><Plus className="w-3 h-3 mr-1"/> Ny</button>
                         </div>
                         <div className="divide-y divide-slate-800">
-                            {filteredTasks.map((task, index) => (
+                            {filteredTasks.map((task, index) => {
+                                const isSelected = selectedIds.has(task.id);
+                                return (
                                 <div 
                                     key={task.id} 
-                                    className="p-3 flex items-center bg-slate-900 hover:bg-slate-800 transition-colors group"
+                                    className={`p-3 flex items-center transition-colors group ${isSelected ? 'bg-blue-900/20' : 'bg-slate-900 hover:bg-slate-800'}`}
                                     draggable={!isMobile}
                                     onDragStart={(e) => handleDragStart(e, index)}
                                     onDragEnter={(e) => handleDragEnter(e, index)}
                                     onDragEnd={handleDragEnd}
                                     onDragOver={(e) => e.preventDefault()}
                                 >
-                                    {/* CONTROLS: Mobile=Arrows, Desktop=Grip */}
-                                    <div className="mr-3 text-slate-600 cursor-grab flex flex-col items-center">
-                                        {isMobile ? (
-                                            <div className="flex flex-col gap-1">
-                                                <button onClick={(e) => { e.stopPropagation(); moveItemOrder(index, -1, filteredTasks, 'backlog'); }} disabled={index === 0 || filterTag !== 'ALL'} className="p-1 hover:text-white disabled:opacity-30"><ChevronUp className="w-4 h-4"/></button>
-                                                <button onClick={(e) => { e.stopPropagation(); moveItemOrder(index, 1, filteredTasks, 'backlog'); }} disabled={index === filteredTasks.length - 1 || filterTag !== 'ALL'} className="p-1 hover:text-white disabled:opacity-30"><ChevronDown className="w-4 h-4"/></button>
-                                            </div>
-                                        ) : (
-                                            <GripVertical className="w-5 h-5 mt-1 hover:text-white" />
-                                        )}
+                                    <div className="mr-3 flex items-center gap-2">
+                                        <button onClick={(e) => { e.stopPropagation(); toggleSelection(task.id); }} className={`p-1 rounded ${isSelected ? 'text-blue-400' : 'text-slate-600 hover:text-slate-300'}`}>
+                                            {isSelected ? <CheckSquare className="w-4 h-4"/> : <Square className="w-4 h-4"/>}
+                                        </button>
+                                        
+                                        <div className="text-slate-600 cursor-grab flex flex-col items-center">
+                                            {isMobile ? (
+                                                <div className="flex flex-col gap-1">
+                                                    <button onClick={(e) => { e.stopPropagation(); moveItemOrder(index, -1, filteredTasks, 'backlog'); }} disabled={index === 0 || filterTag !== 'ALL'} className="p-1 hover:text-white disabled:opacity-30"><ChevronUp className="w-4 h-4"/></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); moveItemOrder(index, 1, filteredTasks, 'backlog'); }} disabled={index === filteredTasks.length - 1 || filterTag !== 'ALL'} className="p-1 hover:text-white disabled:opacity-30"><ChevronDown className="w-4 h-4"/></button>
+                                                </div>
+                                            ) : (
+                                                <GripVertical className="w-5 h-5 hover:text-white" />
+                                            )}
+                                        </div>
                                     </div>
                                     
                                     <div className="flex-1 cursor-pointer" onClick={() => editTask(task)}>
@@ -927,11 +1027,12 @@ const AdminDashboard = ({ onClose }) => {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
+                                        <button onClick={(e) => { e.stopPropagation(); handleCopyForAI(task); }} className="p-2 text-slate-500 hover:text-indigo-400" title="Kopier til AI"><Sparkles className="w-4 h-4"/></button>
                                         <button onClick={() => editTask(task)} className="p-2 text-slate-500 hover:text-blue-400"><Edit2 className="w-4 h-4"/></button>
                                         <button onClick={() => deleteTask(task.id)} className="p-2 text-slate-600 hover:text-red-500"><Trash2 className="w-4 h-4"/></button>
                                     </div>
                                 </div>
-                            ))}
+                            )})}
                         </div>
                     </div>
                 )}
