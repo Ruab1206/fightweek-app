@@ -1,10 +1,10 @@
 /**
- * FIGHTWEEK APP v1.75
+ * FIGHTWEEK APP v1.76
  * -------------------
- * - Login: Tekst rettet (fjernet "Popup")
- * - Admin: Fuldt dashboard genindført (Backlog, CSV, Genveje)
- * - Feedback: Placeholder tekst tilføjet
- * - Core: v1.74 logik bevaret
+ * - FIX: SessionModal genindført (løser sort skærm ved klik på pas)
+ * - FIX: Manglende ikoner (ArrowLeft/Right) tilføjet (løser sort skærm i Admin)
+ * - Admin: Fuldt dashboard (Backlog, CSV, Genveje)
+ * - Login: Tekst rettet
  */
 
 // --- SEKTION 1: IMPORTS ---
@@ -15,7 +15,8 @@ import {
   History, Globe, LogOut, ClipboardList, MessageSquarePlus, 
   MoreHorizontal, Sparkles, CheckSquare, Square, Search, 
   ArrowUpCircle, ArrowDownCircle, CornerDownLeft, Keyboard, Save, 
-  Layout, List, Upload, FileDown, Table, RefreshCw, Terminal, Check, Copy, Smartphone, HelpCircle, MousePointerClick, GripVertical, Edit2, Filter, Monitor
+  Layout, List, Upload, FileDown, Table, RefreshCw, Terminal, Check, Copy, Smartphone, HelpCircle, MousePointerClick, GripVertical, Edit2, Filter, Monitor,
+  ArrowLeft, ArrowRight // Tilføjet manglende ikoner
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
@@ -367,7 +368,7 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
         <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-          <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.75</div>
+          <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.76</div>
           <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
             <ShieldCheck className="w-8 h-8 text-white" />
           </div>
@@ -392,6 +393,138 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => {
           </button>
         </div>
       </div>
+    );
+};
+
+// --- MANGLENDE COMPONENT: SessionModal (Genskabt) ---
+const SessionModal = ({ day, initialData, existingSessions, onClose, onSave, onDelete, isStandardMode, onFeedback }) => {
+    const isNew = !initialData;
+    const [form, setForm] = useState({
+        name: '', category: 'MMA', start: '', end: '', location: '', status: 'active', cancellationReason: '', cancellationTime: null
+    });
+
+    useEffect(() => {
+        if (initialData) setForm(initialData);
+        else {
+            const templates = GLOBAL_TEMPLATES.filter(t => t.day === day);
+            if (templates.length > 0 && !initialData) {
+               // Optional: Pre-fill logic could go here, but keep it clean for now
+            }
+        }
+    }, [initialData, day]);
+
+    const handleChange = (field, value) => {
+        setForm(prev => {
+            const newData = { ...prev, [field]: value };
+            if (field === 'start' && value && !prev.end) newData.end = addMinutes(value, 90);
+            return newData;
+        });
+    };
+
+    const handleQuickSelect = (template) => {
+        setForm({ ...template, id: form.id || undefined }); // Keep ID if editing
+    };
+    
+    const toggleStatus = () => {
+        setForm(prev => ({
+            ...prev,
+            status: prev.status === 'active' ? 'cancelled' : 'active',
+            cancellationReason: prev.status === 'active' ? 'Aflyst' : '',
+            cancellationTime: prev.status === 'active' ? new Date().toISOString() : null
+        }));
+    };
+
+    const relevantTemplates = GLOBAL_TEMPLATES.filter(t => t.day === day);
+
+    return (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center sm:p-4 fade-in">
+            <div className="bg-slate-900 w-full max-w-lg sm:rounded-2xl rounded-t-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
+                    <h3 className="text-white font-bold text-lg">{isNew ? `Nyt Pas: ${day}` : 'Rediger Pas'}</h3>
+                    <button onClick={onClose} className="p-1 text-slate-400 hover:text-white bg-slate-800 rounded-full"><X className="w-5 h-5" /></button>
+                </div>
+                
+                <div className="p-6 overflow-y-auto space-y-5">
+                    {/* Quick Select Templates */}
+                    {isNew && relevantTemplates.length > 0 && (
+                        <div className="mb-4">
+                            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Hurtigvalg</label>
+                            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                                {relevantTemplates.map(t => (
+                                    <button key={t.id} onClick={() => handleQuickSelect(t)} className="flex-shrink-0 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg p-2 px-3 text-left transition-colors">
+                                        <div className="text-white text-xs font-bold whitespace-nowrap">{t.name}</div>
+                                        <div className="text-slate-400 text-[10px]">{t.start}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Aktivitet</label>
+                        <input type="text" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:ring-2 focus:ring-blue-600 outline-none font-bold" value={form.name} onChange={e => handleChange('name', e.target.value)} placeholder="F.eks. MMA Sparring" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Kategori</label>
+                            <select className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:ring-2 focus:ring-blue-600 outline-none appearance-none" value={form.category} onChange={e => handleChange('category', e.target.value)}>
+                                {CATEGORIES.map(c => <option key={c.label} value={c.label}>{c.label}</option>)}
+                            </select>
+                        </div>
+                         <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Lokation</label>
+                            <select className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:ring-2 focus:ring-blue-600 outline-none appearance-none" value={form.location} onChange={e => handleChange('location', e.target.value)}>
+                                <option value="">Vælg...</option>
+                                <option value="Rumble">Rumble</option>
+                                <option value="Burnell">Burnell</option>
+                                <option value="Rødovre">Rødovre</option>
+                                <option value="Roskilde">Roskilde</option>
+                                <option value="Andet">Andet</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Start</label>
+                            <input type="time" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:ring-2 focus:ring-blue-600 outline-none text-center font-mono" value={form.start} onChange={e => handleChange('start', e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Slut</label>
+                            <input type="time" className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-white focus:ring-2 focus:ring-blue-600 outline-none text-center font-mono" value={form.end} onChange={e => handleChange('end', e.target.value)} />
+                        </div>
+                    </div>
+                    
+                    {!isStandardMode && !isNew && (
+                        <div className="pt-2 border-t border-slate-800">
+                             <div className="flex items-center justify-between mb-2">
+                                <label className="text-xs font-bold text-slate-400 uppercase">Status</label>
+                                <button onClick={toggleStatus} className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors ${form.status === 'cancelled' ? 'bg-red-600 text-white' : 'bg-green-600/20 text-green-400 border border-green-600/50'}`}>
+                                    {form.status === 'cancelled' ? 'AFLYST' : 'AKTIV'}
+                                </button>
+                             </div>
+                             {form.status === 'cancelled' && (
+                                <input type="text" className="w-full bg-red-900/20 border border-red-900/50 rounded-xl p-2 text-red-200 text-sm placeholder-red-400/50 focus:outline-none" value={form.cancellationReason} onChange={e => handleChange('cancellationReason', e.target.value)} placeholder="Årsag (Sygdom, Skade...)" />
+                             )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-4 border-t border-slate-800 bg-slate-800/50 flex justify-between items-center pb-safe">
+                    <div className="flex gap-2">
+                         {!isNew && <button onClick={() => onDelete(form.id)} className="p-3 text-slate-500 hover:text-red-500 hover:bg-red-900/20 rounded-xl transition-colors"><Trash2 className="w-5 h-5" /></button>}
+                         {!isNew && !isStandardMode && <button onClick={() => { onClose(); onFeedback(`Pas: ${form.name}`); }} className="p-3 text-slate-500 hover:text-blue-400 hover:bg-blue-900/20 rounded-xl transition-colors"><MessageSquarePlus className="w-5 h-5" /></button>}
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={onClose} className="text-slate-400 hover:text-white font-bold text-sm px-4">Annuller</button>
+                        <button onClick={() => onSave(form)} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-blue-900/20 flex items-center">
+                            <Save className="w-4 h-4 mr-2" /> Gem
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 };
 
