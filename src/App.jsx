@@ -415,7 +415,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.67</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.68</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -1288,7 +1288,7 @@ NOTER: ${t.notes || ''}
                                         <button onClick={() => { moveSelectedTo('top'); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center"><ArrowUpCircle className="w-3 h-3 mr-2"/> Flyt til Top</button>
                                         <button onClick={() => { moveSelectedTo('bottom'); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-300 text-xs font-bold flex items-center"><ArrowDownCircle className="w-3 h-3 mr-2"/> Flyt til Bund</button>
                                         <button onClick={() => { deleteSelected(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-red-400 text-xs font-bold flex items-center"><Trash2 className="w-3 h-3 mr-2"/> Slet {selectedIds.size}</button>
-                                        <button onClick={() => { clearSelection(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-slate-400 text-xs font-bold flex items-center"><X className="w-3 h-3 mr-2"/> Ryd Valg</button>
+                                        <button onClick={() => { clearSelection(); setShowMenu(false); }} className="text-left px-3 py-2 rounded-lg hover:bg-slate-400 text-xs font-bold flex items-center"><X className="w-3 h-3 mr-2"/> Ryd Valg</button>
                                     </>
                                 ) : (
                                     <>
@@ -1975,7 +1975,7 @@ const NavButton = ({ icon: Icon, label, active, onClick }) => (
     </button>
 );
 
-// 2. FEATURE: REFACTORED TEAM SCHEDULE (Responsive)
+// 2. FEATURE: REFACTORED TEAM SCHEDULE (Responsive & Time-Grouped)
 const TeamSchedule = ({ days, teamData, currentWeek, isStandardMode }) => {
     const [weekDates, setWeekDates] = useState({});
     
@@ -1983,63 +1983,82 @@ const TeamSchedule = ({ days, teamData, currentWeek, isStandardMode }) => {
         setWeekDates(getWeekDateMap(currentWeek));
     }, [currentWeek]);
 
-    // Scroll to current day logic
     useEffect(() => {
         const dayIndex = new Date().getDay(); 
         const dayName = dayIndex === 0 ? 'Søndag' : DAYS[dayIndex - 1];
         const element = document.getElementById(`team-day-${dayName}`);
         if (element) {
-            // Tiny timeout to ensure rendering
             setTimeout(() => element.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
         }
-    }, [days]); // Run once when mounted
+    }, [days]); 
 
     return (
         <div className="fade-in px-4 pb-32">
-             <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+             <div className="flex flex-col gap-6">
                  {days.map(day => {
-                     // Collect all sessions for this day across all fighters
-                     let daySessions = [];
+                     // 1. COLLECT SESSIONS
+                     const slots = {};
                      Object.keys(teamData).forEach(fighter => {
                         const data = teamData[fighter];
                         if (!data) return;
                         const sessions = data[day] || [];
                         sessions.forEach(s => {
                             if (s.isRestDay) return;
-                            daySessions.push({ ...s, fighter });
+                            // 2. GROUP BY TIME AND LOCATION
+                            const key = `${s.start}###${s.location}`;
+                            if (!slots[key]) slots[key] = [];
+                            slots[key].push({ ...s, fighter });
                         });
                      });
                      
-                     // Sort by time
-                     daySessions.sort((a,b) => (a.start || '').localeCompare(b.start || ''));
-
-                     // Group by time for cleaner display (optional, but good for list)
-                     // Simple list for now as requested
+                     // 3. SORT TIME SLOTS
+                     const sortedKeys = Object.keys(slots).sort();
                      
                      return (
-                         <div id={`team-day-${day}`} key={day} className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-lg h-full">
-                            <div className="bg-slate-800/80 p-3 border-b border-slate-800 flex justify-between items-center sticky top-0 z-10 backdrop-blur-md">
-                                <h3 className="text-white font-bold">{day}</h3>
-                                {!isStandardMode && weekDates[day] && <span className="text-xs text-slate-400">{weekDates[day]}</span>}
+                         <div id={`team-day-${day}`} key={day} className="bg-slate-900 rounded-2xl border border-slate-800 shadow-lg overflow-hidden">
+                            <div className="bg-slate-800/50 p-4 border-b border-slate-800 flex justify-between items-center">
+                                <h3 className="text-white font-bold text-lg">{day}</h3>
+                                {!isStandardMode && weekDates[day] && <span className="text-sm text-slate-400 font-medium">{weekDates[day]}</span>}
                             </div>
-                            <div className="p-2 space-y-2">
-                                {daySessions.length === 0 && <div className="text-center py-6 text-slate-600 text-xs italic">Ingen træning</div>}
-                                {daySessions.map((s, idx) => {
-                                     const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
-                                     const isCancelled = s.status === 'cancelled';
-                                     return (
-                                         <div key={`${day}-${idx}`} className={`p-2 rounded-lg border ${isCancelled ? 'bg-red-900/10 border-red-900/30' : 'bg-slate-800/50 border-slate-700/50'} relative`}>
-                                             <div className={`absolute left-0 top-2 bottom-2 w-1 rounded-r ${isCancelled ? 'bg-red-500' : cat.color}`}></div>
-                                             <div className="pl-2.5">
-                                                 <div className="flex justify-between items-start">
-                                                     <span className="text-[10px] text-slate-400 font-mono">{s.start}</span>
-                                                     <span className="text-[9px] bg-slate-950 px-1 rounded text-slate-500 uppercase">{s.fighter}</span>
-                                                 </div>
-                                                 <div className={`font-bold text-xs ${isCancelled ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{s.name}</div>
-                                                 {isCancelled && <div className="text-[9px] text-red-400 mt-1">AFLYST</div>}
-                                             </div>
-                                         </div>
-                                     );
+                            
+                            <div className="p-2">
+                                {sortedKeys.length === 0 && <div className="text-center py-8 text-slate-600 text-sm italic border-2 border-dashed border-slate-800/50 rounded-xl m-2">Ingen fælles træning planlagt</div>}
+                                
+                                {sortedKeys.map(key => {
+                                    const [time, location] = key.split('###');
+                                    const sessions = slots[key];
+                                    
+                                    return (
+                                        <div key={key} className="mb-3 last:mb-0 bg-slate-950/30 rounded-xl p-3 border border-slate-800">
+                                            <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-800/50">
+                                                <div className="flex items-center text-blue-400 font-bold font-mono">
+                                                    <Clock className="w-4 h-4 mr-2"/> {time}
+                                                </div>
+                                                <div className="flex items-center text-slate-500 text-xs font-bold uppercase tracking-wider">
+                                                    <MapPin className="w-3 h-3 mr-1"/> {location}
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="space-y-2">
+                                                {sessions.map((s, idx) => {
+                                                     const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
+                                                     const isCancelled = s.status === 'cancelled';
+                                                     return (
+                                                         <div key={idx} className={`flex items-center justify-between p-2 rounded-lg border ${isCancelled ? 'bg-red-900/10 border-red-900/30' : 'bg-slate-800 border-slate-700/50'}`}>
+                                                             <div className="flex items-center gap-3">
+                                                                <div className={`w-1.5 h-8 rounded-full ${isCancelled ? 'bg-red-500' : cat.color}`}></div>
+                                                                <div>
+                                                                    <div className="text-white text-xs font-bold">{s.fighter}</div>
+                                                                    <div className={`text-[10px] ${isCancelled ? 'text-slate-500 line-through' : 'text-slate-400'}`}>{s.name}</div>
+                                                                </div>
+                                                             </div>
+                                                             {isCancelled && <span className="text-[9px] font-bold text-red-400 bg-red-900/20 px-2 py-1 rounded">AFLYST</span>}
+                                                         </div>
+                                                     );
+                                                })}
+                                            </div>
+                                        </div>
+                                    );
                                 })}
                             </div>
                          </div>
