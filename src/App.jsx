@@ -327,6 +327,27 @@ const generateFeedbackCSV = (feedbackItems) => {
 
 // --- COMPONENTS ---
 
+// 1. FEATURE: TOAST NOTIFICATION COMPONENT
+const Toast = ({ message, type = 'success', visible, onClose }) => {
+    useEffect(() => {
+        if (visible) {
+            const timer = setTimeout(onClose, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [visible, onClose]);
+
+    if (!visible) return null;
+
+    return (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[100] fade-in">
+            <div className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border ${type === 'success' ? 'bg-slate-900 border-green-900/50 text-white' : 'bg-red-900 border-red-800 text-white'}`}>
+                {type === 'success' ? <Check className="w-5 h-5 text-green-500" /> : <AlertCircle className="w-5 h-5 text-white" />}
+                <span className="font-bold text-sm">{message}</span>
+            </div>
+        </div>
+    );
+};
+
 const ShortcutModal = ({ onClose }) => (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[90] flex items-center justify-center p-4 fade-in" onClick={onClose}>
         <div className="bg-slate-900 w-full max-w-md rounded-2xl border border-slate-700 shadow-2xl p-6" onClick={e => e.stopPropagation()}>
@@ -394,7 +415,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.66</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.67</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -437,7 +458,7 @@ const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
   </div>
 );
 
-const FeedbackModal = ({ user, currentContext, onClose }) => {
+const FeedbackModal = ({ user, currentContext, onClose, onShowToast }) => {
     const [text, setText] = useState('');
     const [sending, setSending] = useState(false);
 
@@ -456,10 +477,10 @@ const FeedbackModal = ({ user, currentContext, onClose }) => {
                 order: -Date.now() 
             });
             onClose();
-            alert("Tak for dit input!");
+            onShowToast("Feedback modtaget. Tak!");
         } catch (e) {
             console.error("Fejl:", e);
-            alert("Fejl. Prøv igen.");
+            onShowToast("Fejl. Prøv igen.", "error");
         }
         setSending(false);
     };
@@ -523,7 +544,7 @@ const ImportModal = ({ onClose, onImport }) => {
 };
 
 // --- ADMIN DASHBOARD (BACKLOG) ---
-const AdminDashboard = ({ onClose }) => {
+const AdminDashboard = ({ onClose, onShowToast }) => {
     const [tasks, setTasks] = useState([]);
     const [feedback, setFeedback] = useState([]);
     const [view, setView] = useState('board'); 
@@ -933,7 +954,7 @@ const AdminDashboard = ({ onClose }) => {
             setEditingTask(null);
             setLinkedFeedbackId(null);
             resetForm();
-        } catch (e) { alert("Fejl: " + e.message); }
+        } catch (e) { onShowToast("Fejl: " + e.message, "error"); }
     };
 
     const handleCopyForSheets = async () => {
@@ -941,8 +962,8 @@ const AdminDashboard = ({ onClose }) => {
             const items = selectedIds.size > 0 ? tasks.filter(t => selectedIds.has(t.id)) : tasks;
             const tsv = generateCSV(items, true);
             await navigator.clipboard.writeText(tsv);
-            alert(`${items.length} opgaver kopieret til Sheets!`);
-         } catch (e) { alert("Fejl: " + e.message); }
+            onShowToast(`${items.length} opgaver kopieret til Sheets!`);
+         } catch (e) { onShowToast("Fejl: " + e.message, "error"); }
     };
 
     const handleExportCSV = async () => {
@@ -950,8 +971,8 @@ const AdminDashboard = ({ onClose }) => {
             const items = selectedIds.size > 0 ? tasks.filter(t => selectedIds.has(t.id)) : tasks;
             const csv = generateCSV(items, false);
             await navigator.clipboard.writeText(csv);
-            alert(`${items.length} opgaver kopieret som CSV!`);
-        } catch (e) { alert("Kunne ikke eksportere: " + e.message); }
+            onShowToast(`${items.length} opgaver kopieret som CSV!`);
+        } catch (e) { onShowToast("Kunne ikke eksportere: " + e.message, "error"); }
     };
     
     // NEW: Copy formatted text for AI prompting
@@ -997,24 +1018,24 @@ NOTER: ${t.notes || ''}
 `).join('\n');
             
             await navigator.clipboard.writeText(text);
-            alert(`${itemsToExport.length} opgaver kopieret til AI-format!`);
+            onShowToast(`${itemsToExport.length} opgaver kopieret til AI-format!`);
             if (singleTask) return; // Don't clear selection if specific task copy
             clearSelection();
-        } catch (e) { alert("Fejl: " + e.message); }
+        } catch (e) { onShowToast("Fejl: " + e.message, "error"); }
     };
 
     const handleExportFeedbackCSV = async () => {
         try {
             const csv = generateFeedbackCSV(feedback);
             await navigator.clipboard.writeText(csv);
-            alert("Feedback CSV kopieret!");
-        } catch (e) { alert("Fejl: " + e.message); }
+            onShowToast("Feedback CSV kopieret!");
+        } catch (e) { onShowToast("Fejl: " + e.message, "error"); }
     };
 
     const handleImportCSV = async (csvText, mode) => {
         try {
             const parsed = parseCSV(csvText);
-            if (!parsed || parsed.length === 0) { alert("Ingen gyldige data."); return; }
+            if (!parsed || parsed.length === 0) { onShowToast("Ingen gyldige data.", "error"); return; }
             const batch = writeBatch(db);
             let count = 0;
             const now = Date.now();
@@ -1052,8 +1073,8 @@ NOTER: ${t.notes || ''}
             });
             await batch.commit();
             setIsImportOpen(false);
-            alert(`Importerede ${count} opgaver.`);
-        } catch (e) { alert("Fejl: " + e.message); }
+            onShowToast(`Importerede ${count} opgaver.`);
+        } catch (e) { onShowToast("Fejl: " + e.message, "error"); }
     };
 
     const resetForm = () => {
@@ -1117,7 +1138,7 @@ NOTER: ${t.notes || ''}
     };
 
     const moveItemOrder = async (index, direction, list, collectionName) => {
-        if (filterTag !== 'ALL' && !searchQuery) { alert("Sortering kræver 'Alle' tags og ingen søgning"); return; }
+        if (filterTag !== 'ALL' && !searchQuery) { onShowToast("Sortering kræver 'Alle' tags og ingen søgning", "error"); return; }
         const targetIndex = index + direction;
         if (targetIndex < 0 || targetIndex >= list.length) return;
         const itemA = list[index];
@@ -1149,7 +1170,7 @@ NOTER: ${t.notes || ''}
         const destIdx = dragOverItem.current;
 
         if (srcIdx === undefined || destIdx === undefined || srcIdx === destIdx) return;
-        if (filterTag !== 'ALL' || searchQuery) { alert("Slå filtre/søgning fra for at bruge Drag'n Drop sortering."); return; }
+        if (filterTag !== 'ALL' || searchQuery) { onShowToast("Slå filtre/søgning fra for at bruge Drag'n Drop sortering.", "error"); return; }
 
         const newList = [...filteredTasks];
         const itemToMove = newList[srcIdx];
@@ -1172,7 +1193,7 @@ NOTER: ${t.notes || ''}
             await batch.commit();
         } catch(err) {
             console.error("Reorder failed", err);
-            alert("Kunne ikke gemme sortering.");
+            onShowToast("Kunne ikke gemme sortering.", "error");
         }
         
         dragItem.current = null;
@@ -1196,8 +1217,8 @@ NOTER: ${t.notes || ''}
         try {
             const data = { backlog: tasks, feedback: feedback, exportedAt: new Date().toISOString() };
             await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-            alert("Data kopieret!");
-        } catch (e) { alert("Fejl: " + e.message); }
+            onShowToast("Data kopieret!");
+        } catch (e) { onShowToast("Fejl: " + e.message, "error"); }
     };
     
     return (
@@ -1584,6 +1605,12 @@ const App = () => {
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [feedbackContext, setFeedbackContext] = useState(null); 
   const [adminOpen, setAdminOpen] = useState(false);
+  
+  // NEW: TOAST STATE
+  const [toast, setToast] = useState({ message: '', type: 'success', visible: false });
+  const showToast = (message, type = 'success') => {
+      setToast({ message, type, visible: true });
+  };
 
   // Date Logic
   const [weekDates, setWeekDates] = useState({});
@@ -1676,12 +1703,9 @@ const App = () => {
     const newData = JSON.parse(JSON.stringify(scheduleData));
     if (!newData[editingDay]) newData[editingDay] = [];
     
-    // ARCHITECTURAL CHANGE: Calculate and save session date
-    // This allows future calendar views to query by exact date without knowing the week number structure
     if (!isStandardMode) {
         const sessionDate = getDateForWeekDay(currentWeek, editingDay);
         if (sessionDate) {
-            // Set time to session start time if available, otherwise noon
             if (session.start) {
                 const [h, m] = session.start.split(':').map(Number);
                 sessionDate.setHours(h, m);
@@ -1762,7 +1786,7 @@ const App = () => {
         onConfirm: async () => {
             const standardSnap = await getDoc(doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard'));
             if (standardSnap.exists()) await saveToDb(standardSnap.data());
-            else alert("Ingen standarduge fundet.");
+            else showToast("Ingen standarduge fundet.", "error");
             setConfirmDialog(null);
         }
     });
@@ -1937,8 +1961,9 @@ const App = () => {
 
       {modalOpen && <SessionModal day={editingDay} initialData={editingSession} existingSessions={scheduleData[editingDay] || []} onClose={() => setModalOpen(false)} onSave={handleSaveSession} onDelete={handleDeleteSession} isStandardMode={isStandardMode} onFeedback={(ctx) => openFeedback(ctx)} />}
       {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
-      {feedbackContext && <FeedbackModal user={user} currentContext={feedbackContext} onClose={() => setFeedbackContext(null)} />}
-      {adminOpen && <AdminDashboard onClose={() => setAdminOpen(false)} />}
+      {feedbackContext && <FeedbackModal user={user} currentContext={feedbackContext} onClose={() => setFeedbackContext(null)} onShowToast={showToast} />}
+      {adminOpen && <AdminDashboard onClose={() => setAdminOpen(false)} onShowToast={showToast} />}
+      <Toast message={toast.message} type={toast.type} visible={toast.visible} onClose={() => setToast({...toast, visible: false})} />
     </div>
   );
 };
@@ -1950,74 +1975,74 @@ const NavButton = ({ icon: Icon, label, active, onClick }) => (
     </button>
 );
 
+// 2. FEATURE: REFACTORED TEAM SCHEDULE (Responsive)
 const TeamSchedule = ({ days, teamData, currentWeek, isStandardMode }) => {
-    // 2. FEATURE: DEFAULT TO CURRENT DAY
-    const getCurrentDayName = () => {
-        const dayIndex = new Date().getDay(); // 0 is Sunday
-        const day = dayIndex === 0 ? 'Søndag' : DAYS[dayIndex - 1];
-        return day;
-    };
+    const [weekDates, setWeekDates] = useState({});
     
-    const [selectedDay, setSelectedDay] = useState(getCurrentDayName);
-    const [compactDates, setCompactDates] = useState({});
-
     useEffect(() => {
-        setCompactDates(getCompactWeekDateMap(currentWeek));
+        setWeekDates(getWeekDateMap(currentWeek));
     }, [currentWeek]);
 
-    const timeSlots = {};
-    Object.keys(teamData).forEach(fighter => {
-        const data = teamData[fighter];
-        if (!data) return; 
-        const sessions = data[selectedDay] || [];
-        sessions.forEach(s => {
-            if (s.isRestDay) return;
-            const timeKey = s.start || 'TBA';
-            if (!timeSlots[timeKey]) timeSlots[timeKey] = [];
-            timeSlots[timeKey].push({ ...s, fighter });
-        });
-    });
-    const sortedTimes = Object.keys(timeSlots).sort();
+    // Scroll to current day logic
+    useEffect(() => {
+        const dayIndex = new Date().getDay(); 
+        const dayName = dayIndex === 0 ? 'Søndag' : DAYS[dayIndex - 1];
+        const element = document.getElementById(`team-day-${dayName}`);
+        if (element) {
+            // Tiny timeout to ensure rendering
+            setTimeout(() => element.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+        }
+    }, [days]); // Run once when mounted
 
     return (
-        <div className="fade-in">
-             <div className="bg-slate-900/50 mx-4 mb-4 rounded-xl p-2 flex space-x-2 overflow-x-auto hide-scroll">
-                 {days.map(d => (
-                     <button key={d} onClick={() => setSelectedDay(d)} className={`whitespace-nowrap px-4 py-2 rounded-lg text-sm font-bold transition-all border flex flex-col items-center ${selectedDay === d ? 'bg-blue-600 border-blue-500 text-white shadow-lg' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
-                         <span>{d.slice(0, 3)}</span>
-                         {!isStandardMode && compactDates[d] && <span className="text-[10px] opacity-70">{compactDates[d]}</span>}
-                     </button>
-                 ))}
-             </div>
-             <div className="px-4 space-y-4 pb-32">
-                 {sortedTimes.length === 0 && <div className="flex flex-col items-center justify-center py-20 text-slate-500 border-2 border-dashed border-slate-800 rounded-2xl"><User className="w-10 h-10 mb-2 opacity-50"/><p>Ingen fælles træning</p></div>}
-                 {sortedTimes.map(time => {
-                     const sessions = timeSlots[time];
+        <div className="fade-in px-4 pb-32">
+             <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+                 {days.map(day => {
+                     // Collect all sessions for this day across all fighters
+                     let daySessions = [];
+                     Object.keys(teamData).forEach(fighter => {
+                        const data = teamData[fighter];
+                        if (!data) return;
+                        const sessions = data[day] || [];
+                        sessions.forEach(s => {
+                            if (s.isRestDay) return;
+                            daySessions.push({ ...s, fighter });
+                        });
+                     });
+                     
+                     // Sort by time
+                     daySessions.sort((a,b) => (a.start || '').localeCompare(b.start || ''));
+
+                     // Group by time for cleaner display (optional, but good for list)
+                     // Simple list for now as requested
+                     
                      return (
-                        <div key={time} className="bg-slate-900 rounded-xl overflow-hidden border border-slate-800 shadow-lg">
-                            <div className="bg-slate-800/80 p-3 flex justify-between items-center border-b border-slate-800">
-                                <div className="flex items-center text-blue-400 font-bold font-mono text-lg">{time}</div>
-                                <div className="flex items-center text-slate-500 text-[10px] font-medium uppercase bg-slate-950 px-2 py-1 rounded"><MapPin className="w-3 h-3 mr-1"/> {sessions[0].location}</div>
+                         <div id={`team-day-${day}`} key={day} className="bg-slate-900 rounded-xl border border-slate-800 overflow-hidden shadow-lg h-full">
+                            <div className="bg-slate-800/80 p-3 border-b border-slate-800 flex justify-between items-center sticky top-0 z-10 backdrop-blur-md">
+                                <h3 className="text-white font-bold">{day}</h3>
+                                {!isStandardMode && weekDates[day] && <span className="text-xs text-slate-400">{weekDates[day]}</span>}
                             </div>
-                            <div className="p-3 grid grid-cols-2 gap-2">
-                                {sessions.map((s, i) => {
-                                    const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
-                                    const isCancelled = s.status === 'cancelled';
-                                    return (
-                                        <div key={i} className="bg-slate-800/50 p-2.5 rounded border border-slate-700/50 flex items-center justify-between">
-                                            <div className="flex items-center w-full">
-                                                <span className={`w-1.5 h-6 rounded-full ${isCancelled ? 'bg-slate-700' : cat.color} mr-2.5 shadow-sm`}></span>
-                                                <div className={`flex-1 ${isCancelled ? 'opacity-50 line-through' : ''}`}>
-                                                    <div className="text-white text-xs font-bold leading-tight">{s.fighter}</div>
-                                                    <div className="text-slate-400 text-[10px]">{s.name}</div>
-                                                </div>
-                                                {isCancelled && <span className="text-[9px] text-red-400 bg-red-900/50 px-1 rounded ml-auto">AFLYST</span>}
-                                            </div>
-                                        </div>
-                                    );
+                            <div className="p-2 space-y-2">
+                                {daySessions.length === 0 && <div className="text-center py-6 text-slate-600 text-xs italic">Ingen træning</div>}
+                                {daySessions.map((s, idx) => {
+                                     const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
+                                     const isCancelled = s.status === 'cancelled';
+                                     return (
+                                         <div key={`${day}-${idx}`} className={`p-2 rounded-lg border ${isCancelled ? 'bg-red-900/10 border-red-900/30' : 'bg-slate-800/50 border-slate-700/50'} relative`}>
+                                             <div className={`absolute left-0 top-2 bottom-2 w-1 rounded-r ${isCancelled ? 'bg-red-500' : cat.color}`}></div>
+                                             <div className="pl-2.5">
+                                                 <div className="flex justify-between items-start">
+                                                     <span className="text-[10px] text-slate-400 font-mono">{s.start}</span>
+                                                     <span className="text-[9px] bg-slate-950 px-1 rounded text-slate-500 uppercase">{s.fighter}</span>
+                                                 </div>
+                                                 <div className={`font-bold text-xs ${isCancelled ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{s.name}</div>
+                                                 {isCancelled && <div className="text-[9px] text-red-400 mt-1">AFLYST</div>}
+                                             </div>
+                                         </div>
+                                     );
                                 })}
                             </div>
-                        </div>
+                         </div>
                      );
                  })}
              </div>
