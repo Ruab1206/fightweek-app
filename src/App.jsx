@@ -437,8 +437,8 @@ const SessionModal = ({ day, initialData, existingSessions, onClose, onSave, onD
     const relevantTemplates = GLOBAL_TEMPLATES.filter(t => t.day === day);
 
     return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-end sm:items-center justify-center sm:p-4 fade-in">
-            <div className="bg-slate-900 w-full max-w-lg sm:rounded-2xl rounded-t-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4 fade-in">
+            <div className="bg-slate-900 w-full max-w-md rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
                     <h3 className="text-white font-bold text-lg">{isNew ? `Nyt Pas: ${day}` : 'Rediger Pas'}</h3>
                     <button onClick={onClose} className="p-1 text-slate-400 hover:text-white bg-slate-800 rounded-full"><X className="w-5 h-5" /></button>
