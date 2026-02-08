@@ -412,35 +412,49 @@ const BrowserBlockScreen = () => {
     );
 }
 
-const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
-  <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
-    <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.69</div>
-      <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
-        <ShieldCheck className="w-8 h-8 text-white" />
-      </div>
-      <h1 className="text-2xl font-bold text-white mb-2">FightWeek</h1>
-      <p className="text-slate-400 mb-8 text-sm">Log ind for at se din træningsplan</p>
-      
-      {error && (
-        <div className="bg-red-900/50 border border-red-800 rounded-lg p-3 mb-6 text-xs text-red-200 text-left">
-            <p className="font-bold mb-1 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Login Fejl:</p>
-            <p>{error}</p>
+const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => {
+    // TRANSLATE FIREBASE ERRORS
+    const getFriendlyError = (msg) => {
+        if (!msg) return null;
+        if (msg.includes("popup-closed-by-user")) return "Login afbrudt af bruger.";
+        if (msg.includes("network-request-failed")) return "Netværksfejl. Tjek din forbindelse.";
+        if (msg.includes("operation-not-supported")) return "Login metode ikke understøttet her.";
+        if (msg.includes("unauthorized-domain")) return "Domæne ikke godkendt (Kontakt Admin).";
+        return msg; // Fallback
+    };
+    
+    const friendlyError = getFriendlyError(error);
+
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+        <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
+          <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.70</div>
+          <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
+            <ShieldCheck className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-2">FightWeek</h1>
+          <p className="text-slate-400 mb-8 text-sm">Log ind for at se din træningsplan</p>
+          
+          {friendlyError && (
+            <div className="bg-red-900/50 border border-red-800 rounded-lg p-3 mb-6 text-xs text-red-200 text-left">
+                <p className="font-bold mb-1 flex items-center"><AlertCircle className="w-3 h-3 mr-1"/> Login Fejl:</p>
+                <p>{friendlyError}</p>
+            </div>
+          )}
+
+          <button onClick={onLoginPopup} className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mb-4">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+            Log ind med Google (Popup)
+          </button>
+
+          <button onClick={onLoginRedirect} className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2">
+            <MousePointerClick className="w-3 h-3 mr-1" />
+            Alternativ Login (Redirect)
+          </button>
         </div>
-      )}
-
-      <button onClick={onLoginPopup} className="w-full bg-white text-slate-900 font-bold py-3.5 px-4 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 mb-4">
-        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-        Log ind med Google (Popup)
-      </button>
-
-      <button onClick={onLoginRedirect} className="text-slate-500 text-xs hover:text-blue-400 underline flex items-center justify-center w-full mt-2">
-        <MousePointerClick className="w-3 h-3 mr-1" />
-        Alternativ Login (Redirect)
-      </button>
-    </div>
-  </div>
-);
+      </div>
+    );
+};
 
 const ConfirmModal = ({ title, message, onConfirm, onCancel }) => (
   <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[80] flex items-center justify-center p-4 fade-in">
@@ -2051,7 +2065,7 @@ const TeamSchedule = ({ days, teamData, currentWeek, isStandardMode }) => {
                                                      return (
                                                          <div key={idx} className={`flex items-center justify-between p-2 rounded-lg border ${isCancelled ? 'bg-red-900/10 border-red-900/30' : 'bg-slate-800 border-slate-700/50'}`}>
                                                              <div className="flex items-center gap-3">
-                                                                <div className={`w-1.5 h-8 rounded-full ${isCancelled ? 'bg-red-500' : cat.color}`}></div>
+                                                                <div className={`w-1.5 h-8 rounded-full ${cat.color} ${isCancelled ? 'opacity-50' : ''}`}></div>
                                                                 <div>
                                                                     <div className="text-white text-xs font-bold">{s.fighter}</div>
                                                                     <div className={`text-[10px] ${isCancelled ? 'text-slate-500 line-through' : 'text-slate-400'}`}>{s.name}</div>
