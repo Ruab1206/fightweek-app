@@ -394,7 +394,7 @@ const BrowserBlockScreen = () => {
 const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }) => (
   <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
     <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative">
-      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.65</div>
+      <div className="absolute top-2 right-2 text-[10px] text-slate-600 font-mono">v1.66</div>
       <div className="bg-blue-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-900/30">
         <ShieldCheck className="w-8 h-8 text-white" />
       </div>
@@ -636,6 +636,7 @@ const AdminDashboard = ({ onClose }) => {
 
         if (count > 0) {
             await batch.commit();
+            clearSelection(); // NEW: Clear selection after bulk move
         }
     };
 
@@ -726,16 +727,35 @@ const AdminDashboard = ({ onClose }) => {
             switch(e.key) {
                 case 'J': // Shift+j
                     e.preventDefault();
-                    if (focusedIndex < filteredTasks.length - 1) {
-                        moveItemOrder(focusedIndex, 1, filteredTasks, 'backlog');
-                        setFocusedIndex(prev => prev + 1); // Follow item
+                    // Priority: Single Selection > Focused Item
+                    let indexToMoveJ = focusedIndex;
+                    
+                    if (selectedIds.size === 1) {
+                        const id = [...selectedIds][0];
+                        const foundIndex = filteredTasks.findIndex(t => t.id === id);
+                        if (foundIndex !== -1) indexToMoveJ = foundIndex;
+                    }
+
+                    if (indexToMoveJ < filteredTasks.length - 1 && indexToMoveJ >= 0) {
+                        moveItemOrder(indexToMoveJ, 1, filteredTasks, 'backlog');
+                        // If we moved the selection, update focus to follow it so the user sees it
+                         setFocusedIndex(indexToMoveJ + 1);
                     }
                     break;
                 case 'K': // Shift+k
                     e.preventDefault();
-                    if (focusedIndex > 0) {
-                        moveItemOrder(focusedIndex, -1, filteredTasks, 'backlog');
-                        setFocusedIndex(prev => prev - 1); // Follow item
+                     // Priority: Single Selection > Focused Item
+                    let indexToMoveK = focusedIndex;
+                    
+                    if (selectedIds.size === 1) {
+                        const id = [...selectedIds][0];
+                        const foundIndex = filteredTasks.findIndex(t => t.id === id);
+                        if (foundIndex !== -1) indexToMoveK = foundIndex;
+                    }
+                    
+                    if (indexToMoveK > 0) {
+                        moveItemOrder(indexToMoveK, -1, filteredTasks, 'backlog');
+                         setFocusedIndex(indexToMoveK - 1);
                     }
                     break;
                 case 'j': 
@@ -1091,6 +1111,8 @@ NOTER: ${t.notes || ''}
         if (newIdx >= statuses.length) newIdx = statuses.length - 1;
         if (newIdx !== currentIdx) {
             await updateDoc(doc(db, PUBLIC_DATA_PATH, 'backlog', task.id), { status: statuses[newIdx] });
+            // NEW: If task was selected, deselect it
+            if (selectedIds.has(task.id)) toggleSelection(task.id); 
         }
     };
 
