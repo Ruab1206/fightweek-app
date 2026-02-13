@@ -1,8 +1,41 @@
 # Session 2 Summary - Phase 1 Refactor Complete ✅
+# Pre-Merge Fixes Applied ✅
 
 **Date:** February 13, 2026  
 **Branch:** `feature/bedre-design`  
-**Status:** ✅ Phase 1 Foundation Complete
+**Status:** ✅ Phase 1 Complete + UI Fixes Ready for Prod Merge
+
+---
+
+## Pre-Merge Fixes Applied (Feb 13, 2026)
+
+Before merging to main, three critical UX improvements were made to the training pass features:
+
+### 1. ✅ Danish Time Format (24-hour)
+- **Issue:** Time picker displayed American AM/PM format
+- **Fix:** Changed `toLocaleTimeString` to use Danish locale (`'da-DK'`)
+- **Files:** `formatCancellationTime()` and lastUpdated display
+- **Result:** Now shows 24-hour format (e.g., "14:30" instead of "2:30 PM")
+
+### 2. ✅ Enhanced Quick Selection Cards (Hurtigvalg)
+- **Issue:** Quick selection cards only showed activity name and start time
+- **Improvement:** Cards now display:
+  - Category color code (colored dot)
+  - Activity name (bold, white)
+  - **NEW:** Time range (e.g., "15:00 - 16:00")
+  - **NEW:** Location with map icon
+- **Result:** Users can easily identify training passes before adding to schedule
+
+### 3. ✅ Cancel Training Pass UI Redesign
+- **Issue:** Status shown as confusing "Aktiv" / "AFLYST" toggle button
+- **Fix:** Replaced with proper checkbox pattern:
+  - Checkbox (unchecked by default)
+  - Label "Aflys" next to checkbox
+  - When checked: Shows text input for cancellation reason
+  - Placeholder: "Sygdom, Skade, Andet..."
+- **Result:** Clear, intuitive cancellation flow
+
+**Ready for Production:** All fixes tested and integrated ✅
 
 ---
 
@@ -53,14 +86,54 @@ We've successfully extracted **~550 lines** of utility code from the monolithic 
 - ✅ Clear imports (knows exactly where code comes from)
 
 ### What Didn't Change
-- ❌ **No user-facing changes yet** - same behavior as before
-- ❌ App.jsx still works exactly as it did
-- ❌ No new features implemented
-- ❌ This is pure refactoring
+- ❌ Core app structure and routing - same as before
+- ❌ Firebase data model - no database changes
+- ❌ Authentication flow - still uses Google OAuth
+- ⚠️ **User Experience:** 3 critical UX improvements applied before prod merge (see Pre-Merge Fixes section above)
 
 ---
 
-## Next Steps (Phase 2)
+## Production Merge Checklist ✅
+
+Before merging `feature/bedre-design` → `main`:
+
+- ✅ Phase 1 refactoring complete (modular structure, TypeScript setup)
+- ✅ Time format fixed (Danish 24-hour format)
+- ✅ Hurtigvalg cards enhanced (category color, time range, location)
+- ✅ Cancel button redesigned (checkbox + reason input)
+- ✅ All 3 UX fixes tested and working
+- ⏳ Code review (suggested: Frodi review the A.jsx changes)
+- ⏳ Test in staging/production environment
+- ⏳ Create PR and merge to main
+
+**Status:** Ready for code review and merge ✅
+
+---
+
+## Next Steps (After Merge)
+
+### Phase 2: Component Extraction & Polish
+1. Convert `App.jsx` → `App.tsx` (TypeScript support)
+2. Extract reusable React components:
+   - `<LoginScreen.tsx>`
+   - `<SessionModal.tsx>` (with new cancel UI)
+   - `<PersonalSchedule.tsx>`
+   - `<TeamSchedule.tsx>`
+   - `<AdminDashboard.tsx>`
+3. Create custom hooks:
+   - `useAuth.ts`
+   - `useScheduleData.ts`
+   - `useAdminBacklog.ts`
+
+### Phase 3: More Features
+- Dropdown for quick cancellation reasons (as mentioned by user)
+- Better error handling
+- Performance optimizations
+- Mobile responsiveness improvements
+
+---
+
+## Previous Next Steps (Phase 2)
 
 ### Immediate (Next Session)
 1. **Install & Test** (5 min)
@@ -160,19 +233,22 @@ src/
 
 ---
 
-## Questions for Frodi Before Next Session
+## Merge & Next Steps Questions
 
-1. Want to start Phase 2 next time, or take a break and test first?
-2. Any concerns about adding TypeScript? (It's purely optional right now)
-3. Any UI fixes you want to prioritize in Phase 2?
-   - Black screen bug
-   - Team view weekdays overflow
-   - Other?
+1. ✅ Ready to merge `feature/bedre-design` to `main`?
+2. Want to do a quick code review before merging (look at SessionModal changes)?
+3. After merge, want to start Phase 2 (TypeScript + component extraction)?
+4. Any other UX issues to fix before we move on?
 
 ---
 
-**Status: Ready for Phase 2** ✅
+**Status: Ready for Production Merge** ✅
 
-The foundation is solid. We can now extract components and build features without fear of breaking things.
+The feature branch includes:
+- Phase 1 refactoring (modular structure)
+- 3 critical UX fixes (time format, Hurtigvalg cards, cancel UI)
+- All code tested and working
+
+Ready to merge when you give the go-ahead!
 
 *See PROJECT_NOTES.md for full collaboration framework and decision log.*

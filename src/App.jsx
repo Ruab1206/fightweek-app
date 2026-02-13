@@ -116,7 +116,7 @@ const formatCancellationTime = (isoString) => {
     const date = new Date(isoString);
     const now = new Date();
     if (date.toDateString() === now.toDateString()) {
-        return `Kl. ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+        return `Kl. ${date.toLocaleTimeString('da-DK', {hour: '2-digit', minute:'2-digit'})}`;
     }
     const dayIndex = date.getDay();
     const dayName = dayIndex === 0 ? 'Søndag' : DAYS[dayIndex - 1];
@@ -450,12 +450,20 @@ const SessionModal = ({ day, initialData, existingSessions, onClose, onSave, onD
                         <div className="mb-4">
                             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Hurtigvalg</label>
                             <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                                {relevantTemplates.map(t => (
-                                    <button key={t.id} onClick={() => handleQuickSelect(t)} className="flex-shrink-0 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg p-2 px-3 text-left transition-colors">
-                                        <div className="text-white text-xs font-bold whitespace-nowrap">{t.name}</div>
-                                        <div className="text-slate-400 text-[10px]">{t.start}</div>
+                                {relevantTemplates.map(t => {
+                                    const cat = CATEGORIES.find(c => c.label === t.category) || CATEGORIES[6];
+                                    return (
+                                    <button key={t.id} onClick={() => handleQuickSelect(t)} className="flex-shrink-0 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg p-2 px-3 text-left transition-colors min-w-max">
+                                        <div className="flex items-center gap-2 mb-1.5">
+                                            <div className={`w-2 h-2 rounded-full ${cat.color}`}></div>
+                                            <div className="text-white text-xs font-bold">{t.name}</div>
+                                        </div>
+                                        <div className="text-slate-400 text-[10px] space-y-0.5">
+                                            <div>{t.start} - {t.end}</div>
+                                            <div className="flex items-center"><MapPin className="w-2.5 h-2.5 mr-1"/> {t.location}</div>
+                                        </div>
                                     </button>
-                                ))}
+                                );})}
                             </div>
                         </div>
                     )}
@@ -498,14 +506,17 @@ const SessionModal = ({ day, initialData, existingSessions, onClose, onSave, onD
                     
                     {!isStandardMode && !isNew && (
                         <div className="pt-2 border-t border-slate-800">
-                             <div className="flex items-center justify-between mb-2">
-                                <label className="text-xs font-bold text-slate-400 uppercase">Status</label>
-                                <button onClick={toggleStatus} className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-colors ${form.status === 'cancelled' ? 'bg-red-600 text-white' : 'bg-green-600/20 text-green-400 border border-green-600/50'}`}>
-                                    {form.status === 'cancelled' ? 'AFLYST' : 'AKTIV'}
+                             <div className="flex items-center gap-3">
+                                <button onClick={toggleStatus} className={`flex items-center justify-center w-5 h-5 rounded border-2 transition-colors ${form.status === 'cancelled' ? 'bg-red-600 border-red-600' : 'bg-slate-950 border-slate-600'}`}>
+                                    {form.status === 'cancelled' && <Check className="w-3.5 h-3.5 text-white" />}
                                 </button>
+                                <label className="text-xs font-bold text-slate-400 uppercase cursor-pointer" onClick={toggleStatus}>Aflys</label>
                              </div>
                              {form.status === 'cancelled' && (
-                                <input type="text" className="w-full bg-red-900/20 border border-red-900/50 rounded-xl p-2 text-red-200 text-sm placeholder-red-400/50 focus:outline-none" value={form.cancellationReason} onChange={e => handleChange('cancellationReason', e.target.value)} placeholder="Årsag (Sygdom, Skade...)" />
+                                <div className="mt-3">
+                                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Årsag til aflysning</label>
+                                    <input type="text" className="w-full bg-red-900/20 border border-red-900/50 rounded-xl p-2 text-red-200 text-sm placeholder-red-400/50 focus:outline-none focus:ring-2 focus:ring-red-600" value={form.cancellationReason} onChange={e => handleChange('cancellationReason', e.target.value)} placeholder="Sygdom, Skade, Andet..." />
+                                </div>
                              )}
                         </div>
                     )}
@@ -686,7 +697,7 @@ const App = () => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setScheduleData(data);
-        if (data.lastUpdated) setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+        if (data.lastUpdated) setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString('da-DK', {hour: '2-digit', minute:'2-digit'}));
       } else { setScheduleData({}); setLastUpdated('Aldrig'); }
     });
 
