@@ -1900,9 +1900,9 @@ NOTER: ${t.notes || ''}
                                             <button onClick={() => moveItemOrder(index, -1, feedback, 'feedback')} disabled={index === 0} className="hover:text-white disabled:opacity-30"><ChevronUp className="w-3 h-3"/></button>
                                             <button onClick={() => moveItemOrder(index, 1, feedback, 'feedback')} disabled={index === feedback.length -1} className="hover:text-white disabled:opacity-30"><ChevronDown className="w-3 h-3"/></button>
                                         </div>
-                                        <div className="w-8 h-8 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center font-bold">{item.userName.charAt(0)}</div>
+                                        <div className="w-8 h-8 rounded-full bg-blue-900/50 text-blue-400 flex items-center justify-center font-bold">{(item.userName || '?').charAt(0)}</div>
                                         <div>
-                                            <p className="text-sm font-bold text-white">{item.userName}</p>
+                                            <p className="text-sm font-bold text-white">{item.userName || 'Anonym'}</p>
                                             <p className="text-[10px] text-slate-500 flex items-center gap-2">
                                                 <span>{new Date(item.timestamp).toLocaleString()}</span>
                                                 <span className="bg-slate-800 px-1.5 rounded text-slate-400 border border-slate-700">{item.context || 'App'}</span>
