@@ -10,7 +10,7 @@
 // --- SEKTION 1: IMPORTS ---
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  ShieldCheck, User, ChevronDown, Info, ChevronLeft, ChevronRight, 
+  ShieldCheck, User, ChevronUp, ChevronDown, Info, ChevronLeft, ChevronRight, 
   Clock, MapPin, Bed, Plus, AlertCircle, X, Trash2, Calendar, 
   History, Globe, LogOut, ClipboardList, MessageSquarePlus, 
   MoreHorizontal, Sparkles, CheckSquare, Square, Search, 
@@ -1129,6 +1129,15 @@ const AdminDashboard = ({ onClose, onShowToast }) => {
 
         return () => { unsubBacklog(); unsubFeedback(); }
     }, []);
+
+    // Close modals when switching to feedback view (fixes black screen issue)
+    useEffect(() => {
+        if (view === 'feedback') {
+            setIsFormOpen(false);
+            setIsImportOpen(false);
+            setAdminConfirm(null);
+        }
+    }, [view]);
     
     const uniqueReleases = useMemo(() => {
         const releases = new Set();
@@ -1881,8 +1890,8 @@ NOTER: ${t.notes || ''}
                 )}
 
                 {view === 'feedback' && (
-                    <div className="space-y-3 fade-in">
-                        {feedback.length === 0 && <p className="text-slate-500 text-center py-10">Ingen feedback endnu.</p>}
+                    <div className="space-y-3 fade-in bg-slate-900 p-4 rounded-xl relative z-[100]">
+                        {feedback.length === 0 && <p className="text-white text-center py-10 font-bold text-lg">Ingen feedback endnu. 📭</p>}
                         {feedback.map((item, index) => (
                             <div key={item.id} className={`p-4 rounded-xl border ${item.status === 'new' ? 'bg-slate-800 border-blue-900/50' : 'bg-slate-900 border-slate-800 opacity-60'}`}>
                                 <div className="flex justify-between items-start mb-3">
@@ -1922,7 +1931,7 @@ NOTER: ${t.notes || ''}
                 )}
             </div>
 
-            {isFormOpen && (
+            {isFormOpen && view !== 'feedback' && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
                     <div className="bg-slate-900 w-full max-w-2xl rounded-2xl border border-slate-700 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-800/50">
@@ -1996,9 +2005,9 @@ NOTER: ${t.notes || ''}
                 </div>
             )}
             
-            {showShortcuts && <ShortcutModal onClose={() => setShowShortcuts(false)} />}
-            {isImportOpen && <ImportModal onClose={() => setIsImportOpen(false)} onImport={handleImportCSV} />}
-            {adminConfirm && <ConfirmModal title={adminConfirm.title} message={adminConfirm.message} onConfirm={adminConfirm.onConfirm} onCancel={() => setAdminConfirm(null)} />}
+            {showShortcuts && view !== 'feedback' && <ShortcutModal onClose={() => setShowShortcuts(false)} />}
+            {isImportOpen && view !== 'feedback' && <ImportModal onClose={() => setIsImportOpen(false)} onImport={handleImportCSV} />}
+            {adminConfirm && view !== 'feedback' && <ConfirmModal title={adminConfirm.title} message={adminConfirm.message} onConfirm={adminConfirm.onConfirm} onCancel={() => setAdminConfirm(null)} />}
         </div>
     );
 };
