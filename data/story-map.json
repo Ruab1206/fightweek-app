@@ -1,0 +1,561 @@
+{
+  "tasks": [
+    {
+      "description": "",
+      "id": "task-1775067411183-5",
+      "title": "Find app",
+      "order": 0,
+      "pains": [],
+      "activityId": "act-1775067411183-4"
+    },
+    {
+      "activityId": "act-1775075370816-3",
+      "pains": [],
+      "order": 1,
+      "title": "Assess current performance gap",
+      "id": "task-1775075370816-4",
+      "description": ""
+    },
+    {
+      "order": 1,
+      "pains": [],
+      "activityId": "act-1775111311402-6",
+      "description": "",
+      "id": "task-1775075389941-6",
+      "title": "Build program"
+    },
+    {
+      "order": 0,
+      "activityId": "act-1775075450104-7",
+      "pains": [],
+      "id": "task-1775075450104-8",
+      "description": "",
+      "title": "Update training program"
+    },
+    {
+      "id": "task-1775075741354-13",
+      "description": "",
+      "title": "Understand app",
+      "order": 1,
+      "activityId": "act-1775067411183-4",
+      "pains": []
+    },
+    {
+      "pains": [],
+      "activityId": "act-1775067411183-4",
+      "order": 2,
+      "title": "Sign up",
+      "description": "",
+      "id": "task-1775075784995-14"
+    },
+    {
+      "order": 0,
+      "activityId": "act-1775075370816-3",
+      "pains": [],
+      "id": "task-1775075957974-16",
+      "description": "",
+      "title": "Define vision"
+    },
+    {
+      "pains": [],
+      "activityId": "act-1775075370816-3",
+      "order": 2,
+      "title": "Define long term goals",
+      "description": "",
+      "id": "task-1775076034719-17"
+    },
+    {
+      "activityId": "act-1775075370816-3",
+      "pains": [],
+      "order": 3,
+      "title": "Break down goals",
+      "id": "task-1775076064505-18",
+      "description": ""
+    },
+    {
+      "title": "Choose events",
+      "id": "task-1775076934382-22",
+      "description": "",
+      "activityId": "act-1775075370816-3",
+      "pains": [],
+      "order": 4
+    },
+    {
+      "activityId": "act-1775075450104-7",
+      "pains": [],
+      "order": 3,
+      "title": "Evaluate training",
+      "id": "task-1775077310274-23",
+      "description": ""
+    },
+    {
+      "title": "Evaluate goals",
+      "description": "",
+      "id": "task-1775109956866-2",
+      "pains": [],
+      "activityId": "act-1775109956866-1",
+      "order": 2
+    },
+    {
+      "order": 3,
+      "pains": [],
+      "activityId": "act-1775109956866-1",
+      "description": "",
+      "id": "task-1775110271838-1",
+      "title": "Evaluate performance"
+    },
+    {
+      "description": "",
+      "id": "task-1775110327646-2",
+      "title": "Evaluate event",
+      "order": 0,
+      "pains": [],
+      "activityId": "act-1775109956866-1"
+    },
+    {
+      "pains": [],
+      "activityId": "act-1775110489612-3",
+      "order": 0,
+      "title": "Find club",
+      "description": "",
+      "id": "task-1775110489612-4"
+    },
+    {
+      "description": "",
+      "id": "task-1775111196515-5",
+      "title": "Find team",
+      "order": 1,
+      "pains": [],
+      "activityId": "act-1775110489612-3"
+    },
+    {
+      "pains": [
+        "Classes are not uptodate"
+      ],
+      "activityId": "act-1775111311402-6",
+      "order": 0,
+      "title": "Find classes",
+      "description": "",
+      "id": "task-1775111311402-7"
+    },
+    {
+      "description": "",
+      "id": "task-1775111432383-8",
+      "title": "Add custom training",
+      "order": 2,
+      "pains": [],
+      "activityId": "act-1775111311402-6"
+    },
+    {
+      "order": 1,
+      "activityId": "act-1775109956866-1",
+      "pains": [],
+      "id": "task-1775118504169-1",
+      "description": "",
+      "title": "Evaluate program"
+    },
+    {
+      "order": 1,
+      "pains": [],
+      "activityId": "act-1775075450104-7",
+      "description": "",
+      "id": "task-1775118675736-2",
+      "title": "Enroll class"
+    },
+    {
+      "title": "Cancel class",
+      "description": "",
+      "id": "task-1775118691264-3",
+      "pains": [],
+      "activityId": "act-1775075450104-7",
+      "order": 2
+    }
+  ],
+  "personas": [
+    {
+      "role": "Fighter (Udøver)",
+      "createdAt": "2026-04-01T20:23:01.970Z",
+      "name": "Karl",
+      "avatar": "🥊",
+      "id": "persona-1775074981970-1",
+      "painPoints": [
+        "Too many taps to do simple things",
+        "Losing overview when schedule changes mid-week",
+        "Doesn't want to log in every time"
+      ],
+      "updatedAt": "2026-04-02T11:21:31.231Z",
+      "activities": [
+        "Opens app every morning to check today's schedule",
+        "Adds sessions from the curated catalogue or creates custom ones",
+        "After training: marks session as completed and rates intensity (1–5)",
+        "Cancels sessions with a reason when needed",
+        "Marks rest days",
+        "Adjusts his standard week in the weekend for the coming week",
+        "Submits weekly plan for coach review",
+        "Reviews team view to see who else is training",
+        "Gives daily feedback and adjusts the plan"
+      ],
+      "context": "Den centrale aktør — ansvarlig for eksekvering, feedback og daglig justering af planen. Mobile-first (iPhone). Uses the app 2–4 times a day in short bursts between sessions. Competitive MMA fighter aiming for UFC. Strong wrestling and grappling background, capable striker. Needs structure, fight preparation, and an easy way to stay on top of goals, training, and fights.",
+      "goals": [
+        "See today's and this week's training plan at a glance",
+        "Easy session management — pick from the curated catalogue, or add custom sessions",
+        "Rate training intensity after each session (1–5 scale)",
+        "Mark sessions as completed or cancelled (with reason)",
+        "Rest day toggling without friction",
+        "Standard week import for routine weeks, then adjust",
+        "See weekly focus / goals from coach",
+        "Prepare structured fight camps with clear goals"
+      ]
+    },
+    {
+      "role": "Coach",
+      "createdAt": "2026-04-01T20:23:01.970Z",
+      "name": "Frodi",
+      "avatar": "🧠",
+      "id": "persona-1775074981970-2",
+      "painPoints": [
+        "No single view of all fighters' weekly status",
+        "Cancellation reasons get lost in chat messages",
+        "Hard to track training load trends over time"
+      ],
+      "updatedAt": "2026-04-02T11:21:31.231Z",
+      "activities": [
+        "Reviews the Team View to monitor all fighters",
+        "Curates the Catalogue — selects which external classes are available for the team",
+        "Gets notified about cancellations and reasons",
+        "Validates that fighters follow Standarden",
+        "Reviews fighters' weekly plans (submitted by Saturday 18:00)",
+        "Uses intensity and attendance data to adjust training plans",
+        "Defines progression paths and curates training sessions",
+        "💭 Sets quarterly goals and monitors progression",
+        "💭 Registers upcoming fights and defines fight camp periods"
+      ],
+      "goals": [
+        "Overview of all fighters' weekly plans",
+        "Curate the cross-gym training catalogue — decide which classes are available to the team",
+        "Data-driven follow-up on training load (intensity, attendance, volume per discipline)",
+        "Quickly spot who's training, who's resting, who cancelled",
+        "Set goals for fighters at quarterly and long-term level",
+        "Manage upcoming fights and fight camps",
+        "Review and approve weekly plans before the week starts",
+        "Monitor all fighters' training load and compliance"
+      ],
+      "context": "Den strategiske leder — ansvarlig for progression, målhierarki og kuratering af træningsudbuddet. iPad or laptop at the gym. Master's in sports science. Oversees 5–10 fighters at a time. Has a strong theoretical and practical understanding of MMA and training principles."
+    },
+    {
+      "id": "persona-1775074981970-3",
+      "role": "Team Coordinator",
+      "createdAt": "2026-04-01T20:23:01.970Z",
+      "name": "Jens",
+      "avatar": "📋",
+      "updatedAt": "2026-04-02T07:21:45.631Z",
+      "activities": [
+        "Manages fight-week logistics and travel planning",
+        "Updates team calendar with event bookings",
+        "Sends reminders and coordination messages",
+        "Tracks weigh-in schedules and venue details",
+        "Clears impediments so fighters and coaches can focus"
+      ],
+      "context": "Logistik-ankeret (Scrum Master-rollen) — sørger for at fjerne støj omkring aftaler, stævner og praktiske deadlines. Laptop-first, works from office. ",
+      "goals": [
+        "Remove noise around agreements, events, and practical deadlines",
+        "Keep the team calendar in sync with events and bookings",
+        "Coordinate logistics: travel, hotel, equipment for fight weeks"
+      ],
+      "painPoints": [
+        "Information scattered across email, chat, and spreadsheets",
+        "Last-minute changes hard to communicate reliably"
+      ]
+    },
+    {
+      "activities": [
+        "Runs specialised sessions (e.g. wrestling, striking)",
+        "Provides technical feedback to individual fighters",
+        "Reports session attendance and performance notes to coach",
+        "Adjusts sessions based on fighter readiness and feedback"
+      ],
+      "updatedAt": "2026-04-02T07:28:26.005Z",
+      "goals": [
+        "Deliver high-quality technical content in specialised sessions",
+        "Ensure fighters progress in the specific discipline",
+        "Coordinate session content with the head coach's overall plan"
+      ],
+      "context": "Faglig specialist (f.eks. Jabar Shirani til brydning) — leverer det tekniske indhold i de specifikke pas. In the gym for specific sessions only. Mobile phone between sessions.",
+      "painPoints": [
+        "Doesn't always know the fighter's weekly load or fatigue level",
+        "No structured way to share session notes with the coach"
+      ],
+      "id": "persona-1775074981970-4",
+      "createdAt": "2026-04-01T20:23:01.970Z",
+      "role": "Trainer / Instructor",
+      "avatar": "🥋",
+      "name": "Devin"
+    },
+    {
+      "painPoints": [
+        "Limited time — builds in spare hours between other work",
+        "Balancing feature requests with technical debt",
+        "Testing across multiple devices and roles"
+      ],
+      "context": "Desktop-first (VS Code + browser). PO + developer in one person, AI-assisted. Builds on evenings and weekends. Facilitates the team framework. Wants flow, simple processes, and Poka-Yoke (error-proof) solutions to support the team functioning optimally.",
+      "goals": [
+        "Keep the app running, backlog prioritised, releases shipped",
+        "Ensure data quality and user access control",
+        "Evolve the product based on team feedback",
+        "Maintain the catalogue of training offerings (data entry, scraping coordination)",
+        "Story map for development coordination"
+      ],
+      "updatedAt": "2026-04-02T11:21:31.231Z",
+      "activities": [
+        "Manages the Backlog (admin 'b' shortcut)",
+        "Reviews and converts Feedback from users into backlog items",
+        "Maintains Team Charter and Release Notes",
+        "Plans releases with outcome-based goals",
+        "Validates features in the browser",
+        "Helps maintain the Catalogue data (sources, offerings)",
+        "Uses the Story Map for development planning",
+        "Deploys updates and monitors for issues"
+      ],
+      "name": "Rune",
+      "avatar": "⚙️",
+      "role": "App Admin",
+      "createdAt": "2026-04-01T20:23:01.970Z",
+      "id": "persona-1775074981970-5"
+    },
+    {
+      "id": "persona-1775074981970-6",
+      "avatar": "👨‍👩‍👧",
+      "name": "Mette",
+      "createdAt": "2026-04-01T20:23:01.970Z",
+      "role": "Relative (Interessent)",
+      "context": "Interessent — læse-adgang til relevante dele af planen/stævnekalenderen. Mobile only (iPhone). Not tech-savvy. Wants simple, glanceable info.",
+      "goals": [
+        "Know when fight week is and where to watch",
+        "See the fighter's schedule so she can plan around it",
+        "Feel connected to the fighter's journey"
+      ],
+      "activities": [
+        "Checks shared calendar for upcoming sessions and events",
+        "Watches fight announcements and results",
+        "Asks the fighter about the weekly plan"
+      ],
+      "updatedAt": "2026-04-01T20:23:01.970Z",
+      "painPoints": [
+        "No visibility into the fighter's training schedule",
+        "Always asking \"when are you training?\" or \"when is the fight?\"",
+        "Fight details scattered across social media and messages"
+      ]
+    },
+    {
+      "updatedAt": "2026-04-02T07:25:48.056Z",
+      "activities": [
+        "Follows fighter's social media and fight announcements",
+        "Buys tickets or tunes in for live events",
+        "Shares fight results with other friends"
+      ],
+      "goals": [
+        "Follow the fighter's journey and upcoming fights",
+        "Know when and where to watch or attend events",
+        "Show support and stay in the loop"
+      ],
+      "context": "Mobile (Instagram, browser). Casual engagement — checks in around fight announcements, not daily.",
+      "painPoints": [
+        "Hard to find reliable fight schedules and results",
+        "Misses events because announcements come too late",
+        "No single source of truth for the fighter's record and upcoming bouts"
+      ],
+      "id": "persona-1775074981970-7",
+      "role": "Friend / Fan",
+      "createdAt": "2026-04-01T20:23:01.970Z",
+      "name": "William",
+      "avatar": "🎉"
+    },
+    {
+      "id": "persona-1775074981970-8",
+      "role": "Club Admin",
+      "createdAt": "2026-04-01T20:23:01.970Z",
+      "name": "Mikkel",
+      "avatar": "🏢",
+      "updatedAt": "2026-04-02T07:29:47.813Z",
+      "activities": [
+        "Reviews training feedback to ensure quality",
+        "Manages facility bookings that overlap with fight-team sessions",
+        "Handles federation registrations and insurance paperwork"
+      ],
+      "context": "Laptop or often mobile phone. Manages multiple teams/activities — fight team is one of many.",
+      "goals": [
+        "Oversee the club's fight team within the broader club context",
+        "Coordinate facility usage and memberships"
+      ],
+      "painPoints": [
+        "Scheduling conflicts between fight team and club classes"
+      ]
+    },
+    {
+      "goals": [
+        "Build the fighter's career and secure opportunities",
+        "Track fight record, rankings, and contract status",
+        "Coordinate with promoters and negotiate deals"
+      ],
+      "context": "Interessent — læse-adgang til relevante dele af planen/stævnekalenderen. Laptop + phone. Manages multiple fighters across organisations. Needs quick overview, not training details.",
+      "activities": [
+        "Pitches fighters to promoters for upcoming events",
+        "Negotiates fight contracts and sponsorship deals",
+        "Monitors fighter's training and readiness status",
+        "Tracks record, rankings, and media exposure"
+      ],
+      "updatedAt": "2026-04-02T07:31:57.434Z",
+      "painPoints": [
+        "Fighter's training status is a black box",
+        "No structured fight record or career overview in one place",
+        "Communication with promoters is manual and fragmented"
+      ],
+      "id": "persona-1775074981970-9",
+      "avatar": "💼",
+      "name": "Thue",
+      "createdAt": "2026-04-01T20:23:01.970Z",
+      "role": "Manager (Interessent)"
+    },
+    {
+      "id": "persona-1775074981970-10",
+      "createdAt": "2026-04-01T20:23:01.970Z",
+      "role": "Promoter",
+      "avatar": "🎤",
+      "name": "Mark O",
+      "activities": [
+        "Scouts fighters for upcoming event cards",
+        "Confirms availability and weight-class compliance",
+        "Distributes event schedules, weigh-in details, and logistics"
+      ],
+      "updatedAt": "2026-04-02T07:32:24.531Z",
+      "goals": [
+        "Fill fight cards with competitive, reliable matchups",
+        "Verify fighter availability, record, and weight class",
+        "Communicate event details efficiently to all involved parties"
+      ],
+      "context": "Laptop. Runs 2–6 events per year. Works with multiple gyms and managers simultaneously.",
+      "painPoints": [
+        "Hard to verify fighter records and availability quickly",
+        "Last-minute pull-outs due to injury or weight issues",
+        "No standard way to exchange event/fighter information"
+      ]
+    },
+    {
+      "id": "persona-1775074981970-11",
+      "createdAt": "2026-04-01T20:23:01.970Z",
+      "role": "Event Owner",
+      "avatar": "🏟️",
+      "name": "Otto",
+      "activities": [
+        "Coordinates venue setup, security, and medical staff",
+        "Manages event timeline: weigh-ins, walkouts, fight order",
+        "Handles media credentials and broadcast logistics",
+        "Communicates with all stakeholders before and during event"
+      ],
+      "updatedAt": "2026-04-02T07:32:53.643Z",
+      "goals": [
+        "Deliver a professional, well-organised fight event",
+        "Ensure all fighters, officials, and staff have the right info",
+        "Manage ticket sales, venue logistics, and broadcast"
+      ],
+      "context": "Laptop + phone on event day. Manages everything from venue contracts to broadcast. Extremely time-pressured on fight night.",
+      "painPoints": [
+        "Information changes constantly leading up to the event",
+        "Keeping all parties in sync is exhausting and error-prone",
+        "No central system for event logistics — relies on spreadsheets and group chats"
+      ]
+    }
+  ],
+  "maps": [
+    {
+      "name": "Story Map",
+      "id": "map-1775067402483",
+      "updatedAt": "2026-04-01T18:16:42.483Z",
+      "createdAt": "2026-04-01T18:16:42.483Z"
+    }
+  ],
+  "slices": [
+    {
+      "objective": "Students have a one-stop-shop for finding training offers across gyms",
+      "order": 0,
+      "release": "1.4 - Cross-gym training schedule",
+      "name": "Cross-gym training schedule",
+      "color": "gray",
+      "mapId": "map-1775067402483",
+      "successMetrics": "",
+      "releaseNumber": "1.4",
+      "id": "slice-1775067402484-3"
+    },
+    {
+      "release": "",
+      "order": 2,
+      "name": "Later",
+      "objective": "",
+      "color": "gray",
+      "mapId": "map-1775067402483",
+      "successMetrics": "",
+      "id": "slice-1775067684054-8"
+    },
+    {
+      "objective": "The user can add a training session from the catalog to their schedule",
+      "name": "Add class to schedule",
+      "color": "gray",
+      "order": 1,
+      "release": "Add class to schedule",
+      "mapId": "map-1775067402483",
+      "successMetrics": "",
+      "id": "slice-1775132598640-1",
+      "releaseNumber": ""
+    }
+  ],
+  "activities": [
+    {
+      "color": "emerald",
+      "order": 0,
+      "title": "Onboard FightWeek",
+      "mapId": "map-1775067402483",
+      "description": "",
+      "id": "act-1775067411183-4"
+    },
+    {
+      "title": "Set goals",
+      "id": "act-1775075370816-3",
+      "description": "",
+      "mapId": "map-1775067402483",
+      "color": "emerald",
+      "order": 2
+    },
+    {
+      "color": "amber",
+      "order": 6,
+      "title": "Execute training",
+      "description": "",
+      "mapId": "map-1775067402483",
+      "id": "act-1775075450104-7"
+    },
+    {
+      "title": "Evaluate",
+      "mapId": "map-1775067402483",
+      "description": "",
+      "id": "act-1775109956866-1",
+      "color": "rose",
+      "order": 7
+    },
+    {
+      "id": "act-1775110489612-3",
+      "mapId": "map-1775067402483",
+      "description": "",
+      "title": "Find training environment",
+      "order": 1,
+      "color": "purple"
+    },
+    {
+      "id": "act-1775111311402-6",
+      "description": "",
+      "mapId": "map-1775067402483",
+      "title": "Define training program",
+      "order": 3,
+      "color": "blue"
+    }
+  ]
+}
