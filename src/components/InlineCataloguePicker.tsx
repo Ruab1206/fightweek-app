@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, MapPin, Plus, PenLine, X, SlidersHorizontal, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, MapPin, Plus, X, SlidersHorizontal, ChevronUp, ChevronDown } from 'lucide-react';
 
 import { CATEGORIES, DAYS } from '../config/constants';
 import { useCatalogue } from '../hooks/useCatalogue';
@@ -23,11 +23,10 @@ const INITIAL_SHOW = 5;
 interface Props {
     day: string;
     onAdd: (session: CatalogueAddPayload) => void;
-    onManual: () => void;
     onClose: () => void;
 }
 
-const InlineCataloguePicker = ({ day, onAdd, onManual, onClose }: Props) => {
+const InlineCataloguePicker = ({ day, onAdd, onClose }: Props) => {
     const { isDark } = useTheme();
     const { classes, loading } = useCatalogue();
     const dayIndex = DAYS.indexOf(day) + 1;
@@ -157,13 +156,6 @@ const InlineCataloguePicker = ({ day, onAdd, onManual, onClose }: Props) => {
                         <ChevronUp className="w-3.5 h-3.5" /> Vis færre
                     </button>
                 )}
-            </div>
-
-            {/* Manual add link */}
-            <div className={`px-3 py-2 border-t ${isDark ? 'border-slate-700' : 'border-surface-border'}`}>
-                <button onClick={onManual} className={`w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-bold transition-colors ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-ds-text-subtle hover:text-ds-text'}`}>
-                    <PenLine className="w-3.5 h-3.5" /> Eget pas
-                </button>
             </div>
         </div>
     );

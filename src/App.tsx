@@ -59,10 +59,10 @@ const App = () => {
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [showCatalogue, setShowCatalogue] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingDay, setEditingDay] = useState<string | null>(null);
-  const [editingSession, setEditingSession] = useState<any | null>(null);
-  const [confirmDialog, setConfirmDialog] = useState<any | null>(null);
-  const [feedbackContext, setFeedbackContext] = useState<any | null>(null);
+  const [editingDay, setEditingDay] = useState(null);
+  const [editingSession, setEditingSession] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  const [feedbackContext, setFeedbackContext] = useState(null);
   const [adminOpen, setAdminOpen] = useState(false);
   const [catSearch, setCatSearch] = useState('');
   const [catDiscipline, setCatDiscipline] = useState<string | null>(null);
@@ -477,19 +477,24 @@ const PersonalSchedule = ({ days, scheduleData, weekDates, isStandardMode, isRea
               </div>
             );
           })}
+          {/* Mobile: Tilføj eget pas outside picker */}
+          {isExpanded && !isReadOnly && (
+            <div className="md:hidden mt-1.5 mb-0.5">
+              <button onClick={() => onManualAdd()} className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold border transition-colors ${isDark ? 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700' : 'bg-white border-surface-border text-ds-text hover:bg-surface-hover'}`}>
+                <PenLine className="w-3.5 h-3.5" /> Tilføj eget pas
+              </button>
+            </div>
+          )}
           {/* Mobile inline picker */}
-          {isExpanded && <div className="md:hidden"><InlineCataloguePicker day={day} onAdd={onAddFromCatalogue} onManual={onManualAdd} onClose={onCollapseDay} /></div>}
+          {isExpanded && <div className="md:hidden"><InlineCataloguePicker day={day} onAdd={onAddFromCatalogue} onClose={onCollapseDay} /></div>}
           </div>
           </div>
           {/* Desktop catalogue — always rendered for subgrid row alignment */}
           <div className="hidden md:block">
           {showDesktopCatalogue && (
             <>
-              <div className="flex items-center gap-2 mt-2 mb-1.5">
-                  <div className={`flex-1 h-px ${isDark ? 'bg-slate-700' : 'bg-surface-border'}`} />
-                  <button onClick={() => onDesktopManual(day)} className={`flex items-center gap-1 text-[9px] font-bold whitespace-nowrap transition-colors ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-ds-text-subtle hover:text-ds-text'}`}><Plus className="w-2.5 h-2.5" /> Eget pas</button>
-                  <div className={`flex-1 h-px ${isDark ? 'bg-slate-700' : 'bg-surface-border'}`} />
-              </div>
+              <button onClick={() => onDesktopManual(day)} className={`flex items-center gap-1 mt-2 mb-1 text-[9px] font-medium whitespace-nowrap transition-colors ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-brand-500 hover:text-brand-600'}`}><Plus className="w-2.5 h-2.5" /> Tilføj eget pas</button>
+              <span className={`text-[8px] font-bold uppercase tracking-wider mb-1 ${isDark ? 'text-slate-600' : 'text-ds-text-subtlest'}`}>Tilføj fra katalog</span>
               {catalogueLoading && <div className={`text-center py-2 text-[9px] ${isDark ? 'text-slate-600' : 'text-ds-text-subtlest'}`}>...</div>}
               {!catalogueLoading && dayCatalogue.length === 0 && (
                 <div className={`text-center py-2 text-[9px] ${isDark ? 'text-slate-700' : 'text-ds-text-subtlest/50'}`}>Ingen hold</div>
