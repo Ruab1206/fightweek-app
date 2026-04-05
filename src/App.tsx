@@ -59,10 +59,10 @@ const App = () => {
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [showCatalogue, setShowCatalogue] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingDay, setEditingDay] = useState(null);
-  const [editingSession, setEditingSession] = useState(null);
-  const [confirmDialog, setConfirmDialog] = useState(null);
-  const [feedbackContext, setFeedbackContext] = useState(null);
+  const [editingDay, setEditingDay] = useState<string | null>(null);
+  const [editingSession, setEditingSession] = useState<any | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<any | null>(null);
+  const [feedbackContext, setFeedbackContext] = useState<any | null>(null);
   const [adminOpen, setAdminOpen] = useState(false);
   const [catSearch, setCatSearch] = useState('');
   const [catDiscipline, setCatDiscipline] = useState<string | null>(null);
