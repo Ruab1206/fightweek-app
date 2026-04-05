@@ -1,0 +1,412 @@
+{
+  "Caroline": {
+    "currentWeek": null,
+    "standardTemplate": {
+      "Mandag": [
+        {
+          "id": 1769725908651,
+          "location": "Rumble",
+          "category": "MMA",
+          "start": "18:00",
+          "day": "Mandag",
+          "name": "MMA Grappling",
+          "end": "19:30"
+        }
+      ],
+      "lastUpdated": "2026-01-29T22:31:57.619Z",
+      "Fredag": [
+        {
+          "name": "MMA Sparring",
+          "end": "19:00",
+          "day": "Fredag",
+          "start": "18:00",
+          "category": "MMA",
+          "location": "Rumble",
+          "id": 1769725917619
+        }
+      ]
+    }
+  },
+  "San": {
+    "currentWeek": null,
+    "standardTemplate": null
+  },
+  "Enea": {
+    "currentWeek": null,
+    "standardTemplate": {
+      "Tirsdag": [
+        {
+          "name": "Grappling",
+          "day": "Tirsdag",
+          "id": 1769725952270,
+          "category": "Grappling",
+          "location": "Burnell",
+          "start": "17:00",
+          "end": "18:00"
+        }
+      ],
+      "Fredag": [
+        {
+          "start": "18:00",
+          "end": "19:00",
+          "location": "Rumble",
+          "category": "MMA",
+          "id": 1769726056851,
+          "day": "Fredag",
+          "name": "MMA Sparring"
+        }
+      ],
+      "Onsdag": [
+        {
+          "end": "16:00",
+          "start": "15:00",
+          "category": "MMA",
+          "location": "Burnell",
+          "day": "Onsdag",
+          "id": 1769725964403,
+          "name": "MMA Sparring"
+        },
+        {
+          "category": "Grappling",
+          "location": "Burnell",
+          "start": "17:00",
+          "end": "18:00",
+          "name": "Grappling",
+          "day": "Onsdag",
+          "id": 1769725999951
+        }
+      ],
+      "Mandag": [
+        {
+          "name": "Wall Wrestling",
+          "id": 1769725933353,
+          "day": "Mandag",
+          "location": "Burnell",
+          "category": "Brydning",
+          "end": "16:00",
+          "start": "15:00"
+        },
+        {
+          "id": 1769725940203,
+          "day": "Mandag",
+          "name": "MMA Grappling",
+          "end": "19:30",
+          "start": "18:00",
+          "location": "Rumble",
+          "category": "MMA"
+        }
+      ],
+      "Torsdag": [
+        {
+          "location": "Rumble",
+          "category": "Grappling",
+          "end": "18:00",
+          "start": "17:00",
+          "name": "Nogi All",
+          "id": 1769726020468,
+          "day": "Torsdag"
+        },
+        {
+          "name": "Nogi Adv",
+          "id": 1769726026951,
+          "day": "Torsdag",
+          "location": "Rumble",
+          "category": "Grappling",
+          "end": "19:00",
+          "start": "18:00"
+        }
+      ],
+      "Søndag": [
+        {
+          "isRestDay": true,
+          "id": 1769726068050
+        }
+      ],
+      "lastUpdated": "2026-01-29T22:34:28.050Z"
+    }
+  },
+  "Anton": {
+    "currentWeek": null,
+    "standardTemplate": {
+      "Søndag": [
+        {
+          "id": 1769725888063,
+          "isRestDay": true
+        }
+      ],
+      "Fredag": [
+        {
+          "id": 1769725871444,
+          "location": "Rumble",
+          "day": "Fredag",
+          "category": "MMA",
+          "start": "17:00",
+          "end": "18:00",
+          "name": "MMA"
+        },
+        {
+          "id": 1769725874110,
+          "location": "Rumble",
+          "category": "MMA",
+          "day": "Fredag",
+          "name": "MMA Sparring",
+          "end": "19:00",
+          "start": "18:00"
+        }
+      ],
+      "Torsdag": [
+        {
+          "name": "Kickboxing Adv",
+          "start": "17:00",
+          "end": "18:30",
+          "category": "Kickboxing",
+          "day": "Torsdag",
+          "location": "Rumble",
+          "id": 1769725848110
+        },
+        {
+          "name": "Nogi Adv",
+          "end": "19:00",
+          "start": "18:00",
+          "category": "Grappling",
+          "day": "Torsdag",
+          "id": 1769725855543,
+          "location": "Rumble"
+        }
+      ],
+      "Tirsdag": [
+        {
+          "category": "Kickboxing",
+          "day": "Tirsdag",
+          "id": 1769725824362,
+          "location": "Rumble",
+          "name": "Kickboxing Adv",
+          "start": "17:00",
+          "end": "19:00"
+        },
+        {
+          "start": "18:00",
+          "end": "19:00",
+          "name": "Nogi Adv",
+          "id": 1769725830044,
+          "location": "Rumble",
+          "day": "Tirsdag",
+          "category": "Grappling"
+        }
+      ],
+      "Onsdag": [
+        {
+          "id": 1769725837494,
+          "location": "Rumble",
+          "category": "MMA",
+          "day": "Onsdag",
+          "name": "MMA Adv",
+          "end": "18:00",
+          "start": "16:30"
+        }
+      ],
+      "lastUpdated": "2026-01-29T22:31:28.063Z",
+      "Mandag": [
+        {
+          "end": "19:00",
+          "start": "17:00",
+          "name": "Kickboxing Adv",
+          "location": "Rumble",
+          "id": 1769725808228,
+          "day": "Mandag",
+          "category": "Kickboxing"
+        },
+        {
+          "name": "MMA Grappling",
+          "start": "18:00",
+          "end": "19:30",
+          "id": 1769725813312,
+          "location": "Rumble",
+          "category": "MMA",
+          "day": "Mandag"
+        }
+      ],
+      "Lørdag": [
+        {
+          "day": "Lørdag",
+          "category": "Boksning",
+          "location": "Rødovre",
+          "id": 1769725881094,
+          "end": "11:30",
+          "start": "10:00",
+          "name": "Boksning"
+        }
+      ]
+    }
+  },
+  "Jonas": {
+    "currentWeek": null,
+    "standardTemplate": {
+      "Tirsdag": [
+        {
+          "name": "Kickboxing Adv",
+          "id": 1769726103084,
+          "category": "Kickboxing",
+          "day": "Tirsdag",
+          "location": "Rumble",
+          "end": "19:00",
+          "start": "17:00"
+        }
+      ],
+      "Fredag": [
+        {
+          "category": "MMA",
+          "id": 1769726116200,
+          "name": "MMA Sparring",
+          "start": "18:00",
+          "end": "19:00",
+          "location": "Rumble",
+          "day": "Fredag"
+        }
+      ],
+      "Mandag": [
+        {
+          "id": 1769726095948,
+          "category": "MMA",
+          "name": "MMA Grappling",
+          "start": "18:00",
+          "end": "19:30",
+          "day": "Mandag",
+          "location": "Rumble"
+        }
+      ],
+      "Torsdag": [
+        {
+          "start": "17:00",
+          "end": "18:30",
+          "location": "Rumble",
+          "day": "Torsdag",
+          "category": "Kickboxing",
+          "id": 1769726110032,
+          "name": "Kickboxing Adv"
+        }
+      ],
+      "lastUpdated": "2026-01-29T22:35:16.200Z"
+    }
+  },
+  "Karl": {
+    "currentWeek": {
+      "lastUpdated": "2026-03-28T16:21:31.080Z",
+      "Mandag": []
+    },
+    "standardTemplate": {
+      "Tirsdag": [
+        {
+          "name": "Brydning",
+          "end": "21:00",
+          "day": "Tirsdag",
+          "start": "19:00",
+          "category": "Brydning",
+          "location": "Roskilde",
+          "id": 1769724963799
+        }
+      ],
+      "Fredag": [
+        {
+          "id": 1769725167099,
+          "cancel": false,
+          "category": "Fysisk træning",
+          "reason": "",
+          "start": "17:00",
+          "cancellationTime": null,
+          "status": "active",
+          "location": "Rumble",
+          "cancellationReason": null,
+          "end": "18:00",
+          "name": "Frodi fysisk"
+        },
+        {
+          "id": 1769725175031,
+          "location": "Rumble",
+          "start": "18:00",
+          "category": "MMA",
+          "end": "19:00",
+          "day": "Fredag",
+          "name": "MMA Sparring"
+        }
+      ],
+      "Torsdag": [
+        {
+          "id": 1769725096722,
+          "location": "Rumble",
+          "start": "17:00",
+          "category": "Kickboxing",
+          "name": "Kickboxing Adv",
+          "end": "18:30",
+          "day": "Torsdag"
+        },
+        {
+          "location": "Rumble",
+          "id": 1769725101685,
+          "end": "19:00",
+          "day": "Torsdag",
+          "name": "Nogi Adv",
+          "category": "Grappling",
+          "start": "18:00"
+        }
+      ],
+      "Mandag": [
+        {
+          "location": "Rumble",
+          "id": 1769724852477,
+          "day": "Mandag",
+          "name": "MMA Grappling",
+          "end": "19:30",
+          "category": "MMA",
+          "start": "18:00"
+        },
+        {
+          "start": "19:30",
+          "reason": "",
+          "category": "MMA",
+          "cancel": false,
+          "id": 1769724945468,
+          "name": "Frodi wall wrestling",
+          "end": "20:00",
+          "cancellationReason": null,
+          "status": "active",
+          "location": "Rumble",
+          "cancellationTime": null
+        }
+      ],
+      "Onsdag": [
+        {
+          "category": "Fysisk træning",
+          "reason": "",
+          "start": "15:45",
+          "cancel": false,
+          "id": 1769725072959,
+          "cancellationReason": null,
+          "name": "Fysisk træning hjemme",
+          "end": "17:30",
+          "location": "Andet",
+          "status": "active",
+          "cancellationTime": null
+        }
+      ],
+      "Søndag": [
+        {
+          "isRestDay": true,
+          "id": 1769725184566
+        }
+      ],
+      "Lørdag": [
+        {
+          "location": "Roskilde",
+          "id": 1769725181381,
+          "name": "Brydning",
+          "day": "Lørdag",
+          "end": "16:00",
+          "start": "14:00",
+          "category": "Brydning"
+        }
+      ],
+      "lastUpdated": "2026-01-29T22:19:44.566Z"
+    }
+  }
+}

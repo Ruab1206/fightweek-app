@@ -1,0 +1,10 @@
+export { TEAM_CHARTER } from './team-charter.md';
+export { RELEASE_NOTES } from './release-notes.md';
+export { ENTITY_MODEL } from './entity-model.md';
+export { DOMAIN_MODEL } from './domain-model.md';
+export { DESIGN_SYSTEM } from './design-system.md';
+export { MASTER_DATA } from './master-data.md';
+export { FIGHT_TEAM_DESCRIPTION } from './fight-team-description.md';
+export { ARCHITECTURAL_BLUEPRINT } from './architectural-blueprint.md';
+export { PRODUCT_VISION } from './product-vision.md';
+export { CATALOGUE_SPEC } from './catalogue-spec.md';

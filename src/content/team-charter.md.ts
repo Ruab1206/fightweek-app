@@ -1,0 +1,285 @@
+// Team Charter — adopted from the Toolbox's ways of working
+export const TEAM_CHARTER = `# Team Charter
+
+> How we work together — our agreements, ceremonies, quality gates, and the things that might slow us down.
+
+---
+
+## Who We Are
+
+The development team is a **PO + AI Agent pair**. The Product Owner drives what gets built and validates every change in the browser. The AI Agent implements features, manages the backlog data, and follows the team's process agreements. Together they work in a continuous flow, using releases (scope-driven) instead of sprints (time-driven).
+
+| Role | Responsibility |
+|------|---------------|
+| **Product Owner** | Vision, prioritisation, validation, feedback proxy |
+| **AI Agent** | Architecture, implementation, code quality, documentation, outcome coaching |
+
+> **Coaching agreement:** The AI Agent actively coaches the PO on keeping releases outcome-focused. When a release goal drifts toward feature lists ("build X, Y, Z"), the Agent should ask: *"What user behaviour change are we trying to achieve?"* and help reframe toward outcomes.
+
+---
+
+## Our Ceremonies
+
+We follow a release-based cadence. Every release goes through four phases:
+
+| Our ceremony | Scrum equivalent | When it happens |
+|---|---|---|
+| **Release Planning** | Sprint Planning | Before each release starts |
+| **Implementation** | The Sprint | Continuous during the release |
+| **Release Review** | Sprint Review | After the release ships |
+| **Release Retrospective** | Sprint Retrospective | After the review |
+| **Conversation start** | Daily Standup | At the beginning of each working session |
+
+### What happens in each ceremony
+
+**Release Planning**
+- Re-read project documentation for context
+- **Walk the story map** — Before selecting items, walk the backbone left-to-right (Jeff Patton method). For each Activity, ask: *"What's the next thin slice of value we can deliver here?"* Look at the vertical priority under each User Task. The goal is to find the thinnest horizontal slice that delivers end-to-end value — a *walking skeleton*, not a finished feature.
+- **Name the release slice** — Every release gets a number and an outcome-based name using the format \`1.x — Name\`. The name should describe the outcome, not the features (e.g. "1.3 — Catalogue" means *"coaches can manage training offerings without code changes"*, not *"build CRUD for sources and catalogue items"*).
+- **Define success metrics** — For each release, answer: *"What would we measure to determine this was successful?"* This could be a user behaviour change, a workflow that's now possible, or a pain point that's removed.
+- Review the backlog and refine selected items against the release goal
+- Assess whether refactoring should be included or deferred
+
+**Implementation**
+- Move items from Ready to Doing before starting work
+- Work items in priority order
+- Follow DoR/DoD per item
+
+**Release Review**
+- **Assess the outcome first** — Did we achieve the release goal? The review focuses on the outcome, not on whether every planned story was completed. Stories are a means to an end.
+- If the outcome was achieved through different work than originally planned, that's a success — we adapted.
+- If the outcome was not achieved, discuss: was the goal too ambitious, did we learn something that changed the landscape, or did we get sidetracked?
+- Demo to stakeholders, collect feedback
+- Review the backlog — reprioritise, clean up stale items, check release tags
+- Design system review — verify UI changes adhere to the design system
+- **Important:** don't code during review — thinking is fine, but build decisions belong in planning
+
+**Release Retrospective**
+- What went well / what to improve
+- Update DoR, DoD, and team agreements
+- Evaluate AI collaboration
+- Update documentation with learnings and process changes
+
+---
+
+## Release Naming Convention
+
+We use **semantic versioning lite** with an outcome name:
+
+\`\`\`
+1.x — Outcome Name
+\`\`\`
+
+| Part | Meaning |
+|------|---------|
+| **Major (1)** | Bumps only for breaking data migrations or major rearchitecture |
+| **Minor (x)** | Increments with each release — a coherent slice of user value |
+| **Name** | The target outcome, not a feature list |
+
+### Release history
+
+| Release | Outcome | Period |
+|---------|---------|--------|
+| 1.0 — Core App | Fighters can plan and see their training week | Dec 2025 – Feb 2026 |
+| 1.1 — Admin & Backlog | Admin can manage the product backlog inside the app | Feb 2026 |
+| 1.2 — Ways of Working | The app documents its own team process and architecture | Mar 2026 |
+| 1.3 — Code Health | Codebase is production-grade — zero ts-nocheck, zero TS errors | Apr 2026 (shipped) |
+| 1.4 — Class Catalog | Fighters can easily find training offers across gyms | Apr 2026 (shipped) |
+
+---
+
+## The Story Map
+
+We use a **Jeff Patton-style user story map** as the primary tool for shared understanding and release planning. The story map lives inside the app (admin area → Story Map).
+
+### How the story map works
+
+\`\`\`
+  Activities (backbone)        ←  left-to-right = user journey
+       │
+  User Tasks (under each)     ←  the things users do within each activity
+       │
+  Release Slices (horizontal)  ←  each slice = a release = a walking skeleton
+       │
+  Backlog Items (mapped in)    ←  concrete work, placed in a slice under a task
+\`\`\`
+
+### Key principles (from Patton)
+
+1. **The backbone stays fixed** — Activities represent the user's journey. You don't prioritise them against each other. They just *are*.
+2. **Prioritise vertically** — Under each User Task, stories near the top are essential; further down is nice-to-have.
+3. **Slice horizontally for releases** — A line drawn across the map creates a release. Each slice is the **thinnest possible end-to-end delivery** — a walking skeleton.
+4. **Name every slice** — Each release slice gets an outcome name and success metrics, not just a bag of stories.
+5. **Walk the map regularly** — At every release planning, walk the backbone left-to-right to spot gaps, check priorities, and find the next thin slice.
+6. **The map is alive** — Update it as understanding grows. Add new Activities when the domain expands. Move stories between slices as priorities shift.
+
+### How we use it in practice
+
+| When | What we do with the map |
+|------|------------------------|
+| **Release Planning** | Walk the backbone, identify the next slice, name it with an outcome |
+| **During implementation** | Items move through the backlog (Ready → Doing → Done) while staying pinned to their map position |
+| **Release Review** | Mark completed stories on the map. Step back and look at the big picture — what's filled in, what's still thin? |
+| **Domain discovery** | When we learn something new about the domain, check if Activities or User Tasks need updating |
+
+---
+
+## Quality Gates
+
+### ✅ Definition of Ready (DoR)
+
+Before starting any backlog item:
+
+1. **Confirm understanding** — Restate the goal and acceptance criteria. **Wait for PO's explicit written "go" before writing any code.**
+2. **Discuss open questions** — Notes, questions, and topics on the item have been read and discussed.
+3. **Identify affected files** — List which files, services, and data stores will be touched.
+4. **Flag risks** — Call out anything that could go wrong (data loss, breaking changes, scope creep).
+5. **Explicit CRUD scope** — For items involving entities, AC must state which operations are in scope.
+6. **Include "How to verify"** — Every item includes a short verification checklist, written before "go".
+
+### ✅ Definition of Done (DoD)
+
+A backlog item is done when:
+
+1. **Implementation complete** — The feature works as described.
+2. **Tested on mobile + desktop** — Responsive design verified.
+3. **Tested in browser** — The PO has verified the feature works as intended.
+4. **Feedback loop built in** — Users can give feedback directly on the functionality.
+5. **Data persisted correctly** — No hardcoded workarounds, proper database writes.
+6. **Documentation updated** — Relevant docs and changelogs are current.
+7. **Design system checked** — New/changed UI patterns are reflected in the design system.
+8. **Poka-Yoke applied** — If a user *can* do something wrong, it's a design flaw.
+9. **Release assigned** — The item's release field is set.
+10. **File size checked** — No file over 400 lines without a documented reason or a refactoring item in the backlog.
+11. **Design system updated** — If new UI patterns are introduced, the design system page is updated.
+12. **Dev server verified after mechanical edits** — After batch type-annotation changes or pragma removals, check the Vite dev server terminal for parse errors. TypeScript and Babel/esbuild see different things — a file can pass \`tsc\` but crash at serve time. (Retro 1.3 A1)
+13. **Search all callers when removing props** — When a child component's Props interface drops a member, grep for all usages of that prop name in the codebase before considering it done. (Retro 1.3 A4)
+
+---
+
+## Team Agreements
+
+### Process agreements
+
+| Agreement | Why |
+|-----------|-----|
+| **PO "go" before coding** | AI waits for explicit written go from PO before implementing |
+| **Follow ceremony order** | Retrospective → Planning → then items one by one. No skipping ahead. |
+| **Don't code during review/retro** | Thinking de-tours are fine, but build decisions belong in planning |
+| **Outcome-based release goals** | Each release gets an outcome-based goal used to scope work |
+| **Outcome over output** | A release is judged by whether the outcome was achieved, not whether every planned story was completed. If we discover mid-release that different work is needed to reach the goal, we adapt. We only descope the goal itself if the remaining work is disproportionate. |
+| **AI coaches on outcomes** | When the PO drifts toward feature-lists, the AI reframes toward user behaviour changes |
+| **Flag scope growth** | When scope grows mid-item, flag it explicitly — add to AC or new item? |
+| **Items must pass through Ready** | Every item goes Backlog → Ready → Doing → Done. No skipping. |
+| **Pull from backlog before coding** | All items must exist in the backlog before implementation starts. AI must prompt PO to create/confirm the item before writing any code — even for "quick" tasks. |
+| **Spike before invest** | For infrastructure work (MCP, new auth patterns, new integrations), create a spike item first. Only build the full solution after the spike confirms feasibility. |
+| **Stay within product boundary** | Only edit files in the active product's directory. If a change is needed in another product, flag it and let the PO decide. (Retro 1.3 A2) |
+| **Update release notes incrementally** | When completing a significant chunk of work (e.g. a batch of files), update the release notes then — not just at review time. (Retro 1.3 A3) |
+
+### Design principles
+
+| Principle | Description |
+|-----------|-------------|
+| **Poka-Yoke** | If a user can make a mistake, it's our design flaw — remove the possibility |
+| **Outcome Focus** | We don't build features for features' sake — we solve problems |
+| **Mobile-first** | Fighters use phones. Desktop is secondary. |
+| **AI proactive on UI/UX** | AI proposes layout and interaction choices during DoR, not after building |
+| **400-line check** | After any edit pushing a file past 400 lines, propose extraction |
+| **URL/state strategy at DoR** | Items involving URL params must include a state management strategy |
+| **Design system discipline** | Build → Extract → Document → Reference. Bottom-up from working code. |
+
+---
+
+## Potential Impediments
+
+| Impediment | Impact | Status |
+|-----------|--------|--------|
+| **Firebase quota limits** | Could throttle real-time sync under heavy use | Monitoring |
+| **In-app browser incompatibility** | Must detect and block Messenger/Instagram browsers | Solved with browser check |
+| **Mobile auth cross-site tracking** | Popup vs Redirect login method selection needed | Solved with manual chooser |
+| **Single-developer bottleneck** | AI agent is the only implementer | Accepted — pair model works |
+
+---
+
+## Refactoring Discipline
+
+Refactoring is assessed at **every release review**:
+
+1. Count items completed since last refactoring assessment
+2. Quick scan: files over 400 lines, any-types, service patterns
+3. Decide: refactor now, create a deferred item, or move on
+
+### What we look for
+- Component size > 400 lines → extract sub-components
+- Duplicated type definitions or utilities
+- Service layer violations (pages calling APIs directly)
+- Dead code — unused imports, unreachable branches
+- Design system adherence — shared patterns used consistently
+
+---
+
+## How We Communicate
+
+| Channel | Purpose |
+|---------|---------|
+| **Dev conversation** | All planning, implementation, review, and retro |
+| **Story Map (in-app)** | Big picture — activities, user tasks, release slices, shared understanding |
+| **Backlog (in-app)** | Source of truth for what's planned, in progress, and done |
+| **Team Charter** | Team agreements and ways of working (this document) |
+| **Domain Model** | Shared language — every concept, how they connect, and why |
+| **Release Notes** | What shipped, told for users |
+| **Feedback modal** | In-app feedback from users |
+
+---
+
+## AI Agent Data Access
+
+The AI Agent has direct read/write access to the Firestore production database via a service account. This enables live collaboration on planning, backlog management, and data quality checks — without manual export steps.
+
+### How it works
+
+| Component | Purpose |
+|-----------|---------|
+| \`serviceAccountKey.json\` | Firebase service account key (local only, never committed to version control) |
+| \`scripts/firestore-admin.cjs\` | Zero-dependency Firestore client (JWT → OAuth2 → REST API, works on Node 16) |
+| \`scripts/read-all-data.cjs\` | Bulk reader — dumps story map, backlog, feedback, and fighter data to \`data/\` |
+| \`scripts/write-firestore.cjs\` | CLI for read/write/update/delete operations on any Firestore document |
+| \`scripts/mcp-firestore-server.cjs\` | MCP server (ready for when corporate policy allows MCP in VS Code) |
+
+### Firestore paths
+
+| Path | Contains | Access |
+|------|----------|--------|
+| \`artifacts/production/public/data/story-map/main\` | Story map (activities, tasks, slices, personas) | Team read, admin/coach write |
+| \`artifacts/production/public/data/backlog/{id}\` | Backlog items | Team read, admin/coach write |
+| \`artifacts/production/public/data/feedback/{id}\` | User feedback | Team read, admin/coach write |
+| \`artifacts/production/users/{Name}/weeks/week_{N}\` | Fighter weekly schedule | Team read, fighter+admin write |
+| \`artifacts/production/users/{Name}/templates/standard\` | Fighter standard week template | Team read, fighter+admin write |
+
+### Persistence model
+
+**Firestore is the single source of truth for all user data.** No localStorage, no offline caching — every data store works the same way.
+
+| Data | Store | Notes |
+|------|-------|-------|
+| Story map | Firestore (\`story-map/main\`) | Single document containing activities, tasks, slices, and personas |
+| Backlog | Firestore (\`backlog/{id}\`) | Individual docs per item |
+| Feedback | Firestore (\`feedback/{id}\`) | Individual docs per feedback entry |
+| Fighter schedules | Firestore (\`users/{Name}/weeks/week_{N}\`) | Per-fighter, per-week documents |
+| Content docs (charter, domain model, etc.) | Source code (\`src/content/*.md.ts\`) | Updated via code changes, rendered in-app |
+
+### Security
+
+- The service account key bypasses Firestore security rules (admin-level access)
+- The key file is in \`.gitignore\` and must never be committed
+- Firestore security rules still protect browser-based access (team member whitelist, role-based writes)
+- See \`firestore.rules\` for the deployed rule set
+
+---
+
+## Working Principles
+
+- **Order is priority** — The backlog's physical order *is* the priority
+- **Releases over sprints** — We ship when a coherent set of changes is ready, not on a timer
+- **Self-documenting product** — The app documents itself. Docs live inside the app, not in a separate wiki
+`;
