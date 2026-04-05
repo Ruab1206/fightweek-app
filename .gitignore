@@ -18,6 +18,8 @@ build/
 .env
 .env.local
 .env.*.local
+
+# Firebase service account key (NEVER commit)
 serviceAccountKey.json
 
 # Logs
@@ -28,3 +30,6 @@ yarwn-debug.log*
 # Runtime data
 pids/
 *.pid
+
+# Data snapshots (downloaded from Firestore — local only)
+data/
