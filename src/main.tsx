@@ -6,8 +6,6 @@ import CataloguePage from './pages/CataloguePage'
 import './index.css'
 import { ThemeProvider } from './hooks/useTheme'
 
-// Force rebuild cache bust
-
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeProvider>

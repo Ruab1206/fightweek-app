@@ -11,10 +11,9 @@ export function useCatalogue() {
   useEffect(() => {
     const q = query(collection(db, PUBLIC_DATA_PATH, 'catalogue'));
     const unsub = onSnapshot(q, (snap) => {
-      const items: CatalogueClass[] = snap.docs.map((d) => ({
-        ...d.data(),
-        id: d.id,
-      } as CatalogueClass));
+      const items: CatalogueClass[] = snap.docs
+        .map((d) => ({ ...d.data(), id: d.id } as CatalogueClass))
+        .filter((c) => c.title && Array.isArray(c.schedules) && c.schedules.length > 0);
       items.sort((a, b) => a.title.localeCompare(b.title, 'da'));
       setClasses(items);
       setLoading(false);

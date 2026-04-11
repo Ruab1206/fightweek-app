@@ -58,12 +58,18 @@ const InlineCataloguePicker = ({ day, onAdd, onClose }: Props) => {
         if (selGym) list = list.filter(o => o.cls.gym === selGym);
         if (search.trim()) {
             const q = search.toLowerCase();
-            list = list.filter(o =>
-                o.cls.title.toLowerCase().includes(q) ||
-                o.cls.discipline.toLowerCase().includes(q) ||
-                o.cls.gym.toLowerCase().includes(q) ||
-                (o.cls.instructor && o.cls.instructor.toLowerCase().includes(q))
-            );
+            list = list.filter(o => {
+                const c = o.cls;
+                return c.title.toLowerCase().includes(q) ||
+                    c.discipline.toLowerCase().includes(q) ||
+                    disciplineToCategory(c.discipline).toLowerCase().includes(q) ||
+                    c.gym.toLowerCase().includes(q) ||
+                    (c.location && c.location.toLowerCase().includes(q)) ||
+                    (c.address && c.address.toLowerCase().includes(q)) ||
+                    (c.level && c.level.toLowerCase().includes(q)) ||
+                    (c.subDiscipline && c.subDiscipline.toLowerCase().includes(q)) ||
+                    (c.instructor && c.instructor.toLowerCase().includes(q));
+            });
         }
         return list;
     }, [allOptions, selDiscipline, selGym, search]);

@@ -30,6 +30,23 @@ export const USER_MAPPING: Record<string, { name: string; role: 'fighter' | 'coa
 
 export const FIGHTERS = ['Caroline', 'San', 'Enea', 'Anton', 'Jonas', 'Karl', 'Frode'];
 
+// Shared day-of-week mapping (ISO: 1=Monday … 7=Sunday)
+export const DAY_NAMES: Record<number, string> = { 1: 'Mandag', 2: 'Tirsdag', 3: 'Onsdag', 4: 'Torsdag', 5: 'Fredag', 6: 'Lørdag', 7: 'Søndag' };
+
+// Recurrence interval options
+export const RECURRENCE_OPTIONS = [
+  { label: 'Gentag ikke', value: 0 },
+  { label: 'Hver uge', value: 1 },
+  { label: 'Hver 2. uge', value: 2 },
+  { label: 'Hver 3. uge', value: 3 },
+  { label: 'Hver 4. uge', value: 4 },
+];
+
+// Google Maps search link
+export function googleMapsUrl(address: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+
 // Firestore paths
 export const ROOT_COLLECTION = `artifacts/production/users`;
 export const PUBLIC_DATA_PATH = `artifacts/production/public/data`;
