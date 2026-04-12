@@ -21,11 +21,10 @@ interface TeamScheduleProps {
     days: string[];
     teamData: Record<string, Record<string, Session[]>>;
     currentWeek: number;
-    isStandardMode: boolean;
     isDark?: boolean;
 }
 
-const TeamSchedule = ({ days, teamData, currentWeek, isStandardMode, isDark = true }: TeamScheduleProps) => {
+const TeamSchedule = ({ days, teamData, currentWeek, isDark = true }: TeamScheduleProps) => {
     const [weekDates, setWeekDates] = useState<Record<string, string>>({});
     
     useEffect(() => {
@@ -65,7 +64,7 @@ const TeamSchedule = ({ days, teamData, currentWeek, isStandardMode, isDark = tr
                             <h3 className={`font-bold text-sm mb-2 text-center ${isDark ? 'text-white' : 'text-ds-text'}`}>
                                 <span className="md:hidden">{day}</span>
                                 <span className="hidden md:inline">{day.slice(0, 3)}</span>
-                                {!isStandardMode && weekDates[day] && <span className={`text-[10px] ml-1 font-medium ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>d. {weekDates[day]}</span>}
+                                {weekDates[day] && <span className={`text-[10px] ml-1 font-medium ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>d. {weekDates[day]}</span>}
                             </h3>
                             
                             {sortedKeys.length === 0 && <div className={`text-xs font-medium py-2 text-center border-2 border-dashed rounded-xl ${isDark ? 'text-slate-600 border-slate-800/50' : 'text-ds-text-subtlest border-surface-border'}`}>Ingen træning</div>}

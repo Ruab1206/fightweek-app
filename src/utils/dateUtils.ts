@@ -99,11 +99,98 @@ export const formatCancellationTime = (isoString?: string): string => {
     
     // If cancelled today, show time
     if (date.toDateString() === now.toDateString()) {
-        return `Kl. ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+        return `Kl. ${date.toLocaleTimeString('da-DK', {hour: '2-digit', minute:'2-digit'})}`;
     }
     
     // Otherwise show day name
     const dayIndex = date.getDay();
     const dayName = dayIndex === 0 ? 'Søndag' : DAYS[dayIndex - 1];
     return dayName;
+};
+
+/**
+ * Get today's day name in Danish (e.g., 'Mandag')
+ */
+export const getTodayDayName = (): string => {
+    const dow = new Date().getDay(); // 0=Sun, 1=Mon...
+    return dow === 0 ? 'Søndag' : DAYS[dow - 1];
+};
+
+/**
+ * Get a map of days to full dates for a given week
+ * Format: { "Mandag": "13. april", ... }
+ */
+export const getFullWeekDateMap = (weekNumber: number): Record<string, string> => {
+    const map: Record<string, string> = {};
+    DAYS.forEach(day => {
+        const date = getDateForWeekDay(weekNumber, day);
+        if (date) {
+            map[day] = date.toLocaleDateString('da-DK', { day: 'numeric', month: 'long' });
+        }
+    });
+    return map;
+};
+
+/**
+ * Get the month label for a given week (e.g., "april 2026")
+ * Uses Thursday of the week to determine the month (ISO 8601 convention)
+ */
+export const getWeekMonthLabel = (weekNumber: number): string => {
+    const thu = getDateForWeekDay(weekNumber, 'Torsdag');
+    if (!thu) return '';
+    return thu.toLocaleDateString('da-DK', { month: 'long', year: 'numeric' });
+};
+
+/**
+ * Represents one day in the continuous scroll timeline.
+ */
+export interface ScrollDay {
+    date: Date;
+    dayName: string;        // e.g. "Mandag"
+    weekNumber: number;     // ISO week
+    dateLabel: string;      // e.g. "9. april"
+    monthLabel: string;     // e.g. "april"
+    isToday: boolean;
+    key: string;            // unique key e.g. "2026-04-09"
+}
+
+/**
+ * Get the ISO week number for an arbitrary Date object.
+ */
+export const getISOWeekForDate = (d: Date): number => {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+};
+
+/**
+ * Generate a continuous array of ScrollDay objects spanning a range of weeks.
+ * @param weeksBack  Number of weeks before current week (default 2)
+ * @param weeksAhead Number of weeks after current week (default 2)
+ */
+export const getDaysInRange = (weeksBack = 2, weeksAhead = 2): ScrollDay[] => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().slice(0, 10);
+    const currentWeek = getISOWeek();
+    const days: ScrollDay[] = [];
+
+    for (let wOffset = -weeksBack; wOffset <= weeksAhead; wOffset++) {
+        const weekNum = currentWeek + wOffset;
+        for (let d = 0; d < 7; d++) {
+            const date = getDateForWeekDay(weekNum, DAYS[d]);
+            if (!date) continue;
+            days.push({
+                date,
+                dayName: DAYS[d],
+                weekNumber: weekNum,
+                dateLabel: date.toLocaleDateString('da-DK', { day: 'numeric', month: 'long' }),
+                monthLabel: date.toLocaleDateString('da-DK', { month: 'long' }),
+                isToday: date.toISOString().slice(0, 10) === todayStr,
+                key: date.toISOString().slice(0, 10),
+            });
+        }
+    }
+    return days;
 };

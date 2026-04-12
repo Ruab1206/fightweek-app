@@ -5,7 +5,113 @@ export const RELEASE_NOTES = `# Release Notes
 > Releases follow the \`1.x — Outcome Name\` convention. See the Team Charter for how we plan releases using the story map.
 
 ---
+## 1.6 — Easier Class Scheduling
+*April 2026*
 
+**Outcome:** Fighters get a cleaner, simpler weekly view — focused on what matters. Program and rest-day features removed in favour of a streamlined personal schedule. Fravær (absence) tracking added with multi-day calendar picker.
+
+### What changed
+
+**Continuous day scroll (#1133)**
+- Replaced week-by-week navigation with a continuous vertical scroll on mobile
+- Days flow naturally across week boundaries — no more tapping week arrows
+- Sticky date rail on the left with day abbreviation and date number
+- Week divider labels appear automatically between Søndag and Mandag
+- Multi-week data loaded in a rolling window (current ± 4 weeks) with auto-expansion on scroll
+
+**Today button (#1146)**
+- Calendar icon in the header with today's date number
+- Tap to jump directly to today's row — exits search mode if active
+- Visual anchor so you always know where "now" is
+
+**Fravær (absence) tracking**
+- New "Fravær" add type in the AddScreen with MonthCalendarPicker for date range selection
+- Yellow absence cards appear on each day within the range, showing title, description, and day count
+- Clickable cards open the edit view — update title, description, dates, or delete
+- Multi-day absences show "dag X/Y" labels and time bounds (start on first day, end on last)
+- Data stored as individual session entries per day with shared \\\`fraværGroupId\\\`
+
+**Program & Hvile removal (code cleanup)**
+- Removed "Program" (Standarduge) from the left menu and all code paths
+- Removed \\\`isStandardMode\\\` state, \\\`useStandardTemplate\\\` hook, and \\\`programKeys\\\` tracking
+- Removed rest-day (Hvile) toggle button and HVILE badge from the desktop schedule
+- Removed \\\`handleToggleRestDay\\\` function and Bed icon import
+- Simplified view type from \\\`'personal' | 'program' | 'team'\\\` to \\\`'personal' | 'team'\\\`
+- Auto-feed from template preserved — new weeks still seed from the standard template in Firestore
+- Legacy \\\`isRestDay\\\` data filters kept to safely ignore old rest-day markers in existing data
+
+**User menu replaces footer nav (#1147)**
+- Drawer menu with fighter avatar, name, and team role
+- Settings, theme toggle, and logout moved into the drawer
+- Cleaner mobile footer with just the FAB
+
+**Encoding fix**
+- Fixed 24 mojibake sequences in source files caused by PowerShell \\\`Set-Content\\\` encoding corruption (e.g. â€" → —, Â· → ·)
+- Added \\\`.gitattributes\\\` to enforce UTF-8 with LF line endings for all source files
+
+**Refactoring**
+- Merged \\\`handleFravær\\\` and \\\`handleEditFravær\\\` into a single function
+- Replaced \\\`JSON.parse(JSON.stringify())\\\` with \\\`structuredClone()\\\`
+- Replaced inline ISO week calculations with \\\`getISOWeekForDate()\\\` utility
+- Deduplicated constants (\\\`DAY_NAMES\\\`, \\\`RECURRENCE_OPTIONS\\\`, \\\`googleMapsUrl\\\`) into constants.ts
+- Updated type definitions in common.ts (\\\`DayName\\\`, \\\`FraværSession\\\`, \\\`SessionEntry\\\`, \\\`WeekSchedule\\\`)
+- Removed dead imports and fixed duplicate props in MobileScrollView
+
+### Bug fixes
+- Fixed date off-by-one error in Fravær date range calculation
+- Fixed same-week overwrite bug when editing Fravær across week boundaries
+- Fixed edit race condition where old data could briefly flash before update
+- Fixed duplicate Fravær cards appearing after rapid edits
+- Fixed click handler scope issue on Fravær cards in mobile scroll view
+
+### Carry-forward
+- **#1128** — Open class details (tap a catalogue class to see full info in the schedule context)
+- **#1129** — Add class from catalog (inline add flow from the schedule view)
+- **#1136** — Mark recurring catalogue classes in catalogue view
+- **#1137** — Search mode (header-driven, distinct from browse)
+- **#1138** — Change program for recurring training sessions
+- **#1145** — Header month picker
+
+### Retro learnings
+- **Keep:** Removing dead features early — Program and Hvile were adding complexity for no user value. Clean removal is better than carrying dead code.
+- **Keep:** Encoding vigilance — PowerShell \\\`Set-Content\\\` silently re-encodes UTF-8 files. Use Node.js scripts for file mutations, and \\\`.gitattributes\\\` as a safety net.
+- **Keep:** Legacy data filters — when removing a feature from UI, keep server-side/data-layer guards so old documents don't cause runtime errors.
+- **Added to DoD:** After any bulk refactoring, run \\\`npx vite build\\\` before committing — TypeScript and Vite can disagree on what compiles.
+- **Lesson:** God components (App.tsx at 1700+ lines) make feature removal painful. Each removal touches dozens of locations in the same file. This is the strongest signal yet that we need to extract PersonalSchedule, MobileScrollView, and SessionDetailSheet into separate component files.
+- **Lesson:** \\\`structuredClone()\\\` is a drop-in replacement for \\\`JSON.parse(JSON.stringify())\\\` in all modern browsers — simpler, faster, and handles more edge cases.
+
+---
+
+## 1.5 — Build Your Program
+*April 2026*
+
+**Outcome:** Fighters can build their weekly training program from the catalogue — replacing hardcoded templates with real, up-to-date class data.
+
+### What changed
+
+**#917 — Add class to program**
+- Fighters can add any catalogue class to their personal weekly schedule
+- Two entry points: tap [+] on a day to see catalogue classes for that day, or browse the desktop week catalogue overlay
+- Session cards show discipline colour, time, gym, and "recurring" badge for template sessions
+
+**#1124 — Add custom class**
+- Manual session creation alongside catalogue-based adds
+- Fighters can type in a custom name, pick category, set time and location
+
+**#1126 — Add catalogue class to program**
+- Replaced \\\`GLOBAL_TEMPLATES\\\` (hardcoded session presets) with live catalogue data
+- Slide-up panel shows filtered catalogue classes matching the selected day's gym schedules
+- Desktop shows a collapsible weekly catalogue overlay alongside the schedule
+
+**#1125 — CataloguePage refactor**
+- Extracted filter bar, scroll spy, and distance logic into focused modules
+- CataloguePage reduced from ~550 lines by splitting concerns
+
+### Retro learnings
+- **Keep:** Catalogue-first approach — building on the 1.4 catalogue data made "add to schedule" a natural next step
+- **Lesson:** The old \\\`GLOBAL_TEMPLATES\\\` constant was a shortcut that became tech debt. Replacing it with live Firestore data was the right move — no more stale session presets.
+
+---
 ## 1.4 — Class Catalog
 *April 2026*
 

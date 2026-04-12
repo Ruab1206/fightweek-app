@@ -9,7 +9,7 @@ const formatDate = (v: unknown): string => {
   return isNaN(d.getTime()) ? '–' : d.toLocaleString('da-DK', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
-const DAY_NAMES: Record<number, string> = { 1: 'Mandag', 2: 'Tirsdag', 3: 'Onsdag', 4: 'Torsdag', 5: 'Fredag', 6: 'Lørdag', 7: 'Søndag' };
+import { DAY_NAMES, googleMapsUrl } from '../config/constants';
 
 const DISC_BADGE: Record<string, string> = {
   'Muay Thai': 'bg-orange-500/20 text-orange-400',
@@ -20,10 +20,6 @@ const DISC_BADGE: Record<string, string> = {
   'S&C':       'bg-stone-600/20 text-stone-400',
 };
 const DEFAULT_BADGE = 'bg-slate-500/20 text-slate-400';
-
-function googleMapsUrl(address: string) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-}
 
 interface CatalogueDetailModalProps {
   cls: CatalogueClass;
