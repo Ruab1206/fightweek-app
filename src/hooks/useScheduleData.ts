@@ -16,7 +16,6 @@ interface ScheduleDataParams {
 export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked }: ScheduleDataParams) {
   const [systemWeek] = useState(getISOWeek());
   const [currentWeek, setCurrentWeek] = useState(getISOWeek());
-  const [isStandardMode, setIsStandardMode] = useState(false);
   const [scheduleData, setScheduleData] = useState<DocumentData>({});
   const [teamData, setTeamData] = useState<Record<string, DocumentData>>({});
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -24,16 +23,15 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
   // Data Sync
   useEffect(() => {
     if (!user || accessDenied || isBrowserBlocked) return;
-    const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
-    const collectionPath = isStandardMode ? 'templates' : 'weeks';
+    const docId = `week_${currentWeek}`;
 
-    const docRef = doc(db, ROOT_COLLECTION, activeFighter, collectionPath, docId);
+    const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'weeks', docId);
     const unsubPersonal = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setScheduleData(data);
         if (data.lastUpdated) setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' }));
-      } else if (!isStandardMode && currentWeek >= systemWeek) {
+      } else if (currentWeek >= systemWeek) {
         // Auto-feed from program template for current/future weeks
         setScheduleData({});
         setLastUpdated(null);
@@ -53,7 +51,7 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
 
     const unsubsTeam: Unsubscribe[] = [];
     FIGHTERS.forEach(fighter => {
-      const fRef = doc(db, ROOT_COLLECTION, fighter, collectionPath, docId);
+      const fRef = doc(db, ROOT_COLLECTION, fighter, 'weeks', docId);
       const unsub = onSnapshot(fRef, (snap) => {
         if (snap.exists()) setTeamData(prev => ({ ...prev, [fighter]: snap.data() }));
         else setTeamData(prev => ({ ...prev, [fighter]: {} }));
@@ -61,31 +59,19 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
       unsubsTeam.push(unsub);
     });
     return () => { unsubPersonal(); unsubsTeam.forEach(u => u()); };
-  }, [user, activeFighter, currentWeek, isStandardMode, accessDenied, isBrowserBlocked]);
+  }, [user, activeFighter, currentWeek, accessDenied, isBrowserBlocked]);
 
   const saveToDb = async (newData: DocumentData) => {
-    const docId = isStandardMode ? 'standard' : `week_${currentWeek}`;
-    const collectionPath = isStandardMode ? 'templates' : 'weeks';
-    const docRef = doc(db, ROOT_COLLECTION, activeFighter, collectionPath, docId);
+    const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'weeks', `week_${currentWeek}`);
     newData.lastUpdated = new Date().toISOString();
     await setDoc(docRef, newData);
   };
 
-  const handleImportStandard = async () => {
-    const standardSnap = await getDoc(doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard'));
-    if (standardSnap.exists()) {
-      await saveToDb(standardSnap.data());
-      return true;
-    }
-    return false;
-  };
-
   return {
     systemWeek, currentWeek, setCurrentWeek,
-    isStandardMode, setIsStandardMode,
     scheduleData, setScheduleData,
     teamData, lastUpdated,
-    saveToDb, handleImportStandard,
+    saveToDb,
   };
 }
 
@@ -204,95 +190,4 @@ export function useMultiWeekTeamData(
   }, [user, visibleFriends.join(','), weekNumbers.join(','), accessDenied, isBrowserBlocked]);
 
   return { friendWeekData };
-}
-
-/**
- * Load the standard (program) template for the active fighter.
- * Returns the template data so callers can check if a session is recurring.
- */
-export function useStandardTemplate(
-  user: User | null,
-  activeFighter: string,
-  accessDenied: boolean,
-  isBrowserBlocked: boolean,
-) {
-  const [programData, setProgramData] = useState<DocumentData>({});
-
-  useEffect(() => {
-    if (!user || accessDenied || isBrowserBlocked) { setProgramData({}); return; }
-    const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
-    const unsub = onSnapshot(docRef, (snap) => {
-      setProgramData(snap.exists() ? snap.data() : {});
-    });
-    return () => unsub();
-  }, [user, activeFighter, accessDenied, isBrowserBlocked]);
-
-  const saveProgramSession = useCallback(async (dayName: string, session: any) => {
-    const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
-    const snap = await getDoc(docRef);
-    const data = snap.exists() ? { ...snap.data() } : {};
-    if (!data[dayName]) data[dayName] = [];
-    // Don't add if identical session already exists
-    const exists = data[dayName].some((s: any) =>
-      !s.isRestDay && (s.name || '').toLowerCase() === (session.name || '').toLowerCase() &&
-      s.start === session.start
-    );
-    if (exists) return false;
-    data[dayName].push({ ...session, id: Date.now(), status: 'active', day: dayName });
-    data[dayName].sort((a: any, b: any) => (a.start || '').localeCompare(b.start || ''));
-    data.lastUpdated = new Date().toISOString();
-    await setDoc(docRef, data);
-    return true;
-  }, [activeFighter]);
-
-  const updateProgramSessionRecurrence = useCallback(async (
-    dayName: string, sessionName: string, sessionStart: string,
-    recurrenceInterval: number, recurrenceStartWeek: number
-  ) => {
-    const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) return false;
-    const data = { ...snap.data() };
-    if (!data[dayName]) return false;
-    const nameLC = sessionName.toLowerCase();
-    let found = false;
-    data[dayName] = data[dayName].map((s: any) => {
-      if (!s.isRestDay && (s.name || '').toLowerCase() === nameLC && s.start === sessionStart) {
-        found = true;
-        return { ...s, recurrenceInterval, recurrenceStartWeek };
-      }
-      return s;
-    });
-    if (!found) {
-      // Session not in template yet — add it with recurrence metadata
-      data[dayName].push({
-        name: sessionName, start: sessionStart, day: dayName,
-        id: Date.now(), status: 'active',
-        recurrenceInterval, recurrenceStartWeek,
-      });
-      data[dayName].sort((a: any, b: any) => (a.start || '').localeCompare(b.start || ''));
-    }
-    data.lastUpdated = new Date().toISOString();
-    await setDoc(docRef, data);
-    return true;
-  }, [activeFighter]);
-
-  const removeProgramSession = useCallback(async (dayName: string, sessionName: string, sessionStart: string) => {
-    const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) return false;
-    const data = { ...snap.data() };
-    if (!data[dayName]) return false;
-    const nameLC = sessionName.toLowerCase();
-    const before = data[dayName].length;
-    data[dayName] = data[dayName].filter((s: any) =>
-      s.isRestDay || (s.name || '').toLowerCase() !== nameLC || s.start !== sessionStart
-    );
-    if (data[dayName].length === before) return false;
-    data.lastUpdated = new Date().toISOString();
-    await setDoc(docRef, data);
-    return true;
-  }, [activeFighter]);
-
-  return { programData, saveProgramSession, updateProgramSessionRecurrence, removeProgramSession };
 }

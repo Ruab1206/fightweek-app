@@ -31,11 +31,10 @@ interface SessionModalProps {
     onDelete: (id: string) => void;
     onDeleteThisAndFuture: (day: string, name: string, start: string, fromWeek: number) => void;
     onRecurrenceSave: (session: SessionForm, dayName: string, startDate: Date, recurrence: { interval: number; endDate: string | null }) => void;
-    isStandardMode: boolean;
     onFeedback: (context: string) => void;
 }
 
-const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, isStandardMode, onFeedback }: SessionModalProps) => {
+const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback }: SessionModalProps) => {
     const { isDark } = useTheme();
     const isNew = !initialData;
     const [form, setForm] = useState<SessionForm>({
@@ -181,7 +180,7 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                     </div>
 
                     {/* Cancel toggle (existing non-standard only) */}
-                    {!isStandardMode && !isNew && (
+                    {!isNew && (
                         <div className={`px-5 py-3 border-t ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
                             <div className="flex items-center gap-3">
                                 <button onClick={toggleStatus} className={`flex items-center justify-center w-5 h-5 rounded border-2 transition-colors ${form.status === 'cancelled' ? 'bg-red-600 border-red-600' : (isDark ? 'bg-slate-950 border-slate-600' : 'bg-surface-subtle border-surface-border')}`}>

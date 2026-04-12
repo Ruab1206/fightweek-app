@@ -1,6 +1,7 @@
 /**
- * Common Type Definitions
- * Shared types used throughout the application
+ * Aktivitet Type Definitions
+ * Types for calendar entries (aktiviteter): træning, fravær, events.
+ * See docs/DOMAIN_MODEL.md for terminology.
  */
 
 // User & Auth Types
@@ -14,7 +15,7 @@ export interface UserProfile {
 // Day name literal type
 export type DayName = 'Mandag' | 'Tirsdag' | 'Onsdag' | 'Torsdag' | 'Fredag' | 'Lørdag' | 'Søndag';
 
-// Training Session Types
+// Træning (training aktivitet) — added from catalogue or manually
 export interface TrainingSession {
   id?: string | number;
   day: string;
@@ -34,7 +35,7 @@ export interface TrainingSession {
   type?: string;
 }
 
-// Fravær (absence) session — stored inline with training sessions
+// Fravær (absence aktivitet) — stored inline with training sessions
 export interface FraværSession {
   id: string | number;
   type: 'fravær';
@@ -61,10 +62,10 @@ export interface RestDayMarker {
   isRestDay: true;
 }
 
-// Union type for anything stored in a day's session array
+// Union type for anything stored in a day's aktivitet array
 export type SessionEntry = TrainingSession | FraværSession | RestDayMarker;
 
-// A week's schedule data, keyed by day name
+// A week's schedule data (aktiviteter keyed by day name)
 export type WeekSchedule = Record<string, SessionEntry[]>;
 
 export interface StandardWeek {

@@ -1,15 +1,16 @@
 // ──────────────────────────────────────────────
-// Catalogue types — class catalog for cross-gym training offers
+// Hold (Class) — recurring weekly training classes in the catalogue
+// See docs/DOMAIN_MODEL.md for terminology
 // ──────────────────────────────────────────────
 
-/** A recurring weekly timeslot for a class */
+/** A recurring weekly timeslot for a hold */
 export interface ClassSchedule {
   dayOfWeek: number;   // 1=Mon … 7=Sun (ISO 8601, maps to Google Calendar BYDAY)
   startTime: string;   // "17:00" (HH:mm)
   endTime: string;     // "18:30" (HH:mm)
 }
 
-/** A training class offered by a gym */
+/** A training class (Hold) offered by a gym */
 export interface CatalogueClass {
   id: string;
   title: string;                    // "Thaiboksning Elite"

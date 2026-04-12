@@ -23,7 +23,6 @@ export interface AddScreenProps {
   defaultType: AddType;
   activeDay: { dayName: string; weekNumber: number; date: Date; key: string };
   multiWeekData: Record<number, any>;
-  programKeys: Set<string>;
   isDark: boolean;
   editingFravær?: { groupId: string; titel: string; beskrivelse: string; startDate: string; startTime: string; endDate: string; endTime: string } | null;
   onAddFromCatalogue: (session: any, day: string, weekNum: number) => void;
@@ -265,7 +264,7 @@ const MonthCalendarPicker = ({ value, isDark, onSelect, onClose, minDate }: {
 };
 
 // ─── Main AddScreen ───
-const AddScreen = ({ defaultType, activeDay, multiWeekData, programKeys, isDark, editingFravær, onAddFromCatalogue, onAddRecurring, onManualAdd, onAddFravær, onDeleteFravær, onEditFravær, onClose }: AddScreenProps) => {
+const AddScreen = ({ defaultType, activeDay, multiWeekData, isDark, editingFravær, onAddFromCatalogue, onAddRecurring, onManualAdd, onAddFravær, onDeleteFravær, onEditFravær, onClose }: AddScreenProps) => {
   const [type, setType] = useState<AddType>(defaultType);
   const [selectedDay, setSelectedDay] = useState(activeDay);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -456,7 +455,7 @@ const AddScreen = ({ defaultType, activeDay, multiWeekData, programKeys, isDark,
                 <div className="space-y-1.5">
                   {visibleSessions.map((s: any) => {
                     const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
-                    const isRecurring = s.isRecurring || programKeys.has(`${selectedDay.dayName}|${(s.name || '').toLowerCase()}|${s.start || ''}`);
+                    const isRecurring = !!s.isRecurring;
                     return (
                       <div key={s.id} className={`relative flex items-start p-2 rounded-xl border ${isDark ? 'bg-slate-800 border-slate-700/50' : 'bg-surface-raised border-surface-border'}`}>
                         <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl ${cat.color}`} />
