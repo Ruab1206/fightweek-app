@@ -147,7 +147,7 @@ An external entity that provides activities — a gym offering classes, or a pro
 
 This is the pipeline from the external world into the team's training options.
 
-### Catalogue Item (Aktivitetsudbud) 🔨
+### Catalogue Item (Aktivitetsudbud) ✅
 
 A raw training or event offering. Scraped from a club website or entered manually. Exists independently of any team.
 
@@ -168,8 +168,8 @@ A raw training or event offering. Scraped from a club website or entered manuall
 | validFrom | string? | When this offering starts |
 | validUntil | string? | When it expires (semester end, etc.) |
 
-> **Current state ✅:** \`GLOBAL_TEMPLATES\` in constants.ts is a hardcoded version of this — 30 items with day, name, category, time, location.
-> **Next step 🔨:** Promote to a Firestore-backed entity. This is one of the first things to build.
+> **Current state ✅:** Firestore-backed catalogue at \`public/data/catalogue/{id}\`. Admin/coach can create, edit, and delete classes. Fighters browse and add to schedule.
+> **Done:** Promoted from hardcoded \`GLOBAL_TEMPLATES\` to live Firestore entity in release 1.4.
 
 ### Curated Catalogue (Team Bruttoliste) 📐
 
@@ -382,6 +382,39 @@ A preparation period leading up to a fight. Adjusts the training plan to peak fo
 
 > **Current state:** Not modelled. Fights are mentioned in the team charter but not tracked in the app.
 
+### FightweekEvent ✅
+
+A one-off activity outside the regular training programme — tournaments, seminars, social gatherings, or other.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Unique identifier (Firestore doc ID) |
+| title | string | Event name, e.g. "DM i Brydning 2026" |
+| type | 'tournament' \\| 'seminar' \\| 'social' \\| 'other' | Event category |
+| discipline | string? | "Brydning", "MMA", "BJJ", etc. |
+| date | string | ISO date — start date |
+| endDate | string? | ISO date — for multi-day events |
+| startTime | string? | "09:00" (HH:mm) |
+| endTime | string? | "18:00" (HH:mm) |
+| location | string? | Venue name |
+| address | string? | Street address (Google Maps link) |
+| latitude | number? | GPS latitude for distance filtering |
+| longitude | number? | GPS longitude for distance filtering |
+| description | string? | Free-text event details |
+| organiser | string? | Who is hosting |
+| url | string? | External registration / info page |
+| cost | string? | Participation cost |
+| contactName | string? | Contact person |
+| contactEmail | string? | Contact email |
+| contactPhone | string? | Contact phone |
+| registrationDeadline | string? | ISO date — last day to register |
+| signups | Record<string, EventSignupStatus> | Fighter name → 'interested' \\| 'signed-up' \\| 'declined' |
+| createdBy | string | Email of creator |
+| createdAt | string | ISO timestamp |
+| updatedAt | string | ISO timestamp |
+
+> **Current state ✅:** Live since 1.7. Events are stored in \`public/data/events/{id}\`. The \`useEventMerge\` hook creates virtual Session objects (type: 'event') for signed-up events and merges them into the personal calendar and team schedule at render time.
+
 ---
 
 ## 8. Impediments
@@ -461,8 +494,9 @@ Jeff Patton-style story map for development coordination and shared understandin
 | Backlog items | \`public/data/backlog/items/{id}\` | ✅ |
 | Feedback | \`public/data/backlog/feedback/{id}\` | ✅ |
 | Story map | \`public/data/story-map/main\` | ✅ |
-| Catalogue items | \`public/data/catalogue/items/{id}\` | 📐 Next |
+| Catalogue items | \`public/data/catalogue/{id}\` | ✅ Live |
 | Sources (clubs) | \`public/data/catalogue/sources/{id}\` | 📐 Next |
+| Events | \`public/data/events/{id}\` | ✅ Live |
 | Goals | \`users/{uid}/goals/{id}\` | 💭 Later |
 | Impediments | \`users/{uid}/impediments/{id}\` | 💭 Later |
 | Fights | \`users/{uid}/fights/{id}\` | 💭 Later |
@@ -490,4 +524,5 @@ These are the business rules that make FightWeek what it is:
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-04-02 | Initial version. Captures full conceptual model from domain conversations between PO and AI Agent. |
+| 1.1 | 2026-04-13 | FightweekEvent entity added (\u2705 Live). Catalogue Item promoted to \u2705 Live. Events Firestore path added. |
 `;

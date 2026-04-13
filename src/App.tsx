@@ -1,35 +1,38 @@
 /**
- * FIGHTWEEK APP v2.0 â€” Phase 2: Modular Architecture
- * Thin orchestrator â€” all logic lives in hooks / components.
+ * FIGHTWEEK APP v2.0 — Phase 2: Modular Architecture
+ * Thin orchestrator — all logic lives in hooks / components.
  */
-import React, { useState, useEffect, useMemo, useRef, useCallback, type RefObject } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   ChevronDown, ChevronLeft, ChevronRight,
-  Clock, MapPin, Plus, AlertCircle, X, Calendar, CalendarDays,
+  Plus, X, Calendar, CalendarDays,
   History, LogOut, ClipboardList, MessageSquarePlus, Sun, Moon, Users,
   Search, Menu, ArrowLeft,
 } from 'lucide-react';
 
-import { DAYS, CATEGORIES, USER_MAPPING, FIGHTERS } from './config/constants';
-import { getISOWeek, getDateForWeekDay, getWeekDateMap, getTodayDayName, getFullWeekDateMap, getWeekMonthLabel, getDaysInRange, getISOWeekForDate } from './utils/dateUtils';
-
+import { DAYS, USER_MAPPING, FIGHTERS } from './config/constants';
+import { getDateForWeekDay, getWeekDateMap, getTodayDayName, getFullWeekDateMap, getDaysInRange, getISOWeekForDate } from './utils/dateUtils';
 
 import { useAuth } from './hooks/useAuth';
 import { useScheduleData, useMultiWeekData, useMultiWeekTeamData } from './hooks/useScheduleData';
+import { useSessionHandlers, cloneWithoutEvents } from './hooks/useSessionHandlers';
 import { useToast } from './hooks/useToast';
 import { useTheme } from './hooks/useTheme';
 import { useCatalogue } from './hooks/useCatalogue';
+import { useCatalogueFilter } from './hooks/useCatalogueFilter';
 import { useEvents } from './hooks/useEvents';
+import { useEventMerge } from './hooks/useEventMerge';
+import { useScrollController } from './hooks/useScrollController';
 
 import Toast from './components/Toast';
 import BrowserBlockScreen from './components/BrowserBlockScreen';
 import LoginScreen from './components/LoginScreen';
 import SessionModal from './components/SessionModal';
-import { disciplineToCategory } from './components/InlineCataloguePicker';
-import type { CatalogueAddPayload } from './components/InlineCataloguePicker';
-import type { CatalogueClass, ClassSchedule } from './types/catalogue';
+import SearchOverlay from './components/SearchOverlay';
+import type { CatalogueClass } from './types/catalogue';
 import ConfirmModal from './components/ConfirmModal';
 import FeedbackModal from './components/FeedbackModal';
+import MonthPicker from './components/MonthPicker';
 import NavButton from './components/NavButton';
 import TeamSchedule from './components/TeamSchedule';
 import SessionDetailSheet from './components/SessionDetailSheet';
@@ -40,7 +43,6 @@ import EventsPage from './pages/EventsPage';
 import type { EventsPageHandle } from './pages/EventsPage';
 import AddScreen from './components/AddScreen';
 import type { AddType } from './components/AddScreen';
-
 
 const App = () => {
   // --- Hooks ---
@@ -77,67 +79,10 @@ const App = () => {
   const loadMorePast = useCallback(() => setWeeksBack(prev => prev + 4), []);
   const { multiWeekData: rawMultiWeekData, saveWeekToDb } = useMultiWeekData(user, activeFighter, neededWeeks, accessDenied, isBrowserBlocked);
 
-  // ── Build event-sessions from signed-up events and merge into calendar data ──
-  const DAY_NAMES = ['Mandag', 'Tirsdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lørdag', 'Søndag'];
-  const myEventSessions = useMemo(() => {
-    if (!activeFighter) return {} as Record<number, Record<string, any[]>>;
-    const map: Record<number, Record<string, any[]>> = {};
-    for (const ev of allEvents) {
-      const status = ev.signups?.[activeFighter];
-      if (status !== 'interested' && status !== 'signed-up') continue;
-      // For multi-day events, add to each day
-      const start = new Date(ev.date + 'T00:00:00');
-      const end = ev.endDate ? new Date(ev.endDate + 'T00:00:00') : start;
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const weekNum = getISOWeekForDate(d);
-        const dayIdx = (d.getDay() + 6) % 7; // Mon=0
-        const dayName = DAY_NAMES[dayIdx];
-        if (!map[weekNum]) map[weekNum] = {};
-        if (!map[weekNum][dayName]) map[weekNum][dayName] = [];
-        map[weekNum][dayName].push({
-          id: `event_${ev.id}_${d.toISOString().slice(0, 10)}`,
-          name: ev.title,
-          category: ev.discipline ? disciplineToCategory(ev.discipline) : 'Andet',
-          start: ev.startTime || '',
-          end: ev.endTime || '',
-          location: ev.location || ev.address || '',
-          status: 'active',
-          type: 'event',
-          eventId: ev.id,
-          eventSignupStatus: status,
-        });
-      }
-    }
-    return map;
-  }, [allEvents, activeFighter]);
-
-  const multiWeekData = useMemo(() => {
-    const merged: Record<number, any> = {};
-    const allWeeks = new Set([...Object.keys(rawMultiWeekData).map(Number), ...Object.keys(myEventSessions).map(Number)]);
-    for (const wk of allWeeks) {
-      merged[wk] = { ...(rawMultiWeekData[wk] || {}) };
-      const evWeek = myEventSessions[wk];
-      if (!evWeek) continue;
-      for (const dayName of DAY_NAMES) {
-        const existing = merged[wk][dayName] || [];
-        const evSessions = evWeek[dayName] || [];
-        if (evSessions.length) merged[wk][dayName] = [...existing, ...evSessions];
-      }
-    }
-    return merged;
-  }, [rawMultiWeekData, myEventSessions]);
-
-  // Merge event-sessions into single-week desktop scheduleData
-  const mergedScheduleData = useMemo(() => {
-    const evWeek = myEventSessions[currentWeek];
-    if (!evWeek) return scheduleData;
-    const merged = { ...scheduleData };
-    for (const dayName of DAY_NAMES) {
-      const evSessions = evWeek[dayName];
-      if (evSessions?.length) merged[dayName] = [...(merged[dayName] || []), ...evSessions];
-    }
-    return merged;
-  }, [scheduleData, myEventSessions, currentWeek]);
+  // Event-session merge (personal + team calendars)
+  const { multiWeekData, mergedScheduleData, mergedTeamData } = useEventMerge(
+    allEvents, activeFighter, rawMultiWeekData, scheduleData, teamData, currentWeek,
+  );
 
   // --- Local UI State ---
   const [view, setView] = useState<'personal' | 'team' | 'events'>('personal');
@@ -159,14 +104,12 @@ const App = () => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [pickerMonth, setPickerMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
-  const [headerMonth, setHeaderMonth] = useState(() => new Date().toLocaleDateString('da-DK', { month: 'long', year: 'numeric' }));
   const [visibleFriends, setVisibleFriends] = useState<string[]>([]);
   const [addScreenOpen, setAddScreenOpen] = useState(false);
   const [addScreenType, setAddScreenType] = useState<AddType>('træning');
   const [editingFravær, setEditingFravær] = useState<{ groupId: string; titel: string; beskrivelse: string; startDate: string; startTime: string; endDate: string; endTime: string } | null>(null);
   const [fabSheetOpen, setFabSheetOpen] = useState(false);
   const [classInfoSession, setClassInfoSession] = useState<{ cls: CatalogueClass; session: any; day: string; weekNum: number } | null>(null);
-  const activeDayRef = useRef<{ dayName: string; weekNumber: number; date: Date; key: string } | null>(null);
   const { friendWeekData } = useMultiWeekTeamData(user, visibleFriends, neededWeeks, accessDenied, isBrowserBlocked);
 
   const toggleFriend = useCallback((name: string) => {
@@ -179,34 +122,10 @@ const App = () => {
     Anton: 'bg-cyan-500', Jonas: 'bg-violet-500', Karl: 'bg-amber-500',
     Frode: 'bg-lime-500', Frodi: 'bg-rose-500', Rune: 'bg-blue-500',
   };
-  const [catSearch, setCatSearch] = useState('');
-  const [catDiscipline, setCatDiscipline] = useState<string | null>(null);
-  const [catGym, setCatGym] = useState<string | null>(null);
-
-  // Catalogue: per-day filtered lists for desktop inline view
-  const allDisciplines = useMemo(() => [...new Set(catalogueClasses.map(c => c.discipline))].sort(), [catalogueClasses]);
-  const allGyms = useMemo(() => [...new Set(catalogueClasses.map(c => c.gym))].sort(), [catalogueClasses]);
-
-  const catalogueByDay = useMemo(() => {
-    const map: Record<string, { cls: CatalogueClass; schedule: ClassSchedule }[]> = {};
-    for (const day of DAYS) map[day] = [];
-    for (const cls of catalogueClasses) {
-      for (const sched of cls.schedules) {
-        const dayName = DAYS[sched.dayOfWeek - 1];
-        if (!dayName) continue;
-        let match = true;
-        if (catDiscipline && cls.discipline !== catDiscipline) match = false;
-        if (catGym && cls.gym !== catGym) match = false;
-        if (catSearch.trim()) {
-          const q = catSearch.toLowerCase();
-          if (!cls.title.toLowerCase().includes(q) && !cls.discipline.toLowerCase().includes(q) && !disciplineToCategory(cls.discipline).toLowerCase().includes(q) && !cls.gym.toLowerCase().includes(q) && !(cls.location && cls.location.toLowerCase().includes(q)) && !(cls.address && cls.address.toLowerCase().includes(q)) && !(cls.level && cls.level.toLowerCase().includes(q)) && !(cls.subDiscipline && cls.subDiscipline.toLowerCase().includes(q)) && !(cls.instructor && cls.instructor.toLowerCase().includes(q))) match = false;
-        }
-        if (match) map[dayName].push({ cls, schedule: sched });
-      }
-    }
-    for (const day of DAYS) map[day].sort((a, b) => a.schedule.startTime.localeCompare(b.schedule.startTime));
-    return map;
-  }, [catalogueClasses, catDiscipline, catGym, catSearch]);
+  const {
+    catSearch, setCatSearch, catDiscipline, setCatDiscipline, catGym, setCatGym,
+    allDisciplines, allGyms, catalogueByDay,
+  } = useCatalogueFilter(catalogueClasses);
 
   // --- Admin 'b' shortcut ---
   useEffect(() => {
@@ -226,408 +145,23 @@ const App = () => {
     return () => document.removeEventListener('keydown', handler);
   }, [user, modalOpen, confirmDialog, feedbackContext, expandedDay]);
 
-  // --- Session Handlers ---
-  const handleSaveSession = async (session) => {
-    const weekNum = editingWeek || currentWeek;
-    const sourceData = editingWeek ? (multiWeekData[weekNum] || {}) : scheduleData;
-    const newData = structuredClone(sourceData);
-    if (!newData[editingDay]) newData[editingDay] = [];
+  // --- Session Handlers (extracted to hook) ---
+  const {
+    handleSaveSession, handleDeleteSession, handleAddClick,
+    handleAddFromCatalogue, handleAddFromDesktopCatalogue, handleManualFromPicker,
+    handleAddRecurring, handleFravær, handleDeleteFravær,
+  } = useSessionHandlers({
+    scheduleData, setScheduleData, multiWeekData, currentWeek, systemWeek,
+    editingDay, editingWeek, expandedDay, setExpandedDay,
+    saveToDb, saveWeekToDb, showToast,
+    setModalOpen, setEditingWeek, setEditingDay, setEditingSession, setAddScreenOpen,
+  });
 
-    const sessionDate = getDateForWeekDay(weekNum, editingDay);
-    if (sessionDate && session.start) {
-      const [h, m] = session.start.split(':').map(Number);
-      sessionDate.setHours(h, m);
-      session.sessionDate = sessionDate.toISOString();
-    }
-
-    if (session.id) {
-      const idx = newData[editingDay].findIndex(s => s.id === session.id);
-      if (idx > -1) newData[editingDay][idx] = session;
-      else newData[editingDay].push(session);
-    } else {
-      session.id = Date.now();
-      newData[editingDay].push(session);
-    }
-    newData[editingDay].sort((a, b) => a.start.localeCompare(b.start));
-    if (editingWeek) {
-      await saveWeekToDb(weekNum, newData);
-    } else {
-      setScheduleData(newData);
-      await saveToDb(newData);
-    }
-    setModalOpen(false);
-    setEditingWeek(null);
-  };
-
-  const handleDeleteSession = async (sessionId) => {
-    const weekNum = editingWeek || currentWeek;
-    const sourceData = editingWeek ? (multiWeekData[weekNum] || {}) : scheduleData;
-    const newData = structuredClone(sourceData);
-    if (newData[editingDay]) {
-      newData[editingDay] = newData[editingDay].filter(s => s.id !== sessionId);
-      if (editingWeek) {
-        await saveWeekToDb(weekNum, newData);
-      } else {
-        await saveToDb(newData);
-      }
-    }
-    setModalOpen(false);
-    setEditingWeek(null);
-  };
-
-  const handleAddClick = (day) => {
-    setExpandedDay(expandedDay === day ? null : day);
-  };
-
-  // One-tap add from inline catalogue picker
-  const handleAddFromCatalogue = async (session: CatalogueAddPayload, dayOverride?: string, weekOverride?: number) => {
-    const day = dayOverride || expandedDay;
-    if (!day) return;
-    const weekNum = weekOverride || currentWeek;
-    const sourceData = weekOverride ? (multiWeekData[weekNum] || {}) : scheduleData;
-    const newData = structuredClone(sourceData);
-    if (!newData[day]) newData[day] = [];
-    const newSession: any = { ...session, id: Date.now(), status: 'active', day };
-    const sessionDate = getDateForWeekDay(weekNum, day);
-    if (sessionDate && session.start) {
-      const [h, m] = session.start.split(':').map(Number);
-      sessionDate.setHours(h, m);
-      newSession.sessionDate = sessionDate.toISOString();
-    }
-    newData[day].push(newSession);
-    newData[day].sort((a, b) => a.start.localeCompare(b.start));
-    if (weekOverride) {
-      await saveWeekToDb(weekNum, newData);
-    } else {
-      setScheduleData(newData);
-      await saveToDb(newData);
-    }
-    showToast(`${session.name} tilføjet`, 'success');
-  };
-
-  // Desktop: add from 7-day catalogue grid
-  const handleAddFromDesktopCatalogue = async (day: string, session: CatalogueAddPayload) => {
-    const newData = structuredClone(scheduleData);
-    if (!newData[day]) newData[day] = [];
-    const newSession: any = { ...session, id: Date.now(), status: 'active', day };
-    const sessionDate = getDateForWeekDay(currentWeek, day);
-    if (sessionDate && session.start) {
-      const [h, m] = session.start.split(':').map(Number);
-      sessionDate.setHours(h, m);
-      newSession.sessionDate = sessionDate.toISOString();
-    }
-    newData[day].push(newSession);
-    newData[day].sort((a, b) => a.start.localeCompare(b.start));
-    setScheduleData(newData);
-    await saveToDb(newData);
-    showToast(`${session.name} tilf\u00f8jet til ${day}`, 'success');
-  };
-
-  // Open manual SessionModal from picker
-  const handleManualFromPicker = (dayOverride?: string, weekOverride?: number) => {
-    setEditingDay(dayOverride || expandedDay);
-    setEditingSession(null);
-    setEditingWeek(weekOverride || null);
-    setExpandedDay(null);
-    setModalOpen(true);
-  };
-
-  // Add a recurring catalogue session â€” add to matching weeks, remove from non-matching
-  const handleAddRecurring = async (session: any, dayName: string, startDate: Date, recurrence: { interval: number; endDate: string | null }) => {
-    if (recurrence.interval === 0) return;
-    const nameLC = (session.name || '').toLowerCase();
-    const startTime = session.start || '';
-
-    // Compute starting week number from startDate
-    const startWeekDate = new Date(startDate);
-    startWeekDate.setHours(0, 0, 0, 0);
-    const startWeekNum = getISOWeekForDate(startWeekDate);
-
-    // Compute end week number from endDate if provided
-    let endWeekNum: number | null = null;
-    if (recurrence.endDate) {
-      const endD = new Date(recurrence.endDate + 'T00:00:00');
-      endWeekNum = getISOWeekForDate(endD);
-    }
-
-    let added = 0;
-    let removed = 0;
-    let processed = 0;
-    const loadedWeeks = Object.keys(multiWeekData).map(Number).sort((a, b) => a - b);
-    for (const weekNum of loadedWeeks) {
-      if (weekNum < systemWeek) continue;
-      processed++;
-      const weekData = multiWeekData[weekNum];
-      if (!weekData) continue;
-      const newData = structuredClone(weekData);
-      if (!newData[dayName]) newData[dayName] = [];
-
-      // Simple modulo check: is this week on the recurrence pattern? Also respect end date.
-      const isTarget = weekNum >= startWeekNum
-        && (weekNum - startWeekNum) % recurrence.interval === 0
-        && (endWeekNum === null || weekNum <= endWeekNum);
-
-      if (isTarget) {
-        const existing = newData[dayName].find((s: any) =>
-          !s.isRestDay && (s.name || '').toLowerCase() === nameLC &&
-          s.start === startTime && s.status !== 'cancelled'
-        );
-        if (existing) {
-          if (!existing.isRecurring) { existing.isRecurring = true; await saveWeekToDb(weekNum, newData); }
-        } else {
-          const newSession: any = { ...session, id: Date.now() + weekNum, status: 'active', day: dayName, isRecurring: true };
-          const sessionDate = getDateForWeekDay(weekNum, dayName);
-          if (sessionDate && startTime) {
-            const [h, m] = startTime.split(':').map(Number);
-            sessionDate.setHours(h, m);
-            newSession.sessionDate = sessionDate.toISOString();
-          }
-          newData[dayName].push(newSession);
-          newData[dayName].sort((a: any, b: any) => (a.start || '').localeCompare(b.start || ''));
-          await saveWeekToDb(weekNum, newData);
-          added++;
-        }
-      } else {
-        // Remove this session from non-matching weeks
-        if (recurrence.interval > 1) {
-          const before = newData[dayName].length;
-          newData[dayName] = newData[dayName].filter((s: any) =>
-            s.isRestDay || (s.name || '').toLowerCase() !== nameLC || s.start !== startTime
-          );
-          if (newData[dayName].length < before) {
-            await saveWeekToDb(weekNum, newData);
-            removed++;
-          }
-        }
-      }
-    }
-    const intervalLabel = recurrence.interval === 1 ? 'hver uge' : `hver ${recurrence.interval}. uge`;
-    showToast(`${session.name} ${intervalLabel} (+${added} -${removed})`, 'success');
-    setAddScreenOpen(false);
-  };
-
-  // Add or edit a fravær entry. If oldGroupId is provided, old entries are removed first (edit mode).
-  const handleFravær = async (fravær: { titel: string; beskrivelse: string; startDate: string; startTime: string; endDate: string; endTime: string }, oldGroupId?: string) => {
-    const start = new Date(fravær.startDate + 'T' + fravær.startTime);
-    const end = new Date(fravær.endDate + 'T' + fravær.endTime);
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) {
-      showToast('Ugyldig dato/tid', 'error');
-      return;
-    }
-    // Count total days
-    const countCursor = new Date(start); countCursor.setHours(0, 0, 0, 0);
-    const endDay = new Date(end); endDay.setHours(0, 0, 0, 0);
-    let totalDays = 0;
-    const tmpC = new Date(countCursor);
-    while (tmpC <= endDay) { totalDays++; tmpC.setDate(tmpC.getDate() + 1); }
-    const groupId = `fravær_${Date.now()}`;
-
-    // Build new sessions per week
-    const weekChanges: Record<number, { dayName: string; session: any }[]> = {};
-    const cursor = new Date(countCursor);
-    let count = 0;
-    while (cursor <= endDay) {
-      const dayIdx = (cursor.getDay() + 6) % 7;
-      const dayName = DAYS[dayIdx];
-      const weekNum = getISOWeekForDate(cursor);
-      const dayIndex = count + 1;
-      if (!weekChanges[weekNum]) weekChanges[weekNum] = [];
-      weekChanges[weekNum].push({
-        dayName,
-        session: {
-          id: Date.now() + count,
-          type: 'fravær',
-          name: fravær.titel || 'Fravær',
-          fraværTitel: fravær.titel,
-          fraværBeskrivelse: fravær.beskrivelse,
-          fraværGroupId: groupId,
-          fraværDayIndex: dayIndex,
-          fraværTotalDays: totalDays,
-          fraværStartDate: fravær.startDate,
-          fraværEndDate: fravær.endDate,
-          fraværStartTime: fravær.startTime,
-          fraværEndTime: fravær.endTime,
-          start: cursor.getTime() === new Date(fravær.startDate + 'T00:00:00').getTime() ? fravær.startTime : '00:00',
-          end: cursor.getTime() === endDay.getTime() ? fravær.endTime : '23:59',
-          status: 'active',
-          day: dayName,
-          category: 'Fravær',
-        },
-      });
-      count++;
-      cursor.setDate(cursor.getDate() + 1);
-    }
-
-    // Determine delete filter for edit mode
-    const isLegacy = oldGroupId?.startsWith('legacy_');
-    const legacyId = isLegacy ? Number(oldGroupId!.replace('legacy_', '')) : null;
-    const shouldRemove = oldGroupId
-      ? (s: any) => isLegacy ? s.id === legacyId : s.fraværGroupId === oldGroupId
-      : null;
-
-    // Save: for each affected week, optionally remove old entries + add new ones
-    const allWeeks = new Set([...Object.keys(multiWeekData).map(Number), ...Object.keys(weekChanges).map(Number)]);
-    for (const wk of allWeeks) {
-      const nd = structuredClone(multiWeekData[wk] || {});
-      let changed = false;
-      // Remove old group entries (edit mode)
-      if (shouldRemove) {
-        for (const dayName of DAYS) {
-          if (!nd[dayName]) continue;
-          const before = nd[dayName].length;
-          nd[dayName] = nd[dayName].filter((s: any) => !shouldRemove(s));
-          if (nd[dayName].length < before) changed = true;
-        }
-      }
-      // Add new entries for this week
-      if (weekChanges[wk]) {
-        for (const { dayName, session } of weekChanges[wk]) {
-          if (!nd[dayName]) nd[dayName] = [];
-          nd[dayName].push(session);
-          changed = true;
-        }
-      }
-      if (changed) await saveWeekToDb(wk, nd);
-    }
-    showToast(oldGroupId ? 'Fravær opdateret' : `Fravær tilføjet (${count} dag${count > 1 ? 'e' : ''})`, 'success');
-  };
-
-  // Delete all days of a fravær group
-  const handleDeleteFravær = async (groupId: string) => {
-    const isLegacy = groupId.startsWith('legacy_');
-    const legacyId = isLegacy ? Number(groupId.replace('legacy_', '')) : null;
-    let deleted = 0;
-    for (const wk of Object.keys(multiWeekData).map(Number)) {
-      const wd = multiWeekData[wk];
-      if (!wd) continue;
-      const nd = structuredClone(wd);
-      let changed = false;
-      for (const dayName of DAYS) {
-        if (!nd[dayName]) continue;
-        const before = nd[dayName].length;
-        nd[dayName] = nd[dayName].filter((s: any) => {
-          if (isLegacy) return s.id !== legacyId;
-          return s.fraværGroupId !== groupId;
-        });
-        if (nd[dayName].length < before) { changed = true; deleted += before - nd[dayName].length; }
-      }
-      if (changed) await saveWeekToDb(wk, nd);
-    }
-    showToast(`Fravær slettet (${deleted} dag${deleted > 1 ? 'e' : ''})`, 'success');
-  };
-
-  // Scroll to today on mount and when entering personal view
-  const hasScrolledOnMount = useRef(false);
-  const dataSettledRef = useRef(false);
-  const weeksBackRef = useRef(weeksBack);
-  const weeksAheadRef = useRef(weeksAhead);
-  weeksBackRef.current = weeksBack;
-  weeksAheadRef.current = weeksAhead;
-  const scrollToToday = useCallback((behavior: ScrollBehavior = 'instant') => {
-    const ref = mobileTodayRef.current || todayRef.current;
-    if (ref) ref.scrollIntoView({ behavior, block: 'start' });
-  }, []);
-  const scrollToDate = useCallback((date: Date) => {
-    const key = date.toISOString().slice(0, 10);
-    setHeaderMonth(date.toLocaleDateString('da-DK', { month: 'long', year: 'numeric' }));
-    // Compute internal week number
-    const target = new Date(date); target.setHours(0, 0, 0, 0);
-    const internalWeek = getISOWeekForDate(target);
-    setCurrentWeek(internalWeek);
-    if (window.innerWidth >= 768) return;
-    // Mobile: expand range if needed
-    const currentWk = getISOWeek();
-    const needBack = currentWk - internalWeek + 2;
-    const needAhead = internalWeek - currentWk + 2;
-    if (needBack > weeksBackRef.current) setWeeksBack(needBack);
-    if (needAhead > weeksAheadRef.current) setWeeksAhead(needAhead);
-    // Retry loop â€” wait for React to render expanded scrollDays
-    let retries = 0;
-    const tryScroll = () => {
-      const el = document.getElementById(`day-${key}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'instant', block: 'start' });
-      } else if (retries < 50) {
-        retries++;
-        setTimeout(tryScroll, 100);
-      }
-    };
-    setTimeout(tryScroll, 50);
-  }, [setCurrentWeek]);
-  useEffect(() => {
-    if (view !== 'personal') {
-      dataSettledRef.current = false;
-      return;
-    }
-    let attempts = 0;
-    const tryScroll = () => {
-      if (mobileTodayRef.current || todayRef.current) {
-        scrollToToday(hasScrolledOnMount.current ? 'smooth' : 'instant');
-        hasScrolledOnMount.current = true;
-      } else if (attempts < 10) {
-        attempts++;
-        setTimeout(tryScroll, 150);
-      }
-    };
-    setTimeout(tryScroll, 50);
-  }, [view, scrollToToday]);
-  // Re-align after data first populates (sessions change card heights)
-  useEffect(() => {
-    if (!dataSettledRef.current && Object.keys(multiWeekData).length > 0 && view === 'personal') {
-      dataSettledRef.current = true;
-      setTimeout(() => scrollToToday('instant'), 50);
-    }
-  }, [multiWeekData, view, scrollToToday]);
-  // Scroll to current week's Monday when crossing desktopâ†’mobile breakpoint
-  useEffect(() => {
-    const mql = window.matchMedia('(min-width: 768px)');
-    const handler = (e: MediaQueryListEvent) => {
-      if (view !== 'personal' || e.matches) return; // only when entering mobile
-      const mon = getDateForWeekDay(currentWeek, 'Mandag');
-      if (mon) setTimeout(() => scrollToDate(mon), 100);
-      else setTimeout(() => scrollToToday('instant'), 100);
-    };
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
-  }, [view, currentWeek, scrollToDate, scrollToToday]);
-  // Track visible month: from scroll on mobile, from currentWeek on desktop
-  useEffect(() => {
-    if (window.innerWidth >= 768) {
-      // Desktop: derive from currentWeek
-      const thu = getDateForWeekDay(currentWeek, 'Torsdag');
-      if (thu) setHeaderMonth(thu.toLocaleDateString('da-DK', { month: 'long', year: 'numeric' }));
-    }
-  }, [currentWeek]);
-  useEffect(() => {
-    let ticking = false;
-    const onScroll = () => {
-      if (window.innerWidth >= 768) return; // desktop handled by currentWeek
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        const el = document.elementFromPoint(window.innerWidth / 2, 90);
-        const card = el?.closest?.('[id^="day-"]') as HTMLElement | null;
-        if (card) {
-          const dateStr = card.id.replace('day-', '');
-          const d = new Date(dateStr + 'T00:00:00');
-          if (!isNaN(d.getTime())) {
-            setHeaderMonth(d.toLocaleDateString('da-DK', { month: 'long', year: 'numeric' }));
-            // Track active day for FAB
-            const sd = scrollDays.find(s => s.key === dateStr);
-            if (sd) activeDayRef.current = { dayName: sd.dayName, weekNumber: sd.weekNumber, date: sd.date, key: sd.key };
-          }
-        }
-        ticking = false;
-      });
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-
-  // Expand range when search opens so results cover ~6 months ahead
-  useEffect(() => {
-    if (searchMode) setWeeksAhead(prev => Math.max(prev, 26));
-  }, [searchMode]);
+  // Scroll orchestration (scroll-to-today, month tracking, initial alignment)
+  const { headerMonth, setHeaderMonth, initialScrollDone, scrollToToday, scrollToDate, activeDayRef } = useScrollController({
+    todayRef, mobileTodayRef, view, user, currentWeek, setCurrentWeek,
+    multiWeekData, scrollDays, weeksBack, setWeeksBack, weeksAhead, setWeeksAhead, searchMode,
+  });
   // Prevent background scroll when search overlay is open
   useEffect(() => {
     if (searchMode) {
@@ -668,7 +202,7 @@ const App = () => {
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Escape') { setSearchMode(false); setSearchQuery(''); } }}
-                placeholder={view === 'events' ? "Søg i events…" : "Søg i pas..."}
+                placeholder={view === 'events' ? "S\u00F8g i events\u2026" : "S\u00F8g i pas\u2026"}
                 autoFocus
                 className={`flex-1 bg-transparent outline-none text-sm font-medium ${isDark ? 'text-white placeholder-slate-500' : 'text-ds-text placeholder-ds-text-subtlest'}`}
               />
@@ -769,122 +303,14 @@ const App = () => {
         </div>
       </div>
 
-      {/* SEARCH RESULTS OVERLAY (calendar views only — events filters inline) */}
-      {searchMode && view !== 'events' && (
-        <div className={`fixed inset-0 top-[73px] z-[18] overflow-y-auto pb-32 ${isDark ? 'bg-slate-950' : 'bg-surface-subtle'}`}>
-          {(() => {
-            const q = searchQuery.trim().toLowerCase();
-            if (!q) return (
-              <div className={`flex flex-col items-center justify-center pt-24 px-8 ${isDark ? 'text-slate-600' : 'text-ds-text-subtlest'}`}>
-                <Search className="w-10 h-10 mb-3 opacity-40" />
-                <p className="text-sm font-medium">Søg efter holdnavn, kategori, sted...</p>
-              </div>
-            );
-            // Collect all sessions from today forward
-            const today = new Date(); today.setHours(0, 0, 0, 0);
-            const results: { date: Date; dayName: string; weekNum: number; session: any; key: string }[] = [];
-            for (const sd of scrollDays) {
-              if (sd.date < today) continue;
-              const weekData = multiWeekData[sd.weekNumber] || {};
-              const sessions = weekData[sd.dayName] || [];
-              for (const s of sessions) {
-                if (s.isRestDay) continue;
-                const fields = [s.name, s.category, s.location, s.start, s.end, s.cancellationReason].filter(Boolean).map((f: string) => f.toLowerCase());
-                if (fields.some(f => f.includes(q))) {
-                  results.push({ date: sd.date, dayName: sd.dayName, weekNum: sd.weekNumber, session: s, key: sd.key });
-                }
-              }
-            }
-            if (results.length === 0) return (
-              <div className={`flex flex-col items-center justify-center pt-24 px-8 ${isDark ? 'text-slate-600' : 'text-ds-text-subtlest'}`}>
-                <Search className="w-10 h-10 mb-3 opacity-40" />
-                <p className="text-sm font-medium">Ingen resultater for "{searchQuery}"</p>
-              </div>
-            );
-            // Group by date
-            const grouped: { label: string; date: Date; items: typeof results }[] = [];
-            let currentLabel = '';
-            for (const r of results) {
-              const label = r.date.toLocaleDateString('da-DK', { weekday: 'long', day: 'numeric', month: 'long' });
-              if (label !== currentLabel) {
-                currentLabel = label;
-                grouped.push({ label, date: r.date, items: [] });
-              }
-              grouped[grouped.length - 1].items.push(r);
-            }
-            return (
-              <div className="px-4 pt-2 space-y-3">
-                <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>{results.length} resultat{results.length !== 1 ? 'er' : ''}</p>
-                {grouped.map(group => (
-                  <div key={group.label}>
-                    <div className={`text-xs font-bold capitalize mb-1.5 ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>{group.label}</div>
-                    <div className="space-y-1.5">
-                      {group.items.map(r => {
-                        const cat = CATEGORIES.find(c => c.label === r.session.category) || CATEGORIES[6];
-                        const isCancelled = r.session.status === 'cancelled';
-                        return (
-                          <button key={`${r.key}-${r.session.id}`} onClick={() => { if (r.session.type === 'event' && r.session.eventId) { setSearchMode(false); setSearchQuery(''); setInitialEventId(r.session.eventId); setView('events'); return; } setEditingDay(r.dayName); setEditingSession(r.session); setEditingWeek(r.weekNum); setModalOpen(true); }}
-                            className={`w-full text-left relative flex items-start p-2.5 rounded-xl border shadow-sm transition-all active:scale-[0.98] ${isCancelled ? (isDark ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-red-50 border-red-200 opacity-75') : (isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border')}`}>
-                            <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl ${cat.color} ${isCancelled ? 'opacity-50' : ''}`} />
-                            <div className="flex-1 pl-2.5 min-w-0">
-                              <h4 className={`font-bold text-xs leading-tight mb-0.5 line-clamp-2 ${isCancelled ? (isDark ? 'line-through text-slate-500' : 'line-through text-ds-text-subtlest') : (isDark ? 'text-white' : 'text-ds-text')}`}>{r.session.name}</h4>
-                              <div className={`flex flex-col gap-0.5 text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
-                                <span className="flex items-center"><Clock className="w-2.5 h-2.5 mr-0.5 shrink-0" />{r.session.start} - {r.session.end}</span>
-                                <span className="flex items-center truncate"><MapPin className="w-2.5 h-2.5 mr-0.5 shrink-0" />{r.session.location}</span>
-                              </div>
-                              {isCancelled && <div className="mt-0.5 text-[9px] text-red-400 flex items-center"><AlertCircle className="w-2.5 h-2.5 mr-0.5" />Aflyst{r.session.cancellationReason ? `: ${r.session.cancellationReason}` : ''}</div>}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-        </div>
-      )}
+      {/* SEARCH RESULTS OVERLAY */}
+      {searchMode && view !== 'events' && <SearchOverlay searchQuery={searchQuery} scrollDays={scrollDays} multiWeekData={multiWeekData} isDark={isDark}
+        onOpenSession={(d, s, w) => { setEditingDay(d); setEditingSession(s); setEditingWeek(w); setModalOpen(true); }}
+        onOpenEvent={(id) => { setSearchMode(false); setSearchQuery(''); setInitialEventId(id); setView('events'); }} />}
 
       {/* MONTH PICKER */}
-      {monthPickerOpen && (
-        <>
-          <div className="fixed inset-0 z-[25]" onClick={() => setMonthPickerOpen(false)} />
-          <div className={`fixed left-0 right-0 top-[73px] z-30 mx-4 rounded-2xl border shadow-xl p-4 ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-surface-border'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <button onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() - 1, 1))} className={`p-1 rounded-lg ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-surface-hover text-ds-text-subtle'}`}><ChevronLeft className="w-5 h-5" /></button>
-              <span className={`text-sm font-bold capitalize ${isDark ? 'text-white' : 'text-ds-text'}`}>{pickerMonth.toLocaleDateString('da-DK', { month: 'long', year: 'numeric' })}</span>
-              <button onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1, 1))} className={`p-1 rounded-lg ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-surface-hover text-ds-text-subtle'}`}><ChevronRight className="w-5 h-5" /></button>
-            </div>
-            <div className="grid grid-cols-7 gap-0.5 text-center">
-              {['Ma', 'Ti', 'On', 'To', 'Fr', 'Lø', 'Sø'].map(d => (
-                <div key={d} className={`text-[10px] font-bold py-1 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>{d}</div>
-              ))}
-              {(() => {
-                const year = pickerMonth.getFullYear();
-                const month = pickerMonth.getMonth();
-                const firstDay = new Date(year, month, 1);
-                const lastDay = new Date(year, month + 1, 0);
-                const startPad = (firstDay.getDay() + 6) % 7; // Mon=0
-                const today = new Date(); today.setHours(0,0,0,0);
-                const todayStr = today.toISOString().slice(0, 10);
-                const cells: React.ReactNode[] = [];
-                for (let i = 0; i < startPad; i++) cells.push(<div key={`pad-${i}`} />);
-                for (let d = 1; d <= lastDay.getDate(); d++) {
-                  const date = new Date(year, month, d);
-                  const dateStr = date.toISOString().slice(0, 10);
-                  const isToday = dateStr === todayStr;
-                  cells.push(
-                    <button key={d} onClick={() => { setMonthPickerOpen(false); setView('personal'); scrollToDate(date); }}
-                      className={`w-8 h-8 mx-auto rounded-full text-xs font-medium transition-colors ${isToday ? 'bg-blue-600 text-white font-bold' : (isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-ds-text hover:bg-surface-hover')}`}>{d}</button>
-                  );
-                }
-                return cells;
-              })()}
-            </div>
-          </div>
-        </>
-      )}
+      {monthPickerOpen && <MonthPicker pickerMonth={pickerMonth} setPickerMonth={setPickerMonth} isDark={isDark}
+        onClose={() => setMonthPickerOpen(false)} onSelectDate={(date) => { setMonthPickerOpen(false); setView('personal'); scrollToDate(date); }} />}
 
       {/* LEFT DRAWER */}
       {drawerOpen && <div className="fixed inset-0 z-30 bg-black/30" onClick={() => setDrawerOpen(false)} />}
@@ -928,7 +354,7 @@ const App = () => {
         </div>
       </div>
 
-      {/* MAIN CONTENT â€” responsive width */}
+      {/* MAIN CONTENT — responsive width */}
       <div className="mx-auto relative pt-4 min-h-[85vh]">
         {/* Desktop: Week navigation */}
         {view === 'personal' && (
@@ -953,7 +379,7 @@ const App = () => {
         {view === 'events' ? (
           <EventsPage ref={eventsRef} isDark={isDark} fighterName={activeFighter} isAdmin={isAdmin} userEmail={user?.email || ''} searchQuery={searchQuery} searchMode={searchMode} initialEventId={initialEventId} onClearInitialEvent={() => setInitialEventId(null)} />
         ) : view === 'team' ? (
-          <TeamSchedule days={DAYS} teamData={teamData} currentWeek={currentWeek} isDark={isDark} />
+          <TeamSchedule days={DAYS} teamData={mergedTeamData} currentWeek={currentWeek} isDark={isDark} />
         ) : (
           <>
             {/* Desktop action bar + catalogue filter */}
@@ -1014,6 +440,7 @@ const App = () => {
                 todayRef={mobileTodayRef}
                 onLoadMorePast={loadMorePast}
                 onLoadMoreFuture={loadMoreFuture}
+                initialScrollDone={initialScrollDone}
                 visibleFriends={visibleFriends}
                 friendWeekData={friendWeekData}
                 friendColors={FRIEND_COLORS}
@@ -1060,14 +487,14 @@ const App = () => {
       </div>
 
       {/* MODALS */}
-      {/* Desktop FAB â€” floating blue + button */}
+      {/* Desktop FAB — floating blue + button */}
       {view === 'personal' && !isReadOnly && (
         <button onClick={() => setShowCatalogue(!showCatalogue)}
           className={`hidden md:flex fixed bottom-8 right-8 z-20 w-14 h-14 rounded-full items-center justify-center shadow-lg transition-all hover:scale-105 active:scale-95 ${showCatalogue ? 'bg-slate-500 hover:bg-slate-600 rotate-45' : 'bg-blue-600 hover:bg-blue-700'}`}>
           <Plus className="w-7 h-7 text-white" />
         </button>
       )}
-      {/* Mobile FAB â€” floating blue + button */}
+      {/* Mobile FAB — floating blue + button */}
       {view === 'personal' && !isReadOnly && (
         <>
           <button onClick={() => setFabSheetOpen(true)}
@@ -1155,7 +582,7 @@ const App = () => {
               if (wk < fromWeek) continue;
               const wd = multiWeekData[wk];
               if (!wd?.[dayName]) continue;
-              const nd = structuredClone(wd);
+              const nd = cloneWithoutEvents(wd);
               const before = nd[dayName].length;
               nd[dayName] = nd[dayName].filter((s: any) => s.isRestDay || (s.name || '').toLowerCase() !== nameLC || s.start !== start);
               if (nd[dayName].length < before) await saveWeekToDb(wk, nd);

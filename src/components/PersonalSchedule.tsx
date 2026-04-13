@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import {
-  Clock, MapPin, Plus, AlertCircle, Repeat, PenLine,
+  Clock, MapPin, Plus, AlertCircle, Repeat, PenLine, CalendarDays,
 } from 'lucide-react';
 
 import { CATEGORIES } from '../config/constants';
@@ -69,8 +69,9 @@ const PersonalSchedule = ({ days, scheduleData, weekDates, fullWeekDates, isRead
             const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
             const isCancelled = s.status === 'cancelled';
             const isRecurring = !!s.isRecurring;
+            const isEvent = s.type === 'event';
             return (
-              <div key={s.id} onClick={() => !isReadOnly && onEditSession(day, s)} className={`relative flex items-start p-2 rounded-xl mb-1.5 border shadow-sm transition-all ${isCancelled ? (isDark ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-red-50 border-red-200 opacity-75') : (isDark ? 'bg-slate-800 border-slate-700/50' : 'bg-surface-raised border-surface-border')} ${!isReadOnly ? 'cursor-pointer active:scale-[0.98]' : ''}`}>
+              <div key={s.id} onClick={() => !isReadOnly && onEditSession(day, s)} className={`relative flex items-start p-2 rounded-xl mb-1.5 border shadow-sm transition-all ${isCancelled ? (isDark ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-red-50 border-red-200 opacity-75') : isEvent ? (isDark ? 'bg-indigo-950/30 border-indigo-800/50' : 'bg-indigo-50 border-indigo-200') : (isDark ? 'bg-slate-800 border-slate-700/50' : 'bg-surface-raised border-surface-border')} ${!isReadOnly ? 'cursor-pointer active:scale-[0.98]' : ''}`}>
                 <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl ${cat.color} ${isCancelled ? 'opacity-50' : ''}`}></div>
                 <div className="flex-1 pl-2.5 min-w-0">
                   <div className="flex items-start justify-between gap-1">
@@ -81,6 +82,7 @@ const PersonalSchedule = ({ days, scheduleData, weekDates, fullWeekDates, isRead
                     <span className="flex items-center"><Clock className="w-2.5 h-2.5 mr-0.5 shrink-0" />{s.start} - {s.end}</span>
                     <span className="flex items-center truncate"><MapPin className="w-2.5 h-2.5 mr-0.5 shrink-0" />{s.location}</span>
                   </div>
+                  {isEvent && <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase mt-0.5 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}><CalendarDays className="w-2.5 h-2.5" />Event</span>}
                   {isCancelled && <div className="mt-0.5 text-[9px] text-red-400 flex items-center"><AlertCircle className="w-2.5 h-2.5 mr-0.5" />Aflyst{s.cancellationReason ? `: ${s.cancellationReason}` : ''}</div>}
                 </div>
               </div>

@@ -14,7 +14,7 @@ export const MASTER_DATA = `# Master Data
 | **Name** | FightWeek |
 | **Tagline** | Training scheduler for professional fighters |
 | **URL** | fightweek-app.vercel.app |
-| **Version** | 1.1.0 |
+| **Version** | 1.7.0 |
 
 ---
 
@@ -103,7 +103,30 @@ The app uses Danish day names as keys:
 | **Database** | Firestore |
 | **Data path** | \`/artifacts/production/users/{userId}/{collection}/{docId}\` |
 | **Public data** | \`/artifacts/production/public/data/\` |
+| **Events** | \`/artifacts/production/public/data/events/{eventId}\` |
+| **Catalogue** | \`/artifacts/production/public/data/catalogue/{classId}\` |
 | **Hosting** | Vercel |
+
+---
+
+## Event Types
+
+Event type badges shown on event cards and detail views:
+
+| Type key | Label (DA) | Colour (light) | Colour (dark) | Icon |
+|----------|-----------|----------------|---------------|------|
+| **tournament** | St\u00e6vne | bg-red-100 text-red-700 | bg-red-900/30 text-red-400 | Trophy |
+| **seminar** | Seminar | bg-blue-100 text-blue-700 | bg-blue-900/30 text-blue-400 | BookOpen |
+| **social** | Socialt | bg-emerald-100 text-emerald-700 | bg-emerald-900/30 text-emerald-400 | PartyPopper |
+| **other** | Andet | bg-slate-100 text-slate-700 | bg-slate-800 text-slate-400 | CalendarDays |
+
+## Event Signup Statuses
+
+| Status | Label (DA) | Meaning |
+|--------|-----------|--------|
+| **interested** | Interesseret | Fighter is considering attending |
+| **signed-up** | Tilmeldt | Fighter is confirmed |
+| **declined** | Ikke interesseret | Fighter has declined |
 
 ---
 

@@ -77,13 +77,22 @@ Following the Toolbox pattern: \`{hue}-100\` background + \`{hue}-700\` text.
 
 | Category | Colour | Class |
 |----------|--------|-------|
-| MMA | Red | \`bg-red-500\` |
-| Brydning | Blue | \`bg-blue-500\` |
-| Striking | Orange | \`bg-orange-500\` |
-| Styrke | Green | \`bg-green-500\` |
-| Cardio | Yellow | \`bg-yellow-500\` |
-| Mobilitet | Purple | \`bg-purple-500\` |
-| Andet | Grey | \`bg-slate-500\` |
+| MMA | Red | \`bg-red-600\` |
+| Brydning | Emerald | \`bg-emerald-600\` |
+| Grappling | Purple | \`bg-purple-600\` |
+| Boksning | Yellow | \`bg-yellow-600\` |
+| Kickboxing | Orange | \`bg-orange-500\` |
+| Fysisk tr\u00e6ning | Stone | \`bg-stone-600\` |
+| Andet | Slate | \`bg-slate-500\` |
+
+### Event type badges
+
+| Type | Label | Light classes | Dark classes | Icon |
+|------|-------|---------------|-------------|------|
+| tournament | St\u00e6vne | \`bg-red-100 text-red-700 border-red-200\` | \`bg-red-900/30 text-red-400 border-red-800\` | Trophy |
+| seminar | Seminar | \`bg-blue-100 text-blue-700 border-blue-200\` | \`bg-blue-900/30 text-blue-400 border-blue-800\` | BookOpen |
+| social | Socialt | \`bg-emerald-100 text-emerald-700 border-emerald-200\` | \`bg-emerald-900/30 text-emerald-400 border-emerald-800\` | PartyPopper |
+| other | Andet | \`bg-slate-100 text-slate-700 border-slate-200\` | \`bg-slate-800 text-slate-400 border-slate-700\` | CalendarDays |
 
 ### Semantic colours
 
@@ -228,6 +237,14 @@ text-xs px-2 py-0.5 rounded font-medium
 
 **Dark:** \`rounded-2xl p-4 border bg-slate-900 border-slate-800 shadow-md\`
 **Light:** \`rounded-2xl p-4 border bg-white border-gray-200 shadow-sm\`
+
+### Event session cards (calendar)
+
+Virtual event sessions in the personal and team schedule use an indigo palette to distinguish them from regular training sessions:
+
+**Dark:** \`bg-indigo-950/30 border-indigo-800/50\`
+**Light:** \`bg-indigo-50 border-indigo-200\`
+**Badge:** \`text-indigo-400\` (dark) / \`text-indigo-600\` (light) — CalendarDays icon + "EVENT" uppercase text
 
 ### Modals
 

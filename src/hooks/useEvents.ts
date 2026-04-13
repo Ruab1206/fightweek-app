@@ -1,27 +1,48 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { collection, onSnapshot, query, doc, updateDoc, addDoc, deleteDoc as firestoreDeleteDoc, deleteField } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { db, auth } from '../config/firebase';
 import { PUBLIC_DATA_PATH } from '../config/constants';
 import type { FightweekEvent, EventSignupStatus } from '../types/event';
 
 export function useEvents() {
   const [events, setEvents] = useState<FightweekEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, PUBLIC_DATA_PATH, 'events'));
-    const unsub = onSnapshot(q, (snap) => {
-      const items: FightweekEvent[] = snap.docs
-        .map((d) => ({ ...d.data(), id: d.id } as FightweekEvent))
-        .filter((e) => e.title && e.date);
-      items.sort((a, b) => a.date.localeCompare(b.date));
-      setEvents(items);
-      setLoading(false);
-    }, (err) => {
-      console.error('[useEvents] error:', err);
-      setLoading(false);
+    let unsub: (() => void) | null = null;
+
+    function subscribe() {
+      const q = query(collection(db, PUBLIC_DATA_PATH, 'events'));
+      unsub = onSnapshot(q, (snap) => {
+        const items: FightweekEvent[] = snap.docs
+          .map((d) => ({ ...d.data(), id: d.id } as FightweekEvent))
+          .filter((e) => e.title && e.date);
+        items.sort((a, b) => a.date.localeCompare(b.date));
+        setEvents(items);
+        setLoading(false);
+      }, (err) => {
+        console.error('[useEvents] error:', err);
+        setLoading(false);
+        // Firestore terminates the listener on error — retry after a short delay
+        unsub = null;
+        retryTimer.current = setTimeout(subscribe, 2000);
+      });
+    }
+
+    // Wait for auth before subscribing so Firestore has a valid token
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        if (!unsub) subscribe();
+      }
     });
-    return unsub;
+
+    return () => {
+      unsubAuth();
+      if (unsub) unsub();
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    };
   }, []);
 
   /** Update a fighter's sign-up status on an event */
