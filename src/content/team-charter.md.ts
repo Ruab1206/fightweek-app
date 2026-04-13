@@ -83,8 +83,11 @@ We use **semantic versioning lite** with an outcome name:
 | 1.0 — Core App | Fighters can plan and see their training week | Dec 2025 – Feb 2026 |
 | 1.1 — Admin & Backlog | Admin can manage the product backlog inside the app | Feb 2026 |
 | 1.2 — Ways of Working | The app documents its own team process and architecture | Mar 2026 |
-| 1.3 — Code Health | Codebase is production-grade — zero ts-nocheck, zero TS errors | Apr 2026 (shipped) |
-| 1.4 — Class Catalog | Fighters can easily find training offers across gyms | Apr 2026 (shipped) |
+| 1.3 — Code Health | Codebase is production-grade — zero ts-nocheck, zero TS errors | Apr 2026 |
+| 1.4 — Class Catalog | Fighters can easily find training offers across gyms | Apr 2026 |
+| 1.5 — Build Your Program | Fighters can build their own weekly program from the catalogue | Apr 2026 |
+| 1.6 — Easier Class Scheduling | One-tap catalogue add, recurring sessions, fravær management | Apr 2026 |
+| 1.7 — Events | Team can discover, sign up for, and track events like tournaments and seminars | Apr 2026 |
 
 ---
 
@@ -154,6 +157,8 @@ A backlog item is done when:
 11. **Design system updated** — If new UI patterns are introduced, the design system page is updated.
 12. **Dev server verified after mechanical edits** — After batch type-annotation changes or pragma removals, check the Vite dev server terminal for parse errors. TypeScript and Babel/esbuild see different things — a file can pass \`tsc\` but crash at serve time. (Retro 1.3 A1)
 13. **Search all callers when removing props** — When a child component's Props interface drops a member, grep for all usages of that prop name in the codebase before considering it done. (Retro 1.3 A4)
+14. **Auth-gate all Firestore hooks** — Any hook using \`onSnapshot\` on auth-protected collections must wait for \`onAuthStateChanged\` before subscribing, and auto-retry on transient errors. Subscribing before auth resolves kills the listener permanently. (Retro 1.7)
+15. **Verify event-session stripping on new save paths** — When adding a new code path that writes week data to Firestore, verify it uses the centralized save wrapper or \`cloneWithoutEvents()\` to prevent virtual event sessions from leaking into persisted data. (Retro 1.7)
 
 ---
 
@@ -175,6 +180,7 @@ A backlog item is done when:
 | **Spike before invest** | For infrastructure work (MCP, new auth patterns, new integrations), create a spike item first. Only build the full solution after the spike confirms feasibility. |
 | **Stay within product boundary** | Only edit files in the active product's directory. If a change is needed in another product, flag it and let the PO decide. (Retro 1.3 A2) |
 | **Update release notes incrementally** | When completing a significant chunk of work (e.g. a batch of files), update the release notes then — not just at review time. (Retro 1.3 A3) |
+| **Diagnostic logging before deep static analysis** | When a bug's code logic "looks correct" through static tracing, add a console.log to see actual runtime values before spending more time on exhaustive code analysis. (Retro 1.7) |
 
 ### Design principles
 

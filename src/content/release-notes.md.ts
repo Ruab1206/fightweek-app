@@ -5,6 +5,98 @@ export const RELEASE_NOTES = `# Release Notes
 > Releases follow the \`1.x — Outcome Name\` convention. See the Team Charter for how we plan releases using the story map.
 
 ---
+## 1.7 — Events
+*April 2026*
+
+**Outcome:** The team can discover, sign up for, and track upcoming events — tournaments, seminars, and social gatherings — all within FightWeek.
+
+### What changed
+
+**Event entity model and Firestore collection (#1151)**
+- \\\`FightweekEvent\\\` type with full field set: title, type, discipline, date/endDate, times, location, address, lat/lng, contact info, registration deadline, signups
+- \\\`useEvents\\\` hook with live Firestore \\\`onSnapshot\\\` subscription
+- 16+ real events seeded (MMA Galla Vol. 31, Danish Open 2026, seminars, etc.)
+
+**Event list view (#1152)**
+- Events page accessible from the left drawer menu
+- Upcoming events shown chronologically with card layout
+- Past events hidden by default — toggle "Vis tidligere" in search mode
+- Event type shown as colour-coded badge (stævne, seminar, social, andet)
+- Team participation visible — who has signed up / is interested
+- Filter bar in search mode: discipline, distance (GPS + haversine), participants
+- Dark/light theme support throughout
+
+**Event detail view and sign-up (#1153)**
+- Full detail view shows all event fields including contact info (mailto/tel links)
+- Three-state sign-up: Interesseret / Tilmeldt / Ikke interesseret
+- Team members' status visible on each event
+- Google Maps link on address
+- External URL link for registration page
+- Registration deadline shown with red warning when ≤ 3 days away
+
+**Events in schedule view (#1154)**
+- Signed-up events appear on the correct day(s) in the personal schedule as virtual sessions
+- Event cards are visually distinct from training sessions (indigo highlight + "EVENT" badge)
+- Multi-day events show on each day within the range
+- Events visible in team view for all signed-up fighters
+- Click event-session in calendar to navigate directly to event detail
+
+**Maintain events (#1148)**
+- Admin CRUD: create, edit, delete events via EventForm
+- Geocoding via OpenStreetMap Nominatim for lat/lng from address
+- All event fields editable including contact name, email, phone
+
+**Extract inline components from App.tsx (#1150)**
+- Session handlers extracted to \\\`useSessionHandlers\\\` hook
+- Search overlay extracted to \\\`SearchOverlay\\\` component
+- Catalogue filter logic extracted to \\\`useCatalogueFilter\\\` hook
+- Month picker extracted to \\\`MonthPicker\\\` component
+- EventsPage extracted: event list, detail, form, and filters moved to \\\`EventsPage.tsx\\\` (942 \u2192 454 lines)
+- Event merge logic extracted to \\\`useEventMerge\\\` hook
+- Scroll/month-picker logic extracted to \\\`useScrollController\\\` hook
+- Event form and detail extracted to \\\`EventForm\\\` and \\\`EventDetail\\\` components
+- Shared event helpers moved to \\\`eventHelpers.tsx\\\`
+- App.tsx reduced from 1,126 \u2192 608 lines across two refactoring passes
+
+### Bug fixes
+- Fixed calendar showing March instead of today when returning from events view
+- Fixed scroll alignment with header (scrollMarginTop on event cards)
+- Fixed return-to-viewed-event scroll position after closing detail view
+- Fixed filters not resetting when closing search mode
+- Fixed double vertical scroll on Events page (nested overflow containers)
+- Fixed garbled search placeholder encoding (UTF-8 mojibake)
+- Fixed month picker not navigating to far-future dates (ISO week wrap-around across year boundaries)
+- Fixed FAB (+) button not using the currently visible date when adding training/frav\u00e6r- Fixed delete dialog showing "Slet denne og følgende" for non-recurring sessions
+- Fixed calendar jumping back to today when scrolling into the future
+- Fixed duplicate events appearing on the same day (virtual event sessions leaking into Firestore saves)
+- Fixed events not appearing in Karl's calendar after signup (Firestore listener dying before auth resolved)
+- Fixed calendar not scrolling to today on login (progressive DOM height changes from 15 independent Firestore listeners)
+
+### Robustness improvements
+- \\\`useEvents\\\` now waits for Firebase auth before subscribing — prevents permission-denied errors and dead listeners
+- \\\`useEvents\\\` auto-retries with 2 s delay if the Firestore listener is terminated by a transient error
+- Scroll-to-today re-fires during a 3 s settling window while week data loads progressively
+- \\\`cloneWithoutEvents()\\\` exported and applied to all remaining save paths (desktop catalogue add, onDeleteThisAndFuture)
+- All 8+ Firestore save paths now strip virtual event sessions before persisting
+### Carry-forward
+- **#1128** — Open class details (tap a catalogue class to see full info)
+- **#1129** — Add class from catalog (inline add flow from schedule)
+- **#1136** — Mark recurring catalogue classes in catalogue view
+- **#1137** — Search mode (header-driven, distinct from browse)
+- **#1138** — Change program for recurring training sessions
+- **#1145** — Header month picker
+
+### Retro learnings
+- **Keep:** Extraction-first approach — pulling hooks out of App.tsx (useSessionHandlers, useScrollController, useEventMerge, useCatalogueFilter) before building new features kept the events work clean. App.tsx went from 1,126 → 608 lines.
+- **Keep:** Event merge as virtual sessions — designing events as render-time virtual sessions (not persisted per-fighter) was the right architectural call. No per-fighter data duplication, no sync issues.
+- **Keep:** Documentation-as-code — having entity model, domain model, and design system inside the app caught real issues during release review (wrong signup status values, missing entity section, stale catalogue path).
+- **Keep:** Seeding scripts — the \\\`firestore-admin.cjs\\\` pattern made it easy to populate events and backlog stories without manual Firestore console work.
+- **Lesson:** Auth-race conditions are silent killers. \\\`useEvents\\\` subscribed before auth resolved, killing the Firestore listener permanently. All hooks reading auth-protected collections must gate on \\\`onAuthStateChanged\\\`. (Added to DoD #14)
+- **Lesson:** Virtual-session leaking was hard to diagnose. \\\`cloneWithoutEvents\\\` needed to be applied at 8+ separate save paths — each new save path is a potential leak. Centralize into a single save wrapper (backlogged as #1160).
+- **Lesson:** When static code analysis says "should work", add a console.log and check the actual runtime data before spending time on exhaustive code tracing. (Added to agreements)
+- **Lesson:** Progressive Firestore loading (15 independent \\\`onSnapshot\\\` listeners) shifts DOM heights unpredictably. Scroll-to-today needs a settling window, not a one-shot call.
+
+---
 ## 1.6 — Easier Class Scheduling
 *April 2026*
 

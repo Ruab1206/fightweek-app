@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, MapPin } from 'lucide-react';
+import { Clock, MapPin, CalendarDays } from 'lucide-react';
 
 import { DAYS, CATEGORIES } from '../config/constants';
 import { getWeekDateMap } from '../utils/dateUtils';
@@ -15,6 +15,8 @@ interface Session {
     cancellationReason?: string;
     isRestDay?: boolean;
     fighter?: string;
+    type?: string;
+    eventSignupStatus?: string;
 }
 
 interface TeamScheduleProps {
@@ -85,14 +87,16 @@ const TeamSchedule = ({ days, teamData, currentWeek, isDark = true }: TeamSchedu
                                             {/* Fighter session cards */}
                                             <div className="space-y-1">
                                                 {sessions.map((s, idx) => {
-                                                     const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
+                                                     const isEvent = s.type === 'event';
                                                      const isCancelled = s.status === 'cancelled';
+                                                     const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
                                                      return (
-                                                         <div key={idx} className={`relative flex items-start p-1.5 rounded-lg border ${isCancelled ? (isDark ? 'bg-red-900/10 border-red-900/30 opacity-75' : 'bg-red-50 border-red-200 opacity-75') : (isDark ? 'bg-slate-800 border-slate-700/50' : 'bg-white border-surface-border')}`}>
+                                                         <div key={idx} className={`relative flex items-start p-1.5 rounded-lg border ${isCancelled ? (isDark ? 'bg-red-900/10 border-red-900/30 opacity-75' : 'bg-red-50 border-red-200 opacity-75') : isEvent ? (isDark ? 'bg-indigo-950/30 border-indigo-800/50' : 'bg-indigo-50 border-indigo-200') : (isDark ? 'bg-slate-800 border-slate-700/50' : 'bg-white border-surface-border')}`}>
                                                              <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-lg ${cat.color} ${isCancelled ? 'opacity-50' : ''}`}></div>
                                                              <div className="pl-2 min-w-0">
                                                                 <div className={`text-[10px] font-bold ${isDark ? 'text-blue-400' : 'text-brand-500'}`}>{s.fighter}</div>
                                                                 <div className={`text-[10px] truncate ${isCancelled ? (isDark ? 'text-slate-500 line-through' : 'text-ds-text-subtlest line-through') : (isDark ? 'text-slate-300' : 'text-ds-text')}`}>{s.name}</div>
+                                                                {isEvent && <span className={`inline-flex items-center gap-0.5 text-[8px] font-bold uppercase mt-0.5 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}><CalendarDays className="w-2.5 h-2.5" />Event</span>}
                                                                 {isCancelled && <span className="text-[9px] text-red-400">Aflyst</span>}
                                                              </div>
                                                          </div>

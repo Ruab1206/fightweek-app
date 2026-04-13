@@ -64,6 +64,8 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
     const weekData = multiWeekData[weekNum];
     if (!weekData) return;
     const newData = structuredClone(weekData);
+    // Strip virtual event sessions before persisting
+    for (const k of Object.keys(newData)) { if (Array.isArray(newData[k])) newData[k] = newData[k].filter((s: any) => s.type !== 'event'); }
     if (newData[day]) {
       newData[day] = newData[day].filter((s: any) => s.id !== session.id);
       saveWeekToDb(weekNum, newData);
@@ -79,6 +81,8 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
         const weekData = multiWeekData[wk];
         if (!weekData?.[day]) continue;
         const newData = structuredClone(weekData);
+        // Strip virtual event sessions before persisting
+        for (const k of Object.keys(newData)) { if (Array.isArray(newData[k])) newData[k] = newData[k].filter((s: any) => s.type !== 'event'); }
         const before = newData[day].length;
         newData[day] = newData[day].filter((s: any) =>
           (s.name || '').toLowerCase() !== nameLC || s.start !== startTime
@@ -223,10 +227,12 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
               className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-red-400 hover:bg-red-900/20' : 'text-red-600 hover:bg-red-50'}`}>
               Denne træning
             </button>
+            {session?.isRecurring && (
             <button onClick={handleDeleteThisAndFuture}
               className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-red-400 hover:bg-red-900/20' : 'text-red-600 hover:bg-red-50'}`}>
               Denne og alle fremtidige træninger
             </button>
+            )}
             <button onClick={() => setShowDeleteOptions(false)}
               className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-ds-text-subtle hover:bg-surface-hover'}`}>
               Annuller

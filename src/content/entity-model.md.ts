@@ -1,6 +1,6 @@
 // Entity Model — what's actually implemented in code and Firestore right now
 // For the full conceptual model (including envisioned concepts), see domain-model.md.ts
-// Updated 2026-04-02: Aligned with Domain Model v1.0. Clarified scope as "what's live today."
+// Updated 2026-04-13: Added FightweekEvent entity (1.7), updated Session fields, updated diagram
 export const ENTITY_MODEL = `# Entity Model — What's Built
 
 > The data structures that exist in code and Firestore **right now**. For the full conceptual picture (goals, fights, impediments, catalogue, etc.), see the **Domain Model**.
@@ -23,10 +23,10 @@ export const ENTITY_MODEL = `# Entity Model — What's Built
 └──────┬──────┘            └──────────────┘
        │ contains
        ▼
-┌─────────────┐
-│   Session   │
-│ (training)  │
-└─────────────┘
+┌─────────────┐            ┌──────────────────┐
+│   Session   │◀──merge────│ FightweekEvent   │
+│ (training)  │            │ (stævne/seminar) │
+└─────────────┘            └──────────────────┘
 
 Public:                          Admin-only:
 ┌─────────────────┐              ┌─────────────┐     ┌──────────────┐     ┌──────────────┐
@@ -57,28 +57,74 @@ Each day (Mandag–Søndag) contains an array of Session objects.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| id | number | Timestamp-based unique ID |
+| id | number \\| string | Timestamp-based unique ID (or \`event_{eventId}_{date}\` for event sessions) |
 | name | string | Session name (e.g. "Morgen MMA") |
-| category | string | One of the configured disciplines |
+| category | string | One of: MMA, Brydning, Grappling, Boksning, Kickboxing, Fysisk træning, Andet |
 | start | string | Start time (HH:MM) |
 | end | string | End time (HH:MM) |
 | location | string | Training location |
-| status | 'planned' \\| 'cancelled' | Current status |
+| status | 'planned' \\| 'active' \\| 'cancelled' | Current status |
 | isRestDay | boolean | Whether this is a rest-day marker |
 | cancellationReason | string? | Why it was cancelled |
 | cancellationTime | string? | ISO timestamp of cancellation |
+| catalogueClassId | string? | Link to CatalogueClass when added from catalogue |
+| type | 'event'? | Set when session represents an event sign-up |
+| eventId | string? | Links to FightweekEvent.id (when type='event') |
+| eventSignupStatus | string? | Fighter's signup status for the event |
+| fraværGroupId | string? | Groups multi-day fravær sessions together |
+| fraværTitel | string? | Fravær title |
+| fraværBeskrivelse | string? | Fravær description |
+| fraværStartDate | string? | ISO date — first day of fravær |
+| fraværEndDate | string? | ISO date — last day of fravær |
+| fraværStartTime | string? | HH:MM — start time on each fravær day |
+| fraværEndTime | string? | HH:MM — end time on each fravær day |
 
 **Planned additions (from Domain Model):**
 - \`status: 'completed'\` — enables attendance tracking
 - \`intensity: 1–5\` — post-session self-reported load
-- \`focusArea: string\` — sub-discipline tag
-- \`sourceId: string\` — link to catalogue item
 
 ### Standard Template ✅
 
 **Firestore path:** \`/artifacts/production/users/{userId}/templates/standard\`
 
 Same shape as Week Schedule — a reusable base plan that can be imported into any week.
+
+---
+
+## FightweekEvent (1.7) ✅
+
+A one-off event the team can discover and sign up for — tournament, seminar, social gathering, etc.
+
+**Firestore path:** \`/artifacts/production/public/data/events/{eventId}\`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | string | Firestore document ID |
+| title | string | "DM i Brydning 2026" |
+| type | EventType | 'tournament' \\| 'seminar' \\| 'social' \\| 'other' |
+| discipline | string? | "Brydning", "MMA", "BJJ" etc. |
+| date | string | ISO date "2026-05-16" |
+| endDate | string? | ISO date — for multi-day events |
+| startTime | string? | "09:00" (HH:mm) |
+| endTime | string? | "18:00" (HH:mm) |
+| location | string? | Venue name |
+| address | string? | Street address |
+| latitude | number? | GPS latitude for distance filtering |
+| longitude | number? | GPS longitude for distance filtering |
+| description | string? | Free-text info |
+| organiser | string? | Organising body / club |
+| url | string? | External registration / info page |
+| cost | string? | "250 kr" — free text |
+| contactName | string? | Contact person name |
+| contactEmail | string? | Contact email |
+| contactPhone | string? | Contact phone number |
+| registrationDeadline | string? | ISO date |
+| signups | Record<string, EventSignupStatus> | Fighter name → 'interested' \\| 'signed-up' \\| 'declined' |
+| createdBy | string | Email of creator |
+| createdAt | string | ISO 8601 |
+| updatedAt | string | ISO 8601 |
+
+**Event ↔ Calendar merge:** The \`useEventMerge\` hook creates virtual Session objects (with \`type:'event'\`) for each day of events a fighter has signed up for. These are merged into the personal calendar and team schedule at render time — nothing persisted per-fighter.
 
 ---
 
@@ -162,10 +208,9 @@ A recurring training class offered by a gym.
 | Users | Firebase Auth | Read: app, Write: Auth only |
 | Weeks | Firestore \`users/{uid}/weeks/\` | Read/Write: own user |
 | Templates | Firestore \`users/{uid}/templates/\` | Read/Write: own user |
+| Events | Firestore \`public/data/events/{eventId}\` | Read: all users, Write: admin only |
 | Backlog | Firestore \`public/data/backlog/items/\` | Read: all admin, Write: admin only |
 | Feedback | Firestore \`public/data/backlog/feedback/\` | Write: all users, Read: admin only |
 | Story Map | Firestore \`public/data/story-map/main\` | Read/Write: admin only |
 | Catalogue | Firestore \`public/data/catalogue/{classId}\` | Read: public (no auth), Write: admin only |
-
-For planned Firestore paths (goals, impediments, fights, events), see the **Domain Model**.
 `;

@@ -29,11 +29,11 @@ export const ARCHITECTURAL_BLUEPRINT = `# Architectural Blueprint
                       ▼
 ┌─────────────────────────────────────────────────────────┐
 │              React SPA (Vite build)                      │
-│  ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐  │
-│  │ Schedule │ │ Team View│ │  Admin   │ │  Backlog   │  │
-│  │  (main)  │ │(readonly)│ │ (admin)  │ │ (admin)    │  │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────┬──────┘  │
-│       └─────────────┴────────────┴─────────────┘         │
+│  ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐ ┌──────────┐  │
+│  │ Schedule │ │ Team View│ │  Admin   │ │  Backlog   │ │  Events  │  │
+│  │  (main)  │ │(readonly)│ │ (admin)  │ │ (admin)    │ │ (team)   │  │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────┬──────┘ └────┬─────┘  │
+│       └─────────────┴────────────┴─────────────┴─────────────┘       │
 │                         │                                │
 │              Firebase SDK (client-side)                   │
 └─────────────────────────┬───────────────────────────────┘
@@ -89,7 +89,7 @@ Each day (Mandag–Søndag) contains an array of Session objects.
 |-------|------|-------------|
 | id | number | Timestamp-based unique ID |
 | name | string | Session name |
-| category | string | MMA, Brydning, Striking, Styrke, Cardio, Mobilitet, Andet |
+| category | string | MMA, Brydning, Grappling, Boksning, Kickboxing, Fysisk tr\u00e6ning, Andet |
 | start / end | string | Time (HH:MM) |
 | location | string | Training location |
 | status | planned \\| cancelled | Current status |
@@ -143,8 +143,10 @@ Each day (Mandag–Søndag) contains an array of Session objects.
 | 4 | **Tailwind CSS** | Utility-first matches the rapid iteration pace; dark/light theme via class strategy |
 | 5 | **Mobile-first design** | Primary users (fighters) use phones exclusively |
 | 6 | **localStorage-first persistence** | Story map uses localStorage with optional Firestore background sync — resilient to permission errors |
-| 7 | **Phased refactoring** | Structure → Components → State management — low-risk incremental approach |
-| 8 | **Self-documenting app** | Team charter, release notes, design system all live inside the admin area |
+| 7 | **Auth-gated Firestore listeners** | Hooks that read auth-protected collections wait for \\\`onAuthStateChanged\\\` before subscribing and auto-retry on transient errors — prevents dead listeners from racing auth |
+| 8 | **Event-session stripping on save** | All Firestore save paths use \\\`cloneWithoutEvents()\\\` to prevent virtual event sessions from leaking into persisted data |
+| 9 | **Phased refactoring** | Structure → Components → State management — low-risk incremental approach |
+| 10 | **Self-documenting app** | Team charter, release notes, design system all live inside the admin area |
 
 ---
 
@@ -154,12 +156,23 @@ Each day (Mandag–Søndag) contains an array of Session objects.
 src/
 ├── components/          → Reusable UI components
 │   ├── backlog/         → Backlog-specific components
-│   └── story-map/       → Story map sub-components
+│   ├── story-map/       → Story map sub-components
+│   ├── EventForm.tsx    → Create/edit event form
+│   ├── EventDetail.tsx  → Full event detail view
+│   ├── eventHelpers.tsx → Shared event utilities, badges, configs
+│   └── MonthPicker.tsx  → Month navigation overlay
 ├── content/             → Markdown content for doc pages
 ├── hooks/               → Custom React hooks
+│   ├── useEvents.ts         → Firestore events subscription
+│   ├── useEventMerge.ts     → Merge events into schedule as virtual sessions
+│   ├── useScrollController.ts → Scroll-to-date, month tracking, day activation
+│   ├── useSessionHandlers.ts → Session CRUD orchestration
+│   └── useCatalogueFilter.ts → Catalogue filter state
 ├── pages/               → Top-level page components
+│   └── EventsPage.tsx   → Events list, filters, detail/form routing
 ├── services/            → Firebase service layer
 ├── types/               → TypeScript type definitions
+│   └── event.ts         → FightweekEvent, EventType, EventSignupStatus
 ├── config/              → Constants and Firebase setup
 └── utils/               → Date, CSV, device utilities
 \`\`\`
