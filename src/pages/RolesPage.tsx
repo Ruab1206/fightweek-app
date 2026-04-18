@@ -59,7 +59,7 @@ export default function RolesPage({ isDark }: { isDark: boolean }) {
   const inputBg = isDark ? 'bg-slate-800 border-slate-600 text-white' : 'bg-surface-subtle border-surface-border text-ds-text';
 
   return (
-    <div className="max-w-2xl mx-auto p-4 space-y-6">
+    <div className="max-w-2xl mx-auto p-4 space-y-6 overflow-y-auto h-full">
       {/* Header */}
       <div>
         <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-ds-text'}`}>Holdroller</h2>
