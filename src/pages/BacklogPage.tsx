@@ -28,6 +28,7 @@ import { X as XIcon, Search as SearchIcon, ClipboardList, Palette, ScrollText, C
 import MarkdownDocPage from '../components/MarkdownDocPage';
 import { TEAM_CHARTER, RELEASE_NOTES, ENTITY_MODEL, DOMAIN_MODEL, DESIGN_SYSTEM, MASTER_DATA, FIGHT_TEAM_DESCRIPTION, ARCHITECTURAL_BLUEPRINT, PRODUCT_VISION, CATALOGUE_SPEC, TARGET_ARCHITECTURE } from '../content';
 import StoryMapPage from './StoryMapPage';
+import PersonaPage from './PersonaPage';
 import RolesPage from './RolesPage';
 import { useTheme } from '../hooks/useTheme';
 import type { StoryMapData } from '../types/story-map';

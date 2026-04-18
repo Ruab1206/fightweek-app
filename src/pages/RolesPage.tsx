@@ -4,7 +4,7 @@
  * Reads/writes to the Firestore config doc at public/data/config/roles.
  */
 import React, { useState } from 'react';
-import { UserPlus, Trash2, Shield, Users, Dumbbell } from 'lucide-react';
+import { UserPlus, Trash2, Shield, Users, Dumbbell, Pencil } from 'lucide-react';
 import { useRolesConfig, type RolesConfig } from '../hooks/useRolesConfig';
 
 type UserRole = 'fighter' | 'coach' | 'admin';
@@ -22,11 +22,13 @@ const ROLE_COLORS: Record<UserRole, string> = {
 };
 
 export default function RolesPage({ isDark }: { isDark: boolean }) {
-  const { config, loading, userMapping, addMember, removeMember, updateRole, removedMembers } = useRolesConfig();
+  const { config, loading, userMapping, addMember, removeMember, renameMember, updateRole, removedMembers } = useRolesConfig();
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('fighter');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string | null>(null);
+  const [editNameValue, setEditNameValue] = useState('');
 
   if (loading) return <div className="p-6 text-center text-slate-500">Loader roller...</div>;
   if (!config) return <div className="p-6 text-center text-red-400">Rolle-konfigurationen kunne ikke indlæses.</div>;
@@ -75,13 +77,14 @@ export default function RolesPage({ isDark }: { isDark: boolean }) {
             placeholder="Email"
             value={newEmail}
             onChange={e => {
-              setNewEmail(e.target.value);
-              const hint = removedMembers[e.target.value.trim().toLowerCase()];
-              if (hint && !newName) setNewName(hint);
+              const val = e.target.value;
+              setNewEmail(val);
+              const hint = removedMembers[val.trim().toLowerCase()];
+              if (hint) setNewName(hint);
             }}
             onBlur={() => {
               const hint = removedMembers[newEmail.trim().toLowerCase()];
-              if (hint && !newName) setNewName(hint);
+              if (hint) setNewName(hint);
             }}
             className={`flex-1 px-3 py-2 rounded-lg border text-sm ${inputBg}`}
           />
@@ -90,7 +93,9 @@ export default function RolesPage({ isDark }: { isDark: boolean }) {
             placeholder="Navn"
             value={newName}
             onChange={e => setNewName(e.target.value)}
-            className={`w-32 px-3 py-2 rounded-lg border text-sm ${inputBg}`}
+            readOnly={!!removedMembers[newEmail.trim().toLowerCase()]}
+            title={removedMembers[newEmail.trim().toLowerCase()] ? 'Navn genbruges fra tidligere medlem (data bevares)' : ''}
+            className={`w-32 px-3 py-2 rounded-lg border text-sm ${inputBg} ${removedMembers[newEmail.trim().toLowerCase()] ? 'opacity-70 cursor-not-allowed' : ''}`}
           />
           <select
             value={newRole}
@@ -126,7 +131,26 @@ export default function RolesPage({ isDark }: { isDark: boolean }) {
                     {member.name[0]}
                   </div>
                   <div className="min-w-0">
-                    <div className={`text-sm font-medium ${text}`}>{member.name}</div>
+                    {editingName === email ? (
+                      <input
+                        autoFocus
+                        value={editNameValue}
+                        onChange={e => setEditNameValue(e.target.value)}
+                        onBlur={() => {
+                          if (editNameValue.trim() && editNameValue.trim() !== member.name) renameMember(email, editNameValue.trim());
+                          setEditingName(null);
+                        }}
+                        onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') setEditingName(null); }}
+                        className={`text-sm font-medium px-1 py-0.5 rounded border w-32 ${inputBg}`}
+                      />
+                    ) : (
+                      <div className={`text-sm font-medium ${text} flex items-center gap-1 group`}>
+                        {member.name}
+                        <button onClick={() => { setEditingName(email); setEditNameValue(member.name); }} className={`opacity-0 group-hover:opacity-100 p-0.5 rounded ${isDark ? 'text-slate-500 hover:text-slate-300' : 'text-ds-text-subtlest hover:text-ds-text'}`} title="Omdøb (data flyttes med)">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
                     <div className={`text-xs truncate ${textSub}`}>{email}</div>
                   </div>
                 </div>

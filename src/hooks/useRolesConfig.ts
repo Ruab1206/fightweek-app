@@ -5,7 +5,7 @@
  * Falls back to hardcoded constants if the config doc hasn't loaded yet.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, collection, getDocs, writeBatch, deleteDoc as firestoreDeleteDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { PUBLIC_DATA_PATH } from '../config/constants';
 import {
@@ -93,6 +93,29 @@ export function useRolesConfig() {
     await setDoc(doc(db, CONFIG_DOC_PATH), updated);
   }, [config]);
 
+  const renameMember = useCallback(async (email: string, newName: string) => {
+    if (!config) return;
+    const lower = email.toLowerCase();
+    const oldName = config.members[lower];
+    if (!oldName || oldName === newName) return;
+    // 1. Update config doc
+    const updated = { ...config };
+    updated.members = { ...updated.members, [lower]: newName };
+    await setDoc(doc(db, CONFIG_DOC_PATH), updated);
+    // 2. Migrate Firestore schedule data: copy old → new, delete old
+    const ROOT = 'artifacts/production/users';
+    const oldWeeksRef = collection(db, ROOT, oldName, 'weeks');
+    const snap = await getDocs(oldWeeksRef);
+    if (!snap.empty) {
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => {
+        batch.set(doc(db, ROOT, newName, 'weeks', d.id), d.data());
+        batch.delete(d.ref);
+      });
+      await batch.commit();
+    }
+  }, [config]);
+
   const updateRole = useCallback(async (email: string, newRole: UserRole) => {
     if (!config) return;
     const lower = email.toLowerCase();
@@ -114,6 +137,7 @@ export function useRolesConfig() {
     allMembers,
     addMember,
     removeMember,
+    renameMember,
     updateRole,
     removedMembers: config?.removed || {},
   };
