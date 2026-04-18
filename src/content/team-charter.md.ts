@@ -91,6 +91,7 @@ We use **semantic versioning lite** with an outcome name:
 | 1.6 — Easier Class Scheduling | One-tap catalogue add, recurring sessions, fravær management | Apr 2026 |
 | 1.7 — Events | Team can discover, sign up for, and track events like tournaments and seminars | Apr 2026 |
 | 1.8 — Robustness | Code quality, test coverage, centralized save logic, iOS scroll fixes, recurring session management | Apr 2026 |
+| 1.9 — Roles & Security | Dynamic role management from Firestore, security rules without code deploy, admin UI for team members | Apr 2026 |
 
 ---
 
