@@ -26,10 +26,16 @@ serviceAccountKey.json
 npm-debug.log*
 yarwn-debug.log*
 .pnpm-debug.log*
+*.log
 
 # Runtime data
 pids/
 *.pid
+
+# Temp / generated files
+_compare-result.txt
+_config-check.txt
+deploy-gap.txt
 
 # Data snapshots (downloaded from Firestore — local only)
 data/

@@ -56,11 +56,11 @@ export async function readAllData(): Promise<DataSnapshot> {
     try {
       const wSnap = await getDoc(doc(db, ROOT, name, 'weeks', `week_${week}`));
       if (wSnap.exists()) snapshot.fighters[name].currentWeek = wSnap.data();
-    } catch (e) { /* may not exist */ }
+    } catch { /* may not exist */ }
     try {
       const tSnap = await getDoc(doc(db, ROOT, name, 'templates', 'standard'));
       if (tSnap.exists()) snapshot.fighters[name].standardTemplate = tSnap.data();
-    } catch (e) { /* may not exist */ }
+    } catch { /* may not exist */ }
   }
 
   return snapshot;

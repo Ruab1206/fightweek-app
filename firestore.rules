@@ -1,0 +1,120 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Role resolution ───
+    //
+    // TECH DEBT: Roles are hardcoded by email. Plan is to move to a
+    // Firestore-backed role document (artifacts/production/public/config/roles)
+    // so roles can be assigned flexibly through the app.
+    // See Domain Model → Actors & Roles for the target state.
+    //
+    function isAdmin() {
+      return request.auth != null
+          && request.auth.token.email == 'rune.abrahamsson@gmail.com';
+    }
+
+    function isCoach() {
+      return request.auth != null
+          && request.auth.token.email == 'frodihansen@hotmail.com';
+    }
+
+    function isAdminOrCoach() {
+      return isAdmin() || isCoach();
+    }
+
+    function isTeamMember() {
+      return request.auth != null
+          && request.auth.token.email in [
+               'carolinemollerh@gmail.com',
+               'sankarem00@gmail.com',
+               'eneasopa354@gmail.com',
+               'anton.emil.bang@gmail.com',
+               'duraceljones@gmail.com',
+               'karl.lindsgren@gmail.com',
+               'frode.lindsgren@gmail.com',
+               'frodihansen@hotmail.com',
+               'rune.abrahamsson@gmail.com'
+             ];
+    }
+
+    function fighterNameForEmail(email) {
+      return email == 'carolinemollerh@gmail.com'  ? 'Caroline' :
+             email == 'sankarem00@gmail.com'        ? 'San' :
+             email == 'eneasopa354@gmail.com'        ? 'Enea' :
+             email == 'anton.emil.bang@gmail.com'     ? 'Anton' :
+             email == 'duraceljones@gmail.com'        ? 'Jonas' :
+             email == 'karl.lindsgren@gmail.com'      ? 'Karl' :
+             email == 'frode.lindsgren@gmail.com'     ? 'Frode' :
+             email == 'frodihansen@hotmail.com'       ? 'Frodi' :
+             email == 'rune.abrahamsson@gmail.com'    ? 'Rune' :
+             '';
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // ─── Per-user schedule data ───
+    // Path: artifacts/production/users/{fighterName}/...
+    //
+    // Team members can READ all fighters (needed for team view).
+    // Only the fighter themselves or admin/coach can WRITE.
+    match /artifacts/production/users/{fighterName}/{document=**} {
+      allow read: if isTeamMember();
+
+      allow write: if isAdminOrCoach();
+      allow write: if isAuthenticated()
+        && fighterNameForEmail(request.auth.token.email) == fighterName;
+    }
+
+    // ─── Public catalogue & gyms ───
+    // Readable by anyone (including unauthenticated users).
+    // Writable only by admin/coach.
+    match /artifacts/production/public/data/catalogue/{docId} {
+      allow read: if true;
+      allow write: if isAdminOrCoach();
+    }
+    match /artifacts/production/public/data/gyms/{docId} {
+      allow read: if true;
+      allow write: if isAdminOrCoach();
+    }
+
+    // ─── Events (tournaments, seminars, social) ───
+    // Readable by all team members.
+    // Admin/coach can create/update/delete events.
+    // Team members can update their own sign-up status.
+    match /artifacts/production/public/data/events/{docId} {
+      allow read: if isTeamMember();
+      allow create, delete: if isAdminOrCoach();
+      allow update: if isAdminOrCoach() || isTeamMember();
+    }
+
+    // ─── Shared team data (backlog, feedback, story-map, config) ───
+    // Path: artifacts/production/public/data/{collection}/{docId}
+    //
+    // Super-admin only for now (both read and write).
+    // Covers:  backlog/{id}, feedback/{id}, story-map/main
+    match /artifacts/production/public/data/{collection}/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ─── Public data parent document ───
+    match /artifacts/production/public/data/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ─── Future: config document for roles ───
+    // Path: artifacts/production/public/config/{docId}
+    // Prepared for when we move role mapping to Firestore
+    match /artifacts/production/public/config/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ─── Catch-all: deny everything else ───
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

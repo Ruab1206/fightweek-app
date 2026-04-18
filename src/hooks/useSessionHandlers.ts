@@ -2,17 +2,6 @@ import { DAYS } from '../config/constants';
 import { getDateForWeekDay, getISOWeekForDate } from '../utils/dateUtils';
 import type { CatalogueAddPayload } from '../components/InlineCataloguePicker';
 
-/** Clone week data and strip virtual event sessions (they are merged at render time by useEventMerge). */
-export function cloneWithoutEvents(weekData: any): any {
-  const data = structuredClone(weekData);
-  for (const key of Object.keys(data)) {
-    if (Array.isArray(data[key])) {
-      data[key] = data[key].filter((s: any) => s.type !== 'event');
-    }
-  }
-  return data;
-}
-
 interface SessionHandlerDeps {
   scheduleData: any;
   setScheduleData: (data: any) => void;
@@ -44,7 +33,7 @@ export function useSessionHandlers({
   const handleSaveSession = async (session: any) => {
     const weekNum = editingWeek || currentWeek;
     const sourceData = editingWeek ? (multiWeekData[weekNum] || {}) : scheduleData;
-    const newData = editingWeek ? cloneWithoutEvents(sourceData) : structuredClone(sourceData);
+    const newData = structuredClone(sourceData);
     if (!newData[editingDay]) newData[editingDay] = [];
 
     const sessionDate = getDateForWeekDay(weekNum, editingDay);
@@ -76,7 +65,7 @@ export function useSessionHandlers({
   const handleDeleteSession = async (sessionId: any) => {
     const weekNum = editingWeek || currentWeek;
     const sourceData = editingWeek ? (multiWeekData[weekNum] || {}) : scheduleData;
-    const newData = editingWeek ? cloneWithoutEvents(sourceData) : structuredClone(sourceData);
+    const newData = structuredClone(sourceData);
     if (newData[editingDay]) {
       newData[editingDay] = newData[editingDay].filter((s: any) => s.id !== sessionId);
       if (editingWeek) {
@@ -99,7 +88,7 @@ export function useSessionHandlers({
     if (!day) return;
     const weekNum = weekOverride || currentWeek;
     const sourceData = weekOverride ? (multiWeekData[weekNum] || {}) : scheduleData;
-    const newData = weekOverride ? cloneWithoutEvents(sourceData) : structuredClone(sourceData);
+    const newData = structuredClone(sourceData);
     if (!newData[day]) newData[day] = [];
     const newSession: any = { ...session, id: Date.now(), status: 'active', day };
     const sessionDate = getDateForWeekDay(weekNum, day);
@@ -121,7 +110,7 @@ export function useSessionHandlers({
 
   // Desktop: add from 7-day catalogue grid
   const handleAddFromDesktopCatalogue = async (day: string, session: CatalogueAddPayload) => {
-    const newData = cloneWithoutEvents(scheduleData);
+    const newData = structuredClone(scheduleData);
     if (!newData[day]) newData[day] = [];
     const newSession: any = { ...session, id: Date.now(), status: 'active', day };
     const sessionDate = getDateForWeekDay(currentWeek, day);
@@ -170,12 +159,6 @@ export function useSessionHandlers({
       const weekData = multiWeekData[weekNum];
       if (!weekData) continue;
       const newData = structuredClone(weekData);
-      // Strip virtual event sessions — they must not be persisted
-      for (const dayKey of Object.keys(newData)) {
-        if (Array.isArray(newData[dayKey])) {
-          newData[dayKey] = newData[dayKey].filter((s: any) => s.type !== 'event');
-        }
-      }
       if (!newData[dayName]) newData[dayName] = [];
 
       const isTarget = weekNum >= startWeekNum
@@ -185,7 +168,7 @@ export function useSessionHandlers({
       if (isTarget) {
         const existing = newData[dayName].find((s: any) =>
           !s.isRestDay && (s.name || '').toLowerCase() === nameLC &&
-          s.start === startTime && s.status !== 'cancelled'
+          s.start === startTime
         );
         if (existing) {
           if (!existing.isRecurring) { existing.isRecurring = true; await saveWeekToDb(weekNum, newData); }
@@ -278,7 +261,7 @@ export function useSessionHandlers({
 
     const allWeeks = new Set([...Object.keys(multiWeekData).map(Number), ...Object.keys(weekChanges).map(Number)]);
     for (const wk of allWeeks) {
-      const nd = cloneWithoutEvents(multiWeekData[wk] || {});
+      const nd = structuredClone(multiWeekData[wk] || {});
       let changed = false;
       if (shouldRemove) {
         for (const dayName of DAYS) {
@@ -308,7 +291,7 @@ export function useSessionHandlers({
     for (const wk of Object.keys(multiWeekData).map(Number)) {
       const wd = multiWeekData[wk];
       if (!wd) continue;
-      const nd = cloneWithoutEvents(wd);
+      const nd = structuredClone(wd);
       let changed = false;
       for (const dayName of DAYS) {
         if (!nd[dayName]) continue;
@@ -324,9 +307,23 @@ export function useSessionHandlers({
     showToast(`Fravær slettet (${deleted} dag${deleted > 1 ? 'e' : ''})`, 'success');
   };
 
+  // Delete a session in this and all future weeks by name+start match
+  const handleDeleteThisAndFuture = async (dayName: string, name: string, start: string, fromWeek: number) => {
+    const nameLC = name.toLowerCase();
+    for (const wk of Object.keys(multiWeekData).map(Number).sort((a, b) => a - b)) {
+      if (wk < fromWeek) continue;
+      const wd = multiWeekData[wk];
+      if (!wd?.[dayName]) continue;
+      const nd = structuredClone(wd);
+      const before = nd[dayName].length;
+      nd[dayName] = nd[dayName].filter((s: any) => s.isRestDay || (s.name || '').toLowerCase() !== nameLC || s.start !== start);
+      if (nd[dayName].length < before) await saveWeekToDb(wk, nd);
+    }
+  };
+
   return {
     handleSaveSession, handleDeleteSession, handleAddClick,
     handleAddFromCatalogue, handleAddFromDesktopCatalogue, handleManualFromPicker,
-    handleAddRecurring, handleFravær, handleDeleteFravær,
+    handleAddRecurring, handleFravær, handleDeleteFravær, handleDeleteThisAndFuture,
   };
 }

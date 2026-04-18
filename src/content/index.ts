@@ -8,3 +8,4 @@ export { FIGHT_TEAM_DESCRIPTION } from './fight-team-description.md';
 export { ARCHITECTURAL_BLUEPRINT } from './architectural-blueprint.md';
 export { PRODUCT_VISION } from './product-vision.md';
 export { CATALOGUE_SPEC } from './catalogue-spec.md';
+export { TARGET_ARCHITECTURE } from './target-architecture.md';

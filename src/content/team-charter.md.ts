@@ -34,6 +34,7 @@ We follow a release-based cadence. Every release goes through four phases:
 
 **Release Planning**
 - Re-read project documentation for context
+- **Consult the target architecture** — Before selecting items, review the Target Architecture document. Ask: *"Does this slice align with the architectural direction? Will we need to rework this later?"* This prevents incremental drift — locally sensible decisions that create global structural problems. (Added after 1.7 retro)
 - **Walk the story map** — Before selecting items, walk the backbone left-to-right (Jeff Patton method). For each Activity, ask: *"What's the next thin slice of value we can deliver here?"* Look at the vertical priority under each User Task. The goal is to find the thinnest horizontal slice that delivers end-to-end value — a *walking skeleton*, not a finished feature.
 - **Name the release slice** — Every release gets a number and an outcome-based name using the format \`1.x — Name\`. The name should describe the outcome, not the features (e.g. "1.3 — Catalogue" means *"coaches can manage training offerings without code changes"*, not *"build CRUD for sources and catalogue items"*).
 - **Define success metrics** — For each release, answer: *"What would we measure to determine this was successful?"* This could be a user behaviour change, a workflow that's now possible, or a pain point that's removed.
@@ -52,6 +53,7 @@ We follow a release-based cadence. Every release goes through four phases:
 - Demo to stakeholders, collect feedback
 - Review the backlog — reprioritise, clean up stale items, check release tags
 - Design system review — verify UI changes adhere to the design system
+- **Target architecture review** — Did we move toward or away from the north star? Did we learn something that changes the target? Update the Target Architecture document if understanding evolved. (Added after 1.7 retro)
 - **Important:** don't code during review — thinking is fine, but build decisions belong in planning
 
 **Release Retrospective**

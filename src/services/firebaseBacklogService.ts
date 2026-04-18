@@ -86,7 +86,7 @@ export function subscribeBacklog(
 
 export async function createItemInDb(item: Partial<BacklogItem>): Promise<void> {
   const full = ensureItemDefaults(item);
-  const { id, ...rest } = full;
+  const { id: _id, ...rest } = full;
   await addDoc(collection(db, PUBLIC_DATA_PATH, 'backlog'), rest);
 }
 

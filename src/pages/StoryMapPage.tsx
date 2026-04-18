@@ -86,8 +86,8 @@ function StoryMapPageInner({ isDark }: Props) {
   useEffect(() => { localStorage.setItem('fw-sm-collapsed-slc', JSON.stringify([...collapsedSlices])); }, [collapsedSlices]);
   useEffect(() => { localStorage.setItem('fw-sm-show-history', String(showHistory)); }, [showHistory]);
 
-  const toggleActivity = (id: string) => setCollapsedActivities(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
-  const toggleSlice = (id: string) => setCollapsedSlices(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const toggleActivity = (id: string) => setCollapsedActivities(prev => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s; });
+  const toggleSlice = (id: string) => setCollapsedSlices(prev => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s; });
 
   const [linkingCell, setLinkingCell] = useState<{ taskId: string; sliceId: string } | null>(null);
   const [linkSearch, setLinkSearch] = useState('');
@@ -168,7 +168,7 @@ function StoryMapPageInner({ isDark }: Props) {
       batchUpdateRelease(ids, release)
         .catch(err => console.warn('[StoryMap] failed to sync releases:', err));
     }
-  }, [loading, slices, backlogData.items.length]);
+  }, [loading, slices, backlogData.items.length, backlogData]);
 
   // Story handlers
   const handleUpdateStory = useCallback((id: string, patch: Partial<BacklogItem>) => {

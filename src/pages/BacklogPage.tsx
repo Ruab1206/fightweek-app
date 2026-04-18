@@ -26,7 +26,7 @@ import { useSearchField } from '../hooks/useSearchField';
 import { useBacklogKeyboard, BACKLOG_SHORTCUTS } from '../hooks/useBacklogKeyboard';
 import { X as XIcon, Search as SearchIcon, ClipboardList, Palette, ScrollText, ChevronLeft, PanelLeftClose, PanelLeft, Users, Database, BookOpen, Settings, Map, Sun, Moon, Swords, Landmark, Layers, Target, ListChecks } from 'lucide-react';
 import MarkdownDocPage from '../components/MarkdownDocPage';
-import { TEAM_CHARTER, RELEASE_NOTES, ENTITY_MODEL, DOMAIN_MODEL, DESIGN_SYSTEM, MASTER_DATA, FIGHT_TEAM_DESCRIPTION, ARCHITECTURAL_BLUEPRINT, PRODUCT_VISION, CATALOGUE_SPEC } from '../content';
+import { TEAM_CHARTER, RELEASE_NOTES, ENTITY_MODEL, DOMAIN_MODEL, DESIGN_SYSTEM, MASTER_DATA, FIGHT_TEAM_DESCRIPTION, ARCHITECTURAL_BLUEPRINT, PRODUCT_VISION, CATALOGUE_SPEC, TARGET_ARCHITECTURE } from '../content';
 import StoryMapPage from './StoryMapPage';
 import PersonaPage from './PersonaPage';
 import { useTheme } from '../hooks/useTheme';
@@ -35,7 +35,7 @@ import { subscribeStoryMap } from '../services/firebaseStoryMapService';
 
 
 type ViewTab = 'board' | 'list' | 'feedback';
-type SidebarPage = 'backlog' | 'story-map' | 'fight-team-description' | 'team-charter' | 'release-notes' | 'personas' | 'architectural-blueprint' | 'design-system' | 'domain-model' | 'entity-model' | 'master-data' | 'product-vision' | 'catalogue-spec';
+type SidebarPage = 'backlog' | 'story-map' | 'fight-team-description' | 'team-charter' | 'release-notes' | 'personas' | 'architectural-blueprint' | 'target-architecture' | 'design-system' | 'domain-model' | 'entity-model' | 'master-data' | 'product-vision' | 'catalogue-spec';
 
 interface Props {
   isAdmin: boolean;
@@ -226,6 +226,7 @@ export default function BacklogPage({ isAdmin, onClose, onShowToast }: Props) {
     { key: 'domain-model', label: 'Domain Model', icon: Layers },
     { key: 'entity-model', label: 'Entity Model', icon: Database },
     { key: 'architectural-blueprint', label: 'Architecture', icon: Landmark },
+    { key: 'target-architecture', label: 'Target Architecture', icon: Target },
     { key: 'catalogue-spec', label: 'Catalogue Spec', icon: ListChecks },
     { key: 'design-system', label: 'Design System', icon: Palette },
     { key: 'master-data', label: 'Master Data', icon: Settings },
@@ -241,6 +242,7 @@ export default function BacklogPage({ isAdmin, onClose, onShowToast }: Props) {
     'team-charter': TEAM_CHARTER,
     'release-notes': RELEASE_NOTES,
     'architectural-blueprint': ARCHITECTURAL_BLUEPRINT,
+    'target-architecture': TARGET_ARCHITECTURE,
     'domain-model': DOMAIN_MODEL,
     'entity-model': ENTITY_MODEL,
     'design-system': DESIGN_SYSTEM,

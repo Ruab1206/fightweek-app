@@ -14,7 +14,6 @@ import type { CatalogueForm } from '../components/CatalogueModal';
 import type { CatalogueClass } from '../types/catalogue';
 
 // ── Danish day helpers ──
-const DAY_LABELS: Record<number, string> = { 1: 'Man', 2: 'Tir', 3: 'Ons', 4: 'Tor', 5: 'Fre', 6: 'Lør', 7: 'Søn' };
 const DAY_FULL: Record<number, string> = { 1: 'Mandag', 2: 'Tirsdag', 3: 'Onsdag', 4: 'Torsdag', 5: 'Fredag', 6: 'Lørdag', 7: 'Søndag' };
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 7];
 
@@ -268,7 +267,6 @@ export default function CataloguePage() {
   // Derive unique filter options from data
   const disciplines = useMemo(() => [...new Set(classes.map((c) => c.discipline))].sort(), [classes]);
   const gyms = useMemo(() => [...new Set(classes.map((c) => c.gym))].sort(), [classes]);
-  const levels = useMemo(() => [...new Set(classes.map((c) => c.level))].sort(), [classes]);
 
   // Filter
   const filtered = useMemo(() => {

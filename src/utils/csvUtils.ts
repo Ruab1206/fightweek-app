@@ -68,7 +68,7 @@ export const parseCSV = (text: string): Record<string, any>[] => {
     return result.slice(1).map(values => {
         const obj: Record<string, any> = {};
         headers.forEach((h, i) => {
-            let val = values[i] || '';
+            const val = values[i] || '';
             obj[h] = val.trim();
         });
         return obj;
@@ -169,7 +169,7 @@ export const generateFeedbackCSV = (feedbackItems: FeedbackItem[]): string => {
         ];
 
         const row = fields.map(field => {
-            let val = String(field || '').replace(/"/g, '""');
+            const val = String(field || '').replace(/"/g, '""');
             return `"${val}"`;
         });
         csvRows.push(row.join(separator));

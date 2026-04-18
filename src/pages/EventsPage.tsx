@@ -1,9 +1,9 @@
 import { useState, useMemo, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
-import { ArrowLeft, MapPin, CalendarDays, Plus, Search, X, SlidersHorizontal, ChevronDown, ExternalLink, Trophy } from 'lucide-react';
+import { MapPin, CalendarDays, Plus, Search, X, SlidersHorizontal, ExternalLink, Trophy } from 'lucide-react';
 import { useEvents } from '../hooks/useEvents';
 import { FIGHTERS } from '../config/constants';
 import { googleMapsUrl } from '../config/constants';
-import type { FightweekEvent, EventSignupStatus } from '../types/event';
+import type { FightweekEvent } from '../types/event';
 import { getCategoryColor, isEventPast, daysUntil, formatDateRange, TypeBadge, SignupSummary, haversineKm, EVENT_TYPE_CONFIG } from '../components/eventHelpers';
 import { EventForm } from '../components/EventForm';
 import { EventDetail } from '../components/EventDetail';
@@ -105,7 +105,7 @@ const EventsPage = forwardRef<EventsPageHandle, EventsPageProps>(function Events
   // Reset filters when search mode closes; scroll to top when it opens
   useEffect(() => {
     if (searchMode) {
-      listRef.current?.scrollTo({ top: 0 });
+      window.scrollTo({ top: 0 });
     } else {
       setFilterOpen(false);
       setFilterDisciplines([]);
@@ -139,7 +139,7 @@ const EventsPage = forwardRef<EventsPageHandle, EventsPageProps>(function Events
       if (ev) setSelectedEvent(ev);
       onClearInitialEvent?.();
     }
-  }, [initialEventId, loading, events]);
+  }, [initialEventId, loading, events, onClearInitialEvent]);
 
   // Find the index of the first not-yet-started event (for auto-scroll).
   // Prefer events whose start date is today or later; fall back to any non-past event.
@@ -153,7 +153,7 @@ const EventsPage = forwardRef<EventsPageHandle, EventsPageProps>(function Events
   // Scroll to next upcoming event
   const scrollToNext = useCallback((behavior: ScrollBehavior = 'instant') => {
     const el = nextEventRef.current;
-    if (el) el.scrollIntoView({ behavior, block: 'start' });
+    if (el) requestAnimationFrame(() => el.scrollIntoView({ behavior, block: 'start' }));
   }, []);
 
   // Expose scrollToNext to parent via ref
@@ -223,10 +223,15 @@ const EventsPage = forwardRef<EventsPageHandle, EventsPageProps>(function Events
     }
   }, [loading, events.length, scrollToNext]);
 
+  // Scroll to top when filters change (prevents iOS scroll-past-content bug)
+  useEffect(() => {
+    requestAnimationFrame(() => window.scrollTo({ top: 0 }));
+  }, [filterDisciplines, filterDistance, filterParticipants, includePast]);
+
   // Scroll back to the event the user just viewed
   useEffect(() => {
     if (returnToId && returnRef.current) {
-      returnRef.current.scrollIntoView({ behavior: 'instant', block: 'start' });
+      requestAnimationFrame(() => returnRef.current?.scrollIntoView({ behavior: 'instant', block: 'start' }));
       setReturnToId(null);
     }
   }, [returnToId]);
