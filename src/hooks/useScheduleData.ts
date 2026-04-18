@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { doc, setDoc, getDoc, onSnapshot, type Unsubscribe, type DocumentData } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 
@@ -26,7 +26,8 @@ interface ScheduleDataParams {
 }
 
 export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked, fighters }: ScheduleDataParams) {
-  const FIGHTERS = fighters || DEFAULT_FIGHTERS;
+  const fightersKey = fighters ? fighters.join(',') : '';
+  const FIGHTERS = useMemo(() => fighters || DEFAULT_FIGHTERS, [fightersKey]);
   const [systemWeek] = useState(getISOWeek());
   const [currentWeek, setCurrentWeek] = useState(getISOWeek());
   const [scheduleData, setScheduleData] = useState<DocumentData>({});
@@ -72,7 +73,7 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
       unsubsTeam.push(unsub);
     });
     return () => { unsubPersonal(); unsubsTeam.forEach(u => u()); };
-  }, [user, activeFighter, currentWeek, accessDenied, isBrowserBlocked]);
+  }, [user, activeFighter, currentWeek, accessDenied, isBrowserBlocked, FIGHTERS]);
 
   const saveToDb = async (newData: DocumentData) => {
     const clean = stripEvents(newData);

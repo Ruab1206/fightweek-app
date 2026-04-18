@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   signInWithPopup, signInWithRedirect, getRedirectResult,
   GoogleAuthProvider, signOut, onAuthStateChanged,
@@ -20,6 +20,9 @@ export function useAuth(externalMapping?: Record<string, { name: string; role: s
   const [isMobile, setIsMobile] = useState(false);
   const [activeFighter, setActiveFighter] = useState('Karl');
   const [isLocked, setIsLocked] = useState(true);
+  const initialAuthDone = useRef(false);
+  const mappingRef = useRef(externalMapping);
+  mappingRef.current = externalMapping;
 
   useEffect(() => {
     setIsMobile(isMobileDevice());
@@ -39,23 +42,26 @@ export function useAuth(externalMapping?: Record<string, { name: string; role: s
       setAuthLoading(false);
       if (u) {
         const email = u.email ? u.email.toLowerCase() : '';
-        const mapping = externalMapping || HARDCODED_MAPPING;
+        const mapping = mappingRef.current || HARDCODED_MAPPING;
         const userProfile = mapping[email];
         if (userProfile) {
           setUser(u);
           setAccessDenied(false);
-          if (userProfile.role === 'coach' || userProfile.role === 'admin') {
-            setIsLocked(false);
-            setActiveFighter('Karl');
-          } else {
-            setActiveFighter(userProfile.name);
-            setIsLocked(true);
+          if (!initialAuthDone.current) {
+            initialAuthDone.current = true;
+            if (userProfile.role === 'coach' || userProfile.role === 'admin') {
+              setIsLocked(false);
+              setActiveFighter('Karl');
+            } else {
+              setActiveFighter(userProfile.name);
+              setIsLocked(true);
+            }
           }
         } else { setAccessDenied(true); setUser(u); }
-      } else { setUser(null); }
+      } else { setUser(null); initialAuthDone.current = false; }
     });
     return () => unsubAuth();
-  }, [externalMapping]);
+  }, []);
 
   const triggerLoginPopup = async () => {
     setLoginError(null);
