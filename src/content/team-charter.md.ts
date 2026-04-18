@@ -288,18 +288,35 @@ The AI Agent has direct read/write access to the Firestore production database v
 
 ## Deployment
 
-The FightWeek app is deployed via **Vercel**, connected to the GitHub repo \`Ruab1206/fightweek-app\`. Every push to \`main\` triggers an automatic build and deploy.
+The FightWeek app is deployed via **Vercel**, connected to the GitHub repo \`Ruab1206/fightweek-app\`. Vercel auto-deploys every branch push.
 
-### How to deploy
+| Environment | Branch | URL | Trigger |
+|-------------|--------|-----|---------|
+| **Test** | \`feature/bedre-design\` | \`fightweek-app-git-feature-bedre-design-*.vercel.app\` | Push to test branch |
+| **Production** | \`main\` | \`fightweek-app.vercel.app\` | Push to main (after test verification) |
+
+### Workflow: test → verify → production
+
+**1. Work on the \`test\` branch (day-to-day development)**
 
 \`\`\`bash
 cd fightweek-app
+git checkout test            # local branch tracking origin/feature/bedre-design
 git add -A
-git commit -m "Release X.Y — description"
-git push origin main
+git commit -m "Description of changes"
+git push                     # pushes to test environment
 \`\`\`
 
-Vercel picks up the push, runs \`vite build\`, and deploys the result. No manual file uploads needed.
+**2. Verify on the test URL** — open the Vercel preview link and confirm everything works.
+
+**3. Promote to production (after PO go)**
+
+\`\`\`bash
+git checkout main
+git merge test
+git push origin main         # deploys to production
+git checkout test            # switch back to dev branch
+\`\`\`
 
 ### Prerequisites
 
@@ -307,13 +324,14 @@ Vercel picks up the push, runs \`vite build\`, and deploys the result. No manual
 |-------------|----------|
 | **Git credentials** | The Windows Credential Manager must have a token for a GitHub account with push access to the repo |
 | **Collaborator access** | The \`seniorelduderino\` (DSB) account has been added as a collaborator on the personal \`Ruab1206/fightweek-app\` repo |
-| **Branch** | We push to \`main\` directly (no PRs — two-person team) |
+| **Branches** | \`test\` (local) → tracks \`origin/feature/bedre-design\` (test). \`main\` → tracks \`origin/main\` (production). |
 
 ### Troubleshooting
 
 - **403 Permission denied on push** — The cached Git credential doesn't have write access. Check GitHub → Settings → Collaborators.
 - **Build fails on Vercel** — Check the Vercel dashboard for build logs. Common issue: missing dependencies in \`package.json\`.
 - **vercel.json** — Removed in 1.8; Vercel auto-detects Vite projects. SPA rewrites are handled by the framework preset.
+- **Test site not updating** — Make sure you're on the \`test\` branch (\`git branch\`). Commits on \`main\` only deploy to production.
 
 ### Deployment helper script
 

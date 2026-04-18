@@ -10,7 +10,8 @@ import {
   Search, Menu, ArrowLeft,
 } from 'lucide-react';
 
-import { DAYS, USER_MAPPING, FIGHTERS } from './config/constants';
+import { DAYS } from './config/constants';
+import { useRolesConfig } from './hooks/useRolesConfig';
 import { getDateForWeekDay, getWeekDateMap, getTodayDayName, getFullWeekDateMap, getDaysInRange, getISOWeekForDate } from './utils/dateUtils';
 
 import { useAuth } from './hooks/useAuth';
@@ -45,20 +46,21 @@ import type { AddType } from './components/AddScreen';
 
 const App = () => {
   // --- Hooks ---
+  const { userMapping: USER_MAPPING, fighters: FIGHTERS } = useRolesConfig();
   const {
     user, authLoading, accessDenied, loginError,
     isBrowserBlocked,
     activeFighter, setActiveFighter,
     isLocked,
     triggerLoginPopup, triggerLoginRedirect, handleLogout,
-  } = useAuth();
+  } = useAuth(USER_MAPPING);
 
   const {
     systemWeek, currentWeek, setCurrentWeek,
     scheduleData, setScheduleData,
     teamData,
     saveToDb,
-  } = useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked });
+  } = useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked, fighters: FIGHTERS });
 
   const { toast, showToast, hideToast } = useToast();
   const { isDark, toggleTheme } = useTheme();
@@ -248,7 +250,7 @@ const App = () => {
               </svg>
             </button>
             <div className="relative">
-              <button onClick={() => setMenuOpen(!menuOpen)} className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${menuOpen ? 'bg-blue-600 text-white' : (isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-surface-hover text-ds-text hover:bg-surface-raised')}`}>
+              <button onClick={() => setMenuOpen(!menuOpen)} className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-colors active:scale-95 ${menuOpen ? 'bg-blue-600 text-white' : (isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-surface-hover text-ds-text hover:bg-surface-raised')}`}>
                 {activeFighter.slice(0, 1)}
               </button>
               {menuOpen && (
@@ -270,7 +272,7 @@ const App = () => {
                       <div className={`px-4 py-2 border-b ${isDark ? 'border-slate-700' : 'border-surface-border'}`}>
                         <p className={`text-[10px] font-medium uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Vis som fighter</p>
                         <select value={activeFighter} onChange={(e) => { setActiveFighter(e.target.value); setMenuOpen(false); }} className={`w-full px-2 py-1.5 rounded-lg border text-sm font-bold ${isDark ? 'bg-slate-900 text-white border-slate-600' : 'bg-surface-subtle text-ds-text border-surface-border'}`}>
-                          {FIGHTERS.map(f => <option key={f} value={f}>{f}</option>)}
+                          {FIGHTERS.map(f => <option key={f} value={f} className="bg-white text-black dark:bg-slate-800 dark:text-white">{f}</option>)}
                         </select>
                       </div>
                     )}

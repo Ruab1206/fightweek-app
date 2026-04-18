@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   signInWithPopup, signInWithRedirect, getRedirectResult,
   GoogleAuthProvider, signOut, onAuthStateChanged,
@@ -7,10 +7,11 @@ import {
 } from 'firebase/auth';
 
 import { auth } from '../config/firebase';
-import { USER_MAPPING } from '../config/constants';
+import { USER_MAPPING as HARDCODED_MAPPING } from '../config/constants';
 import { checkInAppBrowser, isMobileDevice } from '../utils/deviceUtils';
 
-export function useAuth() {
+export function useAuth(externalMapping?: Record<string, { name: string; role: string }>) {
+  const USER_MAPPING = externalMapping || HARDCODED_MAPPING;
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -19,6 +20,9 @@ export function useAuth() {
   const [isMobile, setIsMobile] = useState(false);
   const [activeFighter, setActiveFighter] = useState('Karl');
   const [isLocked, setIsLocked] = useState(true);
+  const initialAuthDone = useRef(false);
+  const mappingRef = useRef(externalMapping);
+  mappingRef.current = externalMapping;
 
   useEffect(() => {
     setIsMobile(isMobileDevice());
@@ -38,19 +42,23 @@ export function useAuth() {
       setAuthLoading(false);
       if (u) {
         const email = u.email ? u.email.toLowerCase() : '';
-        const userProfile = USER_MAPPING[email];
+        const mapping = mappingRef.current || HARDCODED_MAPPING;
+        const userProfile = mapping[email];
         if (userProfile) {
           setUser(u);
           setAccessDenied(false);
-          if (userProfile.role === 'coach' || userProfile.role === 'admin') {
-            setIsLocked(false);
-            setActiveFighter('Karl');
-          } else {
-            setActiveFighter(userProfile.name);
-            setIsLocked(true);
+          if (!initialAuthDone.current) {
+            initialAuthDone.current = true;
+            if (userProfile.role === 'coach' || userProfile.role === 'admin') {
+              setIsLocked(false);
+              setActiveFighter('Karl');
+            } else {
+              setActiveFighter(userProfile.name);
+              setIsLocked(true);
+            }
           }
         } else { setAccessDenied(true); setUser(u); }
-      } else { setUser(null); }
+      } else { setUser(null); initialAuthDone.current = false; }
     });
     return () => unsubAuth();
   }, []);

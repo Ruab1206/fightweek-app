@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { doc, setDoc, getDoc, onSnapshot, type Unsubscribe, type DocumentData } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 
 import { db } from '../config/firebase';
-import { FIGHTERS, ROOT_COLLECTION } from '../config/constants';
+import { FIGHTERS as DEFAULT_FIGHTERS, ROOT_COLLECTION } from '../config/constants';
 import { getISOWeek } from '../utils/dateUtils';
 
 /** Strip virtual event sessions before persisting (events are merged at render time by useEventMerge). */
@@ -22,9 +22,12 @@ interface ScheduleDataParams {
   activeFighter: string;
   accessDenied: boolean;
   isBrowserBlocked: boolean;
+  fighters?: string[];
 }
 
-export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked }: ScheduleDataParams) {
+export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked, fighters }: ScheduleDataParams) {
+  const fightersKey = fighters ? fighters.join(',') : '';
+  const FIGHTERS = useMemo(() => fighters || DEFAULT_FIGHTERS, [fightersKey]);
   const [systemWeek] = useState(getISOWeek());
   const [currentWeek, setCurrentWeek] = useState(getISOWeek());
   const [scheduleData, setScheduleData] = useState<DocumentData>({});
@@ -60,6 +63,13 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
       } else { setScheduleData({}); setLastUpdated('Aldrig'); }
     });
 
+    // Reset team data to only current fighters (prune removed members)
+    setTeamData(prev => {
+      const pruned: Record<string, DocumentData> = {};
+      FIGHTERS.forEach(f => { if (prev[f]) pruned[f] = prev[f]; });
+      return pruned;
+    });
+
     const unsubsTeam: Unsubscribe[] = [];
     FIGHTERS.forEach(fighter => {
       const fRef = doc(db, ROOT_COLLECTION, fighter, 'weeks', docId);
@@ -70,7 +80,7 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
       unsubsTeam.push(unsub);
     });
     return () => { unsubPersonal(); unsubsTeam.forEach(u => u()); };
-  }, [user, activeFighter, currentWeek, accessDenied, isBrowserBlocked]);
+  }, [user, activeFighter, currentWeek, accessDenied, isBrowserBlocked, FIGHTERS]);
 
   const saveToDb = async (newData: DocumentData) => {
     const clean = stripEvents(newData);

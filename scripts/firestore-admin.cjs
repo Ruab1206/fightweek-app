@@ -330,6 +330,8 @@ async function query(parentPath, collectionId, { where, orderBy, limit } = {}) {
 
 const PATHS = {
   publicData: 'artifacts/production/public/data',
+  config: 'artifacts/production/public/data/config',
+  roles: 'artifacts/production/public/data/config/roles',
   storyMap: 'artifacts/production/public/data/story-map/main',
   backlog: 'artifacts/production/public/data/backlog',
   feedback: 'artifacts/production/public/data/feedback',

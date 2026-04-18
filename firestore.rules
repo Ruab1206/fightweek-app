@@ -2,21 +2,25 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ─── Role resolution ───
+    // ─── Role resolution (reads from Firestore config doc) ───
     //
-    // TECH DEBT: Roles are hardcoded by email. Plan is to move to a
-    // Firestore-backed role document (artifacts/production/public/config/roles)
-    // so roles can be assigned flexibly through the app.
-    // See Domain Model → Actors & Roles for the target state.
+    // Roles are stored in: artifacts/production/public/data/config/roles
+    // Document structure: { admins: [email], coaches: [email], members: { email: fighterName } }
+    // If the config doc is missing, all role checks deny (safe default).
     //
+
+    function getRolesDoc() {
+      return get(/databases/$(database)/documents/artifacts/production/public/data/config/roles).data;
+    }
+
     function isAdmin() {
       return request.auth != null
-          && request.auth.token.email == 'rune.abrahamsson@gmail.com';
+          && request.auth.token.email in getRolesDoc().admins;
     }
 
     function isCoach() {
       return request.auth != null
-          && request.auth.token.email == 'frodihansen@hotmail.com';
+          && request.auth.token.email in getRolesDoc().coaches;
     }
 
     function isAdminOrCoach() {
@@ -25,30 +29,11 @@ service cloud.firestore {
 
     function isTeamMember() {
       return request.auth != null
-          && request.auth.token.email in [
-               'carolinemollerh@gmail.com',
-               'sankarem00@gmail.com',
-               'eneasopa354@gmail.com',
-               'anton.emil.bang@gmail.com',
-               'duraceljones@gmail.com',
-               'karl.lindsgren@gmail.com',
-               'frode.lindsgren@gmail.com',
-               'frodihansen@hotmail.com',
-               'rune.abrahamsson@gmail.com'
-             ];
+          && request.auth.token.email in getRolesDoc().members;
     }
 
     function fighterNameForEmail(email) {
-      return email == 'carolinemollerh@gmail.com'  ? 'Caroline' :
-             email == 'sankarem00@gmail.com'        ? 'San' :
-             email == 'eneasopa354@gmail.com'        ? 'Enea' :
-             email == 'anton.emil.bang@gmail.com'     ? 'Anton' :
-             email == 'duraceljones@gmail.com'        ? 'Jonas' :
-             email == 'karl.lindsgren@gmail.com'      ? 'Karl' :
-             email == 'frode.lindsgren@gmail.com'     ? 'Frode' :
-             email == 'frodihansen@hotmail.com'       ? 'Frodi' :
-             email == 'rune.abrahamsson@gmail.com'    ? 'Rune' :
-             '';
+      return getRolesDoc().members[email];
     }
 
     function isAuthenticated() {
@@ -90,7 +75,17 @@ service cloud.firestore {
       allow update: if isAdminOrCoach() || isTeamMember();
     }
 
-    // ─── Shared team data (backlog, feedback, story-map, config) ───
+    // ─── Config documents (roles, settings) ───
+    // Path: artifacts/production/public/data/config/{docId}
+    //
+    // Readable by all authenticated users (app needs role lookups).
+    // Only admin can write (manage roles, settings).
+    match /artifacts/production/public/data/config/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ─── Shared team data (backlog, feedback, story-map) ───
     // Path: artifacts/production/public/data/{collection}/{docId}
     //
     // Super-admin only for now (both read and write).
@@ -104,9 +99,8 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // ─── Future: config document for roles ───
-    // Path: artifacts/production/public/config/{docId}
-    // Prepared for when we move role mapping to Firestore
+    // ─── Legacy config path (kept for compatibility) ───
+    // The active config is at public/data/config/{docId} (above).
     match /artifacts/production/public/config/{docId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
