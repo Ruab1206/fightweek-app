@@ -27,12 +27,14 @@ export interface SessionDetailSheetProps {
   onClose: () => void;
 }
 
-const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData, systemWeek, saveWeekToDb, showToast, onRecurrenceChange, onClose }: SessionDetailSheetProps) => {
+const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData, systemWeek: _systemWeek, saveWeekToDb, showToast, onRecurrenceChange, onClose }: SessionDetailSheetProps) => {
   const [showMore, setShowMore] = useState(false);
   const [showDeleteOptions, setShowDeleteOptions] = useState(false);
   const [interval, setRecurrenceInterval] = useState(session.isRecurring ? 1 : 0);
   const [endType, setEndType] = useState<'never' | 'date'>('never');
   const [endDate, setEndDate] = useState('');
+  const [isCancelled, setIsCancelled] = useState(session.status === 'cancelled');
+  const [cancelReason, setCancelReason] = useState(session.cancellationReason || '');
   const cat = CATEGORIES.find(c => c.label === disciplineToCategory(cls.discipline)) || CATEGORIES[6];
   const { gyms } = useGyms();
   const gymEntity = gyms.find(g => g.name === cls.gym);
@@ -42,6 +44,29 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
 
   // Compute the date for this session's week+day
   const sessionDate = useMemo(() => getDateForWeekDay(weekNum, day) || new Date(), [weekNum, day]);
+
+  const handleToggleCancel = () => {
+    const nowCancelled = !isCancelled;
+    setIsCancelled(nowCancelled);
+    if (nowCancelled) setCancelReason('Aflyst');
+    else setCancelReason('');
+    // Persist immediately
+    const weekData = multiWeekData[weekNum];
+    if (!weekData) return;
+    const newData = structuredClone(weekData);
+    if (!newData[day]) return;
+    const idx = newData[day].findIndex((s: any) => s.id === session.id);
+    if (idx === -1) return;
+    newData[day][idx] = {
+      ...newData[day][idx],
+      status: nowCancelled ? 'cancelled' : 'active',
+      cancellationReason: nowCancelled ? 'Aflyst' : '',
+      cancellationTime: nowCancelled ? new Date().toISOString() : null,
+    };
+    saveWeekToDb(weekNum, newData);
+    showToast(nowCancelled ? `${session.name} aflyst` : `${session.name} genaktiveret`, 'success');
+    onClose();
+  };
 
   const handleSave = () => {
     const sessionPayload = {
@@ -64,8 +89,6 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
     const weekData = multiWeekData[weekNum];
     if (!weekData) return;
     const newData = structuredClone(weekData);
-    // Strip virtual event sessions before persisting
-    for (const k of Object.keys(newData)) { if (Array.isArray(newData[k])) newData[k] = newData[k].filter((s: any) => s.type !== 'event'); }
     if (newData[day]) {
       newData[day] = newData[day].filter((s: any) => s.id !== session.id);
       saveWeekToDb(weekNum, newData);
@@ -81,8 +104,6 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
         const weekData = multiWeekData[wk];
         if (!weekData?.[day]) continue;
         const newData = structuredClone(weekData);
-        // Strip virtual event sessions before persisting
-        for (const k of Object.keys(newData)) { if (Array.isArray(newData[k])) newData[k] = newData[k].filter((s: any) => s.type !== 'event'); }
         const before = newData[day].length;
         newData[day] = newData[day].filter((s: any) =>
           (s.name || '').toLowerCase() !== nameLC || s.start !== startTime
@@ -185,6 +206,33 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
               {sessionDate.toLocaleDateString('da-DK', { weekday: 'long', day: 'numeric', month: 'long' })}
             </span>
           </div>
+        </div>
+
+        {/* Cancel / Aflys toggle */}
+        <div className={`px-5 py-3 border-t ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
+          <div className="flex items-center gap-3">
+            <button onClick={handleToggleCancel} className={`flex items-center justify-center w-5 h-5 rounded border-2 transition-colors ${isCancelled ? 'bg-red-600 border-red-600' : (isDark ? 'bg-slate-950 border-slate-600' : 'bg-surface-subtle border-surface-border')}`}>
+              {isCancelled && <span className="text-white text-xs font-bold">✓</span>}
+            </button>
+            <label className={`text-xs font-bold uppercase cursor-pointer ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`} onClick={handleToggleCancel}>Aflys</label>
+          </div>
+          {isCancelled && (
+            <div className="mt-3">
+              <label className={labelCls}>Årsag til aflysning</label>
+              <input type="text" className={`w-full px-3 py-2 rounded-lg border text-sm border-red-500/50 ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-surface-border text-ds-text'}`}
+                value={cancelReason}
+                onChange={e => {
+                  setCancelReason(e.target.value);
+                  // Persist reason change
+                  const weekData = multiWeekData[weekNum];
+                  if (!weekData) return;
+                  const nd = structuredClone(weekData);
+                  const idx = nd[day]?.findIndex((s: any) => s.id === session.id);
+                  if (idx >= 0) { nd[day][idx].cancellationReason = e.target.value; saveWeekToDb(weekNum, nd); }
+                }}
+                placeholder="Sygdom, Skade, Andet..." />
+            </div>
+          )}
         </div>
 
         {/* Recurrence */}

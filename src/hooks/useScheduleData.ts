@@ -6,6 +6,17 @@ import { db } from '../config/firebase';
 import { FIGHTERS, ROOT_COLLECTION } from '../config/constants';
 import { getISOWeek } from '../utils/dateUtils';
 
+/** Strip virtual event sessions before persisting (events are merged at render time by useEventMerge). */
+export function stripEvents(weekData: DocumentData): DocumentData {
+  const data = structuredClone(weekData);
+  for (const key of Object.keys(data)) {
+    if (Array.isArray(data[key])) {
+      data[key] = data[key].filter((s: any) => s.type !== 'event');
+    }
+  }
+  return data;
+}
+
 interface ScheduleDataParams {
   user: User | null;
   activeFighter: string;
@@ -62,9 +73,10 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
   }, [user, activeFighter, currentWeek, accessDenied, isBrowserBlocked]);
 
   const saveToDb = async (newData: DocumentData) => {
+    const clean = stripEvents(newData);
     const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'weeks', `week_${currentWeek}`);
-    newData.lastUpdated = new Date().toISOString();
-    await setDoc(docRef, newData);
+    clean.lastUpdated = new Date().toISOString();
+    await setDoc(docRef, clean);
   };
 
   return {
@@ -140,9 +152,10 @@ export function useMultiWeekData(
   }, [user, activeFighter, weekNumbers.join(','), accessDenied, isBrowserBlocked]);
 
   const saveWeekToDb = useCallback(async (weekNum: number, newData: DocumentData) => {
+    const clean = stripEvents(newData);
     const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'weeks', `week_${weekNum}`);
-    newData.lastUpdated = new Date().toISOString();
-    await setDoc(docRef, newData);
+    clean.lastUpdated = new Date().toISOString();
+    await setDoc(docRef, clean);
   }, [activeFighter]);
 
   return { multiWeekData, saveWeekToDb };

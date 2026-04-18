@@ -15,7 +15,7 @@ import { getDateForWeekDay, getWeekDateMap, getTodayDayName, getFullWeekDateMap,
 
 import { useAuth } from './hooks/useAuth';
 import { useScheduleData, useMultiWeekData, useMultiWeekTeamData } from './hooks/useScheduleData';
-import { useSessionHandlers, cloneWithoutEvents } from './hooks/useSessionHandlers';
+import { useSessionHandlers } from './hooks/useSessionHandlers';
 import { useToast } from './hooks/useToast';
 import { useTheme } from './hooks/useTheme';
 import { useCatalogue } from './hooks/useCatalogue';
@@ -33,7 +33,6 @@ import type { CatalogueClass } from './types/catalogue';
 import ConfirmModal from './components/ConfirmModal';
 import FeedbackModal from './components/FeedbackModal';
 import MonthPicker from './components/MonthPicker';
-import NavButton from './components/NavButton';
 import TeamSchedule from './components/TeamSchedule';
 import SessionDetailSheet from './components/SessionDetailSheet';
 import MobileScrollView from './components/MobileScrollView';
@@ -48,7 +47,7 @@ const App = () => {
   // --- Hooks ---
   const {
     user, authLoading, accessDenied, loginError,
-    isBrowserBlocked, isMobile,
+    isBrowserBlocked,
     activeFighter, setActiveFighter,
     isLocked,
     triggerLoginPopup, triggerLoginRedirect, handleLogout,
@@ -149,7 +148,7 @@ const App = () => {
   const {
     handleSaveSession, handleDeleteSession, handleAddClick,
     handleAddFromCatalogue, handleAddFromDesktopCatalogue, handleManualFromPicker,
-    handleAddRecurring, handleFravær, handleDeleteFravær,
+    handleAddRecurring, handleFravær, handleDeleteFravær, handleDeleteThisAndFuture,
   } = useSessionHandlers({
     scheduleData, setScheduleData, multiWeekData, currentWeek, systemWeek,
     editingDay, editingWeek, expandedDay, setExpandedDay,
@@ -158,17 +157,21 @@ const App = () => {
   });
 
   // Scroll orchestration (scroll-to-today, month tracking, initial alignment)
-  const { headerMonth, setHeaderMonth, initialScrollDone, scrollToToday, scrollToDate, activeDayRef } = useScrollController({
+  const { headerMonth, initialScrollDone, scrollToToday, scrollToDate, activeDayRef } = useScrollController({
     todayRef, mobileTodayRef, view, user, currentWeek, setCurrentWeek,
     multiWeekData, scrollDays, weeksBack, setWeeksBack, weeksAhead, setWeeksAhead, searchMode,
   });
-  // Prevent background scroll when search overlay is open
+  // Prevent background scroll when search overlay is open (calendar only — events page handles its own filtering inline)
   useEffect(() => {
-    if (searchMode) {
+    if (searchMode && view !== 'events') {
       document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = ''; };
+      return () => {
+        document.body.style.overflow = '';
+        // Force iOS WebKit to recalculate scrollable area after overflow restore
+        requestAnimationFrame(() => window.scrollTo(window.scrollX, window.scrollY));
+      };
     }
-  }, [searchMode]);
+  }, [searchMode, view]);
 
   // --- Guard screens ---
   if (isBrowserBlocked) return <BrowserBlockScreen />;
@@ -186,7 +189,7 @@ const App = () => {
 
   // --- Render ---
   return (
-    <div className={`min-h-screen font-sans selection:bg-blue-500/30 ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-surface-subtle text-ds-text'}`}>
+    <div className={`min-h-dvh font-sans selection:bg-blue-500/30 ${isDark ? 'bg-slate-950 text-slate-200' : 'bg-surface-subtle text-ds-text'}`}>
       {/* HEADER */}
       <div className={`p-4 shadow-lg border-b sticky top-0 z-20 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border shadow-sm'}`}>
         <div className="flex justify-between items-center px-2">
@@ -355,7 +358,7 @@ const App = () => {
       </div>
 
       {/* MAIN CONTENT — responsive width */}
-      <div className="mx-auto relative pt-4 min-h-[85vh]">
+      <div className="mx-auto relative pt-4 min-h-[85dvh]">
         {/* Desktop: Week navigation */}
         {view === 'personal' && (
           <div className="hidden md:block mx-4 mb-4 space-y-3">
@@ -576,18 +579,7 @@ const App = () => {
           setModalOpen(false);
           setEditingWeek(null);
           showToast(`${name} fjernet`, 'success');
-          const nameLC = name.toLowerCase();
-          (async () => {
-            for (const wk of Object.keys(multiWeekData).map(Number).sort((a, b) => a - b)) {
-              if (wk < fromWeek) continue;
-              const wd = multiWeekData[wk];
-              if (!wd?.[dayName]) continue;
-              const nd = cloneWithoutEvents(wd);
-              const before = nd[dayName].length;
-              nd[dayName] = nd[dayName].filter((s: any) => s.isRestDay || (s.name || '').toLowerCase() !== nameLC || s.start !== start);
-              if (nd[dayName].length < before) await saveWeekToDb(wk, nd);
-            }
-          })();
+          handleDeleteThisAndFuture(dayName, name, start, fromWeek);
         }}
         onRecurrenceSave={(session, dayName, startDate, recurrence) => {
           handleAddRecurring(session, dayName, startDate, recurrence);
