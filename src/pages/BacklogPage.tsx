@@ -287,7 +287,7 @@ export default function BacklogPage({ isAdmin, onClose, onShowToast }: Props) {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Desktop sidebar */}
         <aside className={`hidden md:flex flex-col border-r flex-shrink-0 transition-all duration-200 ${sidebarCollapsed ? 'w-14' : 'w-56'} ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-surface-raised border-surface-border'}`}>
-          <nav className={`flex-1 py-4 space-y-1 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
+          <nav className={`flex-1 py-4 space-y-1 overflow-y-auto ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
             {sidebarItems.map((item) => (
               <button
                 key={item.key}

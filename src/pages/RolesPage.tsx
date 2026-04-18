@@ -22,7 +22,7 @@ const ROLE_COLORS: Record<UserRole, string> = {
 };
 
 export default function RolesPage({ isDark }: { isDark: boolean }) {
-  const { config, loading, userMapping, addMember, removeMember, updateRole } = useRolesConfig();
+  const { config, loading, userMapping, addMember, removeMember, updateRole, removedMembers } = useRolesConfig();
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('fighter');
@@ -74,7 +74,15 @@ export default function RolesPage({ isDark }: { isDark: boolean }) {
             type="email"
             placeholder="Email"
             value={newEmail}
-            onChange={e => setNewEmail(e.target.value)}
+            onChange={e => {
+              setNewEmail(e.target.value);
+              const hint = removedMembers[e.target.value.trim().toLowerCase()];
+              if (hint && !newName) setNewName(hint);
+            }}
+            onBlur={() => {
+              const hint = removedMembers[newEmail.trim().toLowerCase()];
+              if (hint && !newName) setNewName(hint);
+            }}
             className={`flex-1 px-3 py-2 rounded-lg border text-sm ${inputBg}`}
           />
           <input

@@ -19,6 +19,7 @@ export interface RolesConfig {
   admins: string[];
   coaches: string[];
   members: Record<string, string>; // email → fighter name
+  removed?: Record<string, string>; // email → fighter name (preserved on delete)
 }
 
 type UserRole = 'fighter' | 'coach' | 'admin';
@@ -65,10 +66,16 @@ export function useRolesConfig() {
 
   const addMember = useCallback(async (email: string, name: string, role: UserRole) => {
     if (!config) return;
+    const lower = email.toLowerCase();
     const updated = { ...config };
-    updated.members = { ...updated.members, [email.toLowerCase()]: name };
-    if (role === 'admin') updated.admins = [...new Set([...updated.admins, email.toLowerCase()])];
-    else if (role === 'coach') updated.coaches = [...new Set([...updated.coaches, email.toLowerCase()])];
+    updated.members = { ...updated.members, [lower]: name };
+    if (role === 'admin') updated.admins = [...new Set([...updated.admins, lower])];
+    else if (role === 'coach') updated.coaches = [...new Set([...updated.coaches, lower])];
+    // Clean up from removed list if re-adding
+    if (updated.removed?.[lower]) {
+      const { [lower]: _, ...restRemoved } = updated.removed;
+      updated.removed = restRemoved;
+    }
     await setDoc(doc(db, CONFIG_DOC_PATH), updated);
   }, [config]);
 
@@ -76,10 +83,13 @@ export function useRolesConfig() {
     if (!config) return;
     const lower = email.toLowerCase();
     const updated = { ...config };
+    const name = updated.members[lower];
     const { [lower]: _, ...rest } = updated.members;
     updated.members = rest;
     updated.admins = updated.admins.filter(e => e !== lower);
     updated.coaches = updated.coaches.filter(e => e !== lower);
+    // Preserve email→name mapping so re-adding finds the old name
+    if (name) updated.removed = { ...(updated.removed || {}), [lower]: name };
     await setDoc(doc(db, CONFIG_DOC_PATH), updated);
   }, [config]);
 
@@ -105,5 +115,6 @@ export function useRolesConfig() {
     addMember,
     removeMember,
     updateRole,
+    removedMembers: config?.removed || {},
   };
 }
