@@ -22,13 +22,14 @@ export const USER_MAPPING: Record<string, { name: string; role: 'fighter' | 'coa
   'eneasopa354@gmail.com': { name: 'Enea', role: 'fighter' },
   'anton.emil.bang@gmail.com': { name: 'Anton', role: 'fighter' },
   'duraceljones@gmail.com': { name: 'Jonas', role: 'fighter' },
+  'lindsgren@gmail.com': { name: 'Chris', role: 'fighter' },
   'karl.lindsgren@gmail.com': { name: 'Karl', role: 'fighter' },
   'frode.lindsgren@gmail.com': { name: 'Frode', role: 'fighter' },
   'frodihansen@hotmail.com': { name: 'Frodi', role: 'coach' }, 
   'rune.abrahamsson@gmail.com': { name: 'Rune', role: 'admin' }
 };
 
-export const FIGHTERS = ['Caroline', 'San', 'Enea', 'Anton', 'Jonas', 'Karl', 'Frode'];
+export const FIGHTERS = ['Caroline', 'Chris', 'San', 'Enea', 'Anton', 'Jonas', 'Karl', 'Frode'];
 
 // Shared day-of-week mapping (ISO: 1=Monday … 7=Sunday)
 export const DAY_NAMES: Record<number, string> = { 1: 'Mandag', 2: 'Tirsdag', 3: 'Onsdag', 4: 'Torsdag', 5: 'Fredag', 6: 'Lørdag', 7: 'Søndag' };
