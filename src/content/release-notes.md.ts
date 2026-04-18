@@ -5,6 +5,109 @@ export const RELEASE_NOTES = `# Release Notes
 > Releases follow the \`1.x — Outcome Name\` convention. See the Team Charter for how we plan releases using the story map.
 
 ---
+## 1.9 — Roles & Security
+*April 2026*
+
+**Outcome:** Fighters and coaches can be added or removed without changing code or redeploying security rules.
+
+### What changed
+
+**Firestore role configuration (#1155)**
+- Team members, coaches, and admins are now managed via a Firestore config document at \\\`config/roles\\\`
+- Seeding script (\\\`scripts/seed-roles.cjs\\\`) writes the initial config from the existing hardcoded list
+- \\\`useRolesConfig\\\` hook subscribes to config doc in real time — \\\`USER_MAPPING\\\` and \\\`FIGHTERS\\\` are derived dynamically
+- Hardcoded \\\`USER_MAPPING\\\` in \\\`constants.ts\\\` retained as fallback only
+
+**Dynamic security rules (#1156)**
+- \\\`firestore.rules\\\` rewritten to read from the config document instead of hardcoded emails
+- \\\`isAdmin()\\\`, \\\`isCoach()\\\`, \\\`isTeamMember()\\\` all resolve via \\\`getRolesDoc()\\\`
+- Rules deployed via \\\`scripts/deploy-rules.cjs\\\` (REST API, no Firebase CLI required)
+
+**Admin role management UI (#1157)**
+- New "Holdroller" page in the admin area (BacklogPage sidebar)
+- Add, remove, and change role for each team member
+- Safe delete: removed members are stored in a \\\`removed\\\` map (name preserved for re-add)
+- Safe re-add: name auto-fills from removed list and is locked to prevent duplication
+- Inline rename: pencil icon on hover, renames across all Firestore schedule data (\\\`users/{name}/weeks/*\\\`) via batch write
+
+### Bug fixes
+- Fixed PersonaPage crash — missing import in BacklogPage caused black screen on navigation
+- Fixed \\\`activeFighter\\\` resetting to first fighter whenever roles config loaded (React effect re-subscription loop). Used \\\`useRef\\\` to only set fighter on first auth, \\\`mappingRef\\\` to stabilise subscription dependencies.
+- Fixed removed fighters still showing in team view — \\\`teamData\\\` now prunes stale entries when FIGHTERS list changes
+- Fixed RolesPage missing scroll (\\\`overflow-y-auto h-full\\\`)
+- Fixed sidebar navigation overflow (\\\`overflow-y-auto\\\`)
+- Fixed persona "goes black" on tap on iOS — added \\\`-webkit-tap-highlight-color: transparent\\\` globally
+- Fixed persona select option colours (explicit \\\`bg-white text-black\\\` on \\\`<option>\\\` elements)
+- Added Chris (lindsgren@gmail.com) to hardcoded fallback for immediate access
+
+### Carry-forward
+- **#1128** — Open class details (tap a catalogue class to see full info)
+- **#1129** — Add class from catalog (inline add flow from schedule)
+- **#1136** — Mark recurring catalogue classes in catalogue view
+- **#1137** — Search mode (header-driven, distinct from browse)
+- **#1138** — Change program for recurring training sessions
+- **#1145** — Header month picker
+
+### Retro learnings
+- **Keep:** Test-first deployment workflow — all code goes to \\\`test\\\` branch (Vercel preview) first, only merges to \\\`main\\\` after PO verification on device. Caught 5 rounds of bugs before production.
+- **Keep:** Safe delete pattern — storing removed members in a map lets re-add recover the original name, preventing data orphaning.
+- **Lesson:** React effects that depend on object references (like \\\`externalMapping\\\`) re-fire on every render if the object is reconstructed. Use \\\`useRef\\\` + stable dependency arrays to avoid infinite re-subscription loops.
+- **Lesson:** When a page "goes black", check for missing imports first. React error boundaries don't catch missing-module errors — the whole component tree crashes silently.
+- **Lesson:** Future improvement — use email as data key instead of fighter name. Name-based paths (\\\`users/{name}/weeks/*\\\`) make rename a batch migration. Email-based paths would be immutable.
+
+---
+## 1.8 — Robustness
+*April 2026*
+
+**Outcome:** The codebase is production-grade — centralized save logic, automated tests, linting, and iOS stability fixes.
+
+### What changed
+
+**Centralized save wrapper**
+- \\\`cloneWithoutEvents()\\\` applied to all 8+ Firestore save paths — virtual event sessions are stripped before persisting
+- Eliminates the class of bugs where event sessions leak into stored data
+
+**Test infrastructure**
+- Vitest configured with \\\`stripEvents.test.ts\\\` and \\\`dateUtils.test.ts\\\`
+- Playwright end-to-end tests (\\\`login.spec.js\\\`, \\\`ui.spec.js\\\`) — disabled in CI (requires Firebase creds)
+- ESLint v10 configured (\\\`eslint.config.js\\\`)
+
+**Recurring session management**
+- "Aflys" (cancel) option for recurring sessions — cancellation reason tracked
+- Session detail sheet shows full session info with cancel flow
+- Duplicate session prevention in save paths
+
+**Target architecture document**
+- New \\\`target-architecture.md.ts\\\` — north-star architecture with domain model, entity definitions, migration sequence, Firestore path map
+- Read at planning, updated at review
+
+**iOS scroll & UX fixes**
+- Fixed scroll alignment with header (scrollMarginTop)
+- Fixed month picker not navigating to far-future dates (ISO week wrap-around)
+- Removed \\\`vercel.json\\\` — Vercel auto-detects Vite projects
+
+**Scripts & tooling**
+- \\\`firestore-admin.cjs\\\` — zero-dep Firestore REST admin client
+- Seed scripts for catalogue, events, and backlog items
+- \\\`compare-deploy.cjs\\\` — diff local vs deployed
+- \\\`dev-start.mjs\\\` — local dev launcher
+- \\\`patch-vite.cjs\\\` — Vite compatibility patch
+
+### Carry-forward
+- **#1128** — Open class details
+- **#1129** — Add class from catalog
+- **#1136** — Mark recurring catalogue classes in catalogue view
+- **#1137** — Search mode
+- **#1138** — Change program for recurring training sessions
+- **#1145** — Header month picker
+
+### Retro learnings
+- **Keep:** Target architecture as living document inside the app — forces architectural awareness at every planning/review ceremony.
+- **Keep:** Firestore admin scripts — zero-dep REST-based tooling that works without Firebase CLI installation.
+- **Lesson:** Deployment was painful (17 commits behind, orphaned commits, push permission issues). Established test-first workflow to prevent recurrence.
+- **Lesson:** Node.js v24 has a Crypto bug that breaks local Vite builds. Vercel uses Node 20 and builds fine. Don't spend time debugging local build failures — deploy and verify on Vercel.
+
+---
 ## 1.7 — Events
 *April 2026*
 

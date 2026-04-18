@@ -100,7 +100,7 @@ These principles govern how we translate domain concepts into code and data:
 | displayName | string | How they appear in the app |
 | avatarUrl | string? | Profile picture |
 
-> **Current state:** \`USER_MAPPING\` in constants.ts. Target: Firestore document, seeded from Auth on first login.
+> **Current state:** ✅ Partially live — \`config/roles\` Firestore document holds email→name+role mapping. \`useRolesConfig\` hook derives \`USER_MAPPING\` and \`FIGHTERS\` dynamically. Hardcoded fallback remains in constants.ts. Target: full Person profile doc seeded from Auth on first login.
 
 #### Team
 
@@ -120,7 +120,7 @@ These principles govern how we translate domain concepts into code and data:
 | teamId | string | Team reference |
 | role | string | 'head-coach' \\| 'coach' \\| 'coordinator' \\| 'fighter' |
 
-> Stored as a subcollection or embedded array on the Team document. Replaces the global role in \`USER_MAPPING\`.
+> **Current state:** ✅ Partially live — roles stored as \`admins\`, \`coaches\`, \`members\` arrays in the \`config/roles\` document. Admin UI ("Holdroller") allows add/remove/rename/role-change. Security rules read from this document dynamically. Target: evolve into subcollection on Team document when multi-team is needed.
 
 #### Gym (Source)
 
@@ -242,9 +242,10 @@ These principles govern how we translate domain concepts into code and data:
 
 | Entity | Path | Status |
 |--------|------|--------|
-| Person (profile) | \`users/{uid}/profile\` | 📐 Replaces USER_MAPPING |
+| Roles Config | \`public/data/config/roles\` | ✅ Live (Release 1.9) |
+| Person (profile) | \`users/{uid}/profile\` | 📐 Replaces USER_MAPPING (partially done via config/roles) |
 | Team | \`public/data/teams/{id}\` | 📐 New |
-| TeamMember | \`public/data/teams/{id}/members/{uid}\` | 📐 New |
+| TeamMember | \`public/data/teams/{id}/members/{uid}\` | 📐 New (partially done via config/roles) |
 | Gym | \`public/data/gyms/{id}\` | ✅ Live |
 | CatalogueClass | \`public/data/catalogue/{id}\` | ✅ Live |
 | FightweekEvent | \`public/data/events/{id}\` | ✅ Live |
@@ -268,7 +269,7 @@ Ordered by value and dependency. Each phase can be a release or part of a releas
 | **0. Robustness** | ESLint, Vitest, save wrapper, file extractions (Release 1.8) | Nothing | Low |
 | **1. Activity evolution** | Add \`type\` and \`status: completed\` to Session. Enable post-session logging (intensity). | Nothing | Low — additive fields |
 | **2. HealthCondition** | New entity, standalone tracker. Wire into session planning (warnings). | Nothing | Low — new feature, no migration |
-| **3. Person + Roles** | Firestore-backed Person profile + Team + TeamMember. Replace USER_MAPPING. | Nothing | Medium — auth refactor |
+| **3. Person + Roles** | Firestore-backed Person profile + Team + TeamMember. Replace USER_MAPPING. | Nothing | ✅ Phase A done (Release 1.9): config/roles doc, dynamic security rules, admin UI. Phase B remaining: full Person profile per UID, email-as-data-key migration. |
 | **4. Training Log** | Readiness + relevance + notes on Activity. ConditionImpact as embedded array. | Phase 1 + 2 | Low — additive |
 | **5. FavouriteSeries** | Replace Standard Template with favourites-based schedule builder. | Phase 3 (needs Person doc) | Medium — UI change |
 | **6. Competition tracking** | W/L/D fields on event Activities. Fight Camp concept. | Phase 1 | Low — additive |
@@ -305,4 +306,5 @@ These are explicitly parked. Don't engineer toward them, but don't block them ei
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2026-04-18 | Initial version. Synthesised from PO's conceptual DBML proposal + AI Agent's critical analysis. Key decisions: Activity as universal calendar atom, Person = Auth user, Team independent of Gym, Firestore-native physical model. |
+| 1.1 | 2026-04-19 | Updated for Release 1.9 (Roles & Security). Phase 3 partially complete: config/roles Firestore doc live, dynamic security rules deployed, admin UI built. Person and TeamMember current-state annotations updated. Roles Config added to Firestore path map. Remaining: full Person profile per UID, email-based data keys. |
 `;
