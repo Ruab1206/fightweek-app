@@ -7,10 +7,11 @@ import {
 } from 'firebase/auth';
 
 import { auth } from '../config/firebase';
-import { USER_MAPPING } from '../config/constants';
+import { USER_MAPPING as HARDCODED_MAPPING } from '../config/constants';
 import { checkInAppBrowser, isMobileDevice } from '../utils/deviceUtils';
 
-export function useAuth() {
+export function useAuth(externalMapping?: Record<string, { name: string; role: string }>) {
+  const USER_MAPPING = externalMapping || HARDCODED_MAPPING;
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -38,7 +39,8 @@ export function useAuth() {
       setAuthLoading(false);
       if (u) {
         const email = u.email ? u.email.toLowerCase() : '';
-        const userProfile = USER_MAPPING[email];
+        const mapping = externalMapping || HARDCODED_MAPPING;
+        const userProfile = mapping[email];
         if (userProfile) {
           setUser(u);
           setAccessDenied(false);
@@ -53,7 +55,7 @@ export function useAuth() {
       } else { setUser(null); }
     });
     return () => unsubAuth();
-  }, []);
+  }, [externalMapping]);
 
   const triggerLoginPopup = async () => {
     setLoginError(null);

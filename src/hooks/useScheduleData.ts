@@ -3,7 +3,7 @@ import { doc, setDoc, getDoc, onSnapshot, type Unsubscribe, type DocumentData } 
 import type { User } from 'firebase/auth';
 
 import { db } from '../config/firebase';
-import { FIGHTERS, ROOT_COLLECTION } from '../config/constants';
+import { FIGHTERS as DEFAULT_FIGHTERS, ROOT_COLLECTION } from '../config/constants';
 import { getISOWeek } from '../utils/dateUtils';
 
 /** Strip virtual event sessions before persisting (events are merged at render time by useEventMerge). */
@@ -22,9 +22,11 @@ interface ScheduleDataParams {
   activeFighter: string;
   accessDenied: boolean;
   isBrowserBlocked: boolean;
+  fighters?: string[];
 }
 
-export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked }: ScheduleDataParams) {
+export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked, fighters }: ScheduleDataParams) {
+  const FIGHTERS = fighters || DEFAULT_FIGHTERS;
   const [systemWeek] = useState(getISOWeek());
   const [currentWeek, setCurrentWeek] = useState(getISOWeek());
   const [scheduleData, setScheduleData] = useState<DocumentData>({});

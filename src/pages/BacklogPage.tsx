@@ -24,18 +24,18 @@ import TabBar from '../components/backlog/TabBar';
 import ShortcutHelpOverlay from '../components/backlog/ShortcutHelpOverlay';
 import { useSearchField } from '../hooks/useSearchField';
 import { useBacklogKeyboard, BACKLOG_SHORTCUTS } from '../hooks/useBacklogKeyboard';
-import { X as XIcon, Search as SearchIcon, ClipboardList, Palette, ScrollText, ChevronLeft, PanelLeftClose, PanelLeft, Users, Database, BookOpen, Settings, Map, Sun, Moon, Swords, Landmark, Layers, Target, ListChecks } from 'lucide-react';
+import { X as XIcon, Search as SearchIcon, ClipboardList, Palette, ScrollText, ChevronLeft, PanelLeftClose, PanelLeft, Users, Database, BookOpen, Settings, Map, Sun, Moon, Swords, Landmark, Layers, Target, ListChecks, ShieldCheck } from 'lucide-react';
 import MarkdownDocPage from '../components/MarkdownDocPage';
 import { TEAM_CHARTER, RELEASE_NOTES, ENTITY_MODEL, DOMAIN_MODEL, DESIGN_SYSTEM, MASTER_DATA, FIGHT_TEAM_DESCRIPTION, ARCHITECTURAL_BLUEPRINT, PRODUCT_VISION, CATALOGUE_SPEC, TARGET_ARCHITECTURE } from '../content';
 import StoryMapPage from './StoryMapPage';
-import PersonaPage from './PersonaPage';
+import RolesPage from './RolesPage';
 import { useTheme } from '../hooks/useTheme';
 import type { StoryMapData } from '../types/story-map';
 import { subscribeStoryMap } from '../services/firebaseStoryMapService';
 
 
 type ViewTab = 'board' | 'list' | 'feedback';
-type SidebarPage = 'backlog' | 'story-map' | 'fight-team-description' | 'team-charter' | 'release-notes' | 'personas' | 'architectural-blueprint' | 'target-architecture' | 'design-system' | 'domain-model' | 'entity-model' | 'master-data' | 'product-vision' | 'catalogue-spec';
+type SidebarPage = 'backlog' | 'roles' | 'story-map' | 'fight-team-description' | 'team-charter' | 'release-notes' | 'personas' | 'architectural-blueprint' | 'target-architecture' | 'design-system' | 'domain-model' | 'entity-model' | 'master-data' | 'product-vision' | 'catalogue-spec';
 
 interface Props {
   isAdmin: boolean;
@@ -219,6 +219,7 @@ export default function BacklogPage({ isAdmin, onClose, onShowToast }: Props) {
   // Sidebar nav items
   const sidebarItems: { key: SidebarPage; label: string; icon: any; }[] = [
     { key: 'backlog', label: 'Backlog & Feedback', icon: ClipboardList },
+    { key: 'roles', label: 'Holdroller', icon: ShieldCheck },
     { key: 'product-vision', label: 'Product Vision', icon: Target },
     { key: 'release-notes', label: 'Release Notes', icon: ScrollText },
     { key: 'personas', label: 'Personas', icon: Users },
@@ -327,6 +328,9 @@ export default function BacklogPage({ isAdmin, onClose, onShowToast }: Props) {
           ) : activePage === 'personas' ? (
             /* ═══ Persona page (interactive cards) ═══ */
             <PersonaPage isDark={isDark} />
+          ) : activePage === 'roles' ? (
+            /* ═══ Roles management page ═══ */
+            <RolesPage isDark={isDark} />
           ) : activePage !== 'backlog' && pageContent[activePage] ? (
             /* ═══ Markdown doc page ═══ */
             <>

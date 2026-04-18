@@ -10,7 +10,8 @@ import {
   Search, Menu, ArrowLeft,
 } from 'lucide-react';
 
-import { DAYS, USER_MAPPING, FIGHTERS } from './config/constants';
+import { DAYS } from './config/constants';
+import { useRolesConfig } from './hooks/useRolesConfig';
 import { getDateForWeekDay, getWeekDateMap, getTodayDayName, getFullWeekDateMap, getDaysInRange, getISOWeekForDate } from './utils/dateUtils';
 
 import { useAuth } from './hooks/useAuth';
@@ -45,20 +46,21 @@ import type { AddType } from './components/AddScreen';
 
 const App = () => {
   // --- Hooks ---
+  const { userMapping: USER_MAPPING, fighters: FIGHTERS } = useRolesConfig();
   const {
     user, authLoading, accessDenied, loginError,
     isBrowserBlocked,
     activeFighter, setActiveFighter,
     isLocked,
     triggerLoginPopup, triggerLoginRedirect, handleLogout,
-  } = useAuth();
+  } = useAuth(USER_MAPPING);
 
   const {
     systemWeek, currentWeek, setCurrentWeek,
     scheduleData, setScheduleData,
     teamData,
     saveToDb,
-  } = useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked });
+  } = useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked, fighters: FIGHTERS });
 
   const { toast, showToast, hideToast } = useToast();
   const { isDark, toggleTheme } = useTheme();
