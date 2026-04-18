@@ -63,6 +63,13 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
       } else { setScheduleData({}); setLastUpdated('Aldrig'); }
     });
 
+    // Reset team data to only current fighters (prune removed members)
+    setTeamData(prev => {
+      const pruned: Record<string, DocumentData> = {};
+      FIGHTERS.forEach(f => { if (prev[f]) pruned[f] = prev[f]; });
+      return pruned;
+    });
+
     const unsubsTeam: Unsubscribe[] = [];
     FIGHTERS.forEach(fighter => {
       const fRef = doc(db, ROOT_COLLECTION, fighter, 'weeks', docId);
