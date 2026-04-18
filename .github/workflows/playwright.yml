@@ -1,15 +1,8 @@
 name: Playwright Tests
 
+# Disabled — requires Firebase credentials not available in CI.
+# Run locally with: npx playwright test
 on:
-  # 1. Kør automatisk på ALLE push til ALLE grene
-  push:
-    branches: [ '**' ]
-  
-  # 2. Kør automatisk på ALLE Pull Requests
-  pull_request:
-    branches: [ '**' ]
-
-  # 3. Tilføj en "Run workflow" knap, så du kan starte den manuelt
   workflow_dispatch:
 
 jobs:
