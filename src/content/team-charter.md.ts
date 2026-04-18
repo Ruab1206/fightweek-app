@@ -90,6 +90,7 @@ We use **semantic versioning lite** with an outcome name:
 | 1.5 — Build Your Program | Fighters can build their own weekly program from the catalogue | Apr 2026 |
 | 1.6 — Easier Class Scheduling | One-tap catalogue add, recurring sessions, fravær management | Apr 2026 |
 | 1.7 — Events | Team can discover, sign up for, and track events like tournaments and seminars | Apr 2026 |
+| 1.8 — Robustness | Code quality, test coverage, centralized save logic, iOS scroll fixes, recurring session management | Apr 2026 |
 
 ---
 
@@ -282,6 +283,41 @@ The AI Agent has direct read/write access to the Firestore production database v
 - The key file is in \`.gitignore\` and must never be committed
 - Firestore security rules still protect browser-based access (team member whitelist, role-based writes)
 - See \`firestore.rules\` for the deployed rule set
+
+---
+
+## Deployment
+
+The FightWeek app is deployed via **Vercel**, connected to the GitHub repo \`Ruab1206/fightweek-app\`. Every push to \`main\` triggers an automatic build and deploy.
+
+### How to deploy
+
+\`\`\`bash
+cd fightweek-app
+git add -A
+git commit -m "Release X.Y — description"
+git push origin main
+\`\`\`
+
+Vercel picks up the push, runs \`vite build\`, and deploys the result. No manual file uploads needed.
+
+### Prerequisites
+
+| Requirement | Details |
+|-------------|----------|
+| **Git credentials** | The Windows Credential Manager must have a token for a GitHub account with push access to the repo |
+| **Collaborator access** | The \`seniorelduderino\` (DSB) account has been added as a collaborator on the personal \`Ruab1206/fightweek-app\` repo |
+| **Branch** | We push to \`main\` directly (no PRs — two-person team) |
+
+### Troubleshooting
+
+- **403 Permission denied on push** — The cached Git credential doesn't have write access. Check GitHub → Settings → Collaborators.
+- **Build fails on Vercel** — Check the Vercel dashboard for build logs. Common issue: missing dependencies in \`package.json\`.
+- **vercel.json** — Removed in 1.8; Vercel auto-detects Vite projects. SPA rewrites are handled by the framework preset.
+
+### Deployment helper script
+
+\`scripts/compare-deploy.cjs\` compares local source files against what's on GitHub, reporting which files are different, new, or identical. Run it before pushing to verify what will change.
 
 ---
 
