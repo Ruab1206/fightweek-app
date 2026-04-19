@@ -11,6 +11,8 @@ import { CATEGORIES, DAY_NAMES, RECURRENCE_OPTIONS, googleMapsUrl } from '../con
 import { getDateForWeekDay } from '../utils/dateUtils';
 import { disciplineToCategory } from './InlineCataloguePicker';
 import { useGyms } from '../hooks/useGyms';
+import { NotesEditor } from './NotesEditor';
+import { sessionNoteKey } from '../hooks/useActivityNotes';
 import type { CatalogueClass } from '../types/catalogue';
 
 export interface SessionDetailSheetProps {
@@ -25,9 +27,11 @@ export interface SessionDetailSheetProps {
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
   onRecurrenceChange: (session: any, dayName: string, startDate: Date, recurrence: { interval: number; endDate: string | null }) => void;
   onClose: () => void;
+  getNote: (key: string) => string;
+  saveNote: (key: string, text: string) => Promise<void>;
 }
 
-const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData, systemWeek: _systemWeek, saveWeekToDb, showToast, onRecurrenceChange, onClose }: SessionDetailSheetProps) => {
+const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData, systemWeek: _systemWeek, saveWeekToDb, showToast, onRecurrenceChange, onClose, getNote, saveNote }: SessionDetailSheetProps) => {
   const [showMore, setShowMore] = useState(false);
   const [showDeleteOptions, setShowDeleteOptions] = useState(false);
   const [interval, setRecurrenceInterval] = useState(session.isRecurring ? 1 : 0);
@@ -206,6 +210,16 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
               {sessionDate.toLocaleDateString('da-DK', { weekday: 'long', day: 'numeric', month: 'long' })}
             </span>
           </div>
+        </div>
+
+        {/* Notes */}
+        <div className={`px-5 py-3 border-t ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
+          <NotesEditor
+            noteKey={sessionNoteKey(sessionDate.toISOString().slice(0, 10), session.id || `${session.name}_${session.start}`)}
+            getNote={getNote}
+            saveNote={saveNote}
+            isDark={isDark}
+          />
         </div>
 
         {/* Cancel / Aflys toggle */}

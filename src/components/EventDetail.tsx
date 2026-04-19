@@ -6,8 +6,10 @@ import { FIGHTERS } from '../config/constants';
 import { googleMapsUrl } from '../config/constants';
 import type { FightweekEvent, EventSignupStatus } from '../types/event';
 import { TypeBadge, formatDateRange, formatDateDa, isEventPast, daysUntil, SIGNUP_OPTIONS } from './eventHelpers';
+import { NotesEditor } from './NotesEditor';
+import { eventNoteKey } from '../hooks/useActivityNotes';
 
-export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onClose, onEdit, onDelete }: {
+export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onClose, onEdit, onDelete, getNote, saveNote }: {
   event: FightweekEvent;
   isDark: boolean;
   fighterName: string;
@@ -16,6 +18,8 @@ export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onC
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  getNote: (key: string) => string;
+  saveNote: (key: string, text: string) => Promise<void>;
 }) {
   const myStatus = event.signups?.[fighterName] || null;
   const deadlineDays = event.registrationDeadline ? daysUntil(event.registrationDeadline) : null;
@@ -173,6 +177,17 @@ export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onC
             </div>
           </div>
         )}
+
+        {/* Notes */}
+        <div className={`rounded-xl border p-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border'}`}>
+          <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Mine noter</p>
+          <NotesEditor
+            noteKey={eventNoteKey(event.id)}
+            getNote={getNote}
+            saveNote={saveNote}
+            isDark={isDark}
+          />
+        </div>
       </div>
     </div>
   );

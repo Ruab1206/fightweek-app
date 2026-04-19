@@ -4,6 +4,8 @@ import { Clock, Calendar } from 'lucide-react';
 import { CATEGORIES } from '../config/constants';
 import { addMinutes } from '../utils/dateUtils';
 import { useTheme } from '../hooks/useTheme';
+import { NotesEditor } from './NotesEditor';
+import { sessionNoteKey } from '../hooks/useActivityNotes';
 
 import { RECURRENCE_OPTIONS } from '../config/constants';
 
@@ -32,9 +34,11 @@ interface SessionModalProps {
     onDeleteThisAndFuture: (day: string, name: string, start: string, fromWeek: number) => void;
     onRecurrenceSave: (session: SessionForm, dayName: string, startDate: Date, recurrence: { interval: number; endDate: string | null }) => void;
     onFeedback: (context: string) => void;
+    getNote: (key: string) => string;
+    saveNote: (key: string, text: string) => Promise<void>;
 }
 
-const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback }: SessionModalProps) => {
+const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote }: SessionModalProps) => {
     const { isDark } = useTheme();
     const isNew = !initialData;
     const [form, setForm] = useState<SessionForm>({
@@ -178,6 +182,18 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                             </div>
                         )}
                     </div>
+
+                    {/* Notes (existing sessions only) */}
+                    {!isNew && (
+                        <div className={`px-5 py-3 border-t ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
+                            <NotesEditor
+                                noteKey={sessionNoteKey(date.toISOString().slice(0, 10), form.id || `${form.name}_${form.start}`)}
+                                getNote={getNote}
+                                saveNote={saveNote}
+                                isDark={isDark}
+                            />
+                        </div>
+                    )}
 
                     {/* Cancel toggle (existing non-standard only) */}
                     {!isNew && (

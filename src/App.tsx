@@ -36,6 +36,7 @@ import FeedbackModal from './components/FeedbackModal';
 import MonthPicker from './components/MonthPicker';
 import TeamSchedule from './components/TeamSchedule';
 import SessionDetailSheet from './components/SessionDetailSheet';
+import { useActivityNotes } from './hooks/useActivityNotes';
 import MobileScrollView from './components/MobileScrollView';
 import PersonalSchedule from './components/PersonalSchedule';
 import BacklogPage from './pages/BacklogPage';
@@ -66,6 +67,7 @@ const App = () => {
   const { isDark, toggleTheme } = useTheme();
   const { classes: catalogueClasses, loading: catalogueLoading } = useCatalogue();
   const { events: allEvents } = useEvents();
+  const { getNote, saveNote } = useActivityNotes(activeFighter);
 
   // --- Refs & scroll-to-today (must be before early returns) ---
   const todayRef = useRef<HTMLDivElement | null>(null);
@@ -382,7 +384,7 @@ const App = () => {
 
         {/* VIEW: Personal / Team / Events */}
         {view === 'events' ? (
-          <EventsPage ref={eventsRef} isDark={isDark} fighterName={activeFighter} isAdmin={isAdmin} userEmail={user?.email || ''} searchQuery={searchQuery} searchMode={searchMode} initialEventId={initialEventId} onClearInitialEvent={() => setInitialEventId(null)} />
+          <EventsPage ref={eventsRef} isDark={isDark} fighterName={activeFighter} isAdmin={isAdmin} userEmail={user?.email || ''} searchQuery={searchQuery} searchMode={searchMode} initialEventId={initialEventId} onClearInitialEvent={() => setInitialEventId(null)} getNote={getNote} saveNote={saveNote} />
         ) : view === 'team' ? (
           <TeamSchedule days={DAYS} teamData={mergedTeamData} currentWeek={currentWeek} isDark={isDark} />
         ) : (
@@ -542,6 +544,8 @@ const App = () => {
             setClassInfoSession(null);
           }}
           onClose={() => setClassInfoSession(null)}
+          getNote={getNote}
+          saveNote={saveNote}
         />
       )}
 
@@ -589,6 +593,8 @@ const App = () => {
           setEditingWeek(null);
         }}
         onFeedback={(ctx) => setFeedbackContext(ctx)}
+        getNote={getNote}
+        saveNote={saveNote}
       />}
       {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
       {feedbackContext && <FeedbackModal user={user} currentContext={feedbackContext} onClose={() => setFeedbackContext(null)} onShowToast={showToast} />}

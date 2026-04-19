@@ -75,10 +75,12 @@ interface EventsPageProps {
   searchMode?: boolean;
   initialEventId?: string | null;
   onClearInitialEvent?: () => void;
+  getNote: (key: string) => string;
+  saveNote: (key: string, text: string) => Promise<void>;
 }
 
 const EventsPage = forwardRef<EventsPageHandle, EventsPageProps>(function EventsPage(
-  { isDark, fighterName, isAdmin, userEmail, searchQuery, searchMode, initialEventId, onClearInitialEvent },
+  { isDark, fighterName, isAdmin, userEmail, searchQuery, searchMode, initialEventId, onClearInitialEvent, getNote, saveNote },
   ref
 ) {
   const { events, loading, updateSignup, createEvent, saveEvent, removeEvent } = useEvents();
@@ -250,6 +252,8 @@ const EventsPage = forwardRef<EventsPageHandle, EventsPageProps>(function Events
           onClose={() => { setReturnToId(live.id); setSelectedEvent(null); }}
           onEdit={() => { setEditingEvent(live); setFormMode('edit'); }}
           onDelete={() => setConfirmDelete(live)}
+          getNote={getNote}
+          saveNote={saveNote}
         />
         {confirmDelete && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={() => setConfirmDelete(null)}>
