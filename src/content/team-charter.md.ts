@@ -166,6 +166,7 @@ A backlog item is done when:
 14. **Auth-gate all Firestore hooks** — Any hook using \`onSnapshot\` on auth-protected collections must wait for \`onAuthStateChanged\` before subscribing, and auto-retry on transient errors. Subscribing before auth resolves kills the listener permanently. (Retro 1.7)
 15. **Verify event-session stripping on new save paths** — When adding a new code path that writes week data to Firestore, verify it uses the centralized save wrapper or \`cloneWithoutEvents()\` to prevent virtual event sessions from leaking into persisted data. (Retro 1.7)
 16. **Stabilise object/callback references passed to hooks** — When passing an object, array, or callback into a hook's dependency array (or into a hook that subscribes on it), give it a stable reference with \`useRef\`/\`useMemo\`/\`useCallback\`. A fresh reference every render re-runs the effect — this caused the \`activeFighter\` reset (\`useAuth\` re-subscribed on a new \`externalMapping\` object) and stale \`teamData\` from un-pruned removed members. Also prune stale keys from accumulated state when the source list changes. (Retro 1.11)
+17. **Destructive changes use expand → migrate → contract** — Never delete or overwrite data in the same step that introduces the new shape. First *expand* (add the new path/field and rules that accept both old and new), *migrate* (copy data, ship code that reads/writes the new shape), and only then *contract* (remove the old data/rules) — as a **separate backlog item, deferred until the new shape has soaked in production**. The #1191 email-path migration followed this; the contract step is tracked separately as #1193/#1194. (Retro 1.11)
 
 ---
 
@@ -188,6 +189,8 @@ A backlog item is done when:
 | **Stay within product boundary** | Only edit files in the active product's directory. If a change is needed in another product, flag it and let the PO decide. (Retro 1.3 A2) |
 | **Update release notes incrementally** | When completing a significant chunk of work (e.g. a batch of files), update the release notes then — not just at review time. (Retro 1.3 A3) |
 | **Diagnostic logging before deep static analysis** | When a bug's code logic "looks correct" through static tracing, add a console.log to see actual runtime values before spending more time on exhaustive code analysis. (Retro 1.7) |
+| **Look past the loaded window** | For any feature that spans past/future data, ask whether the logic must walk a real horizon or only the data currently scrolled into memory. The recurring-session and delete-future bugs (#1183) were loaded-window artefacts mistaken for logic errors — operations stopped at the scroll-window edge, not at the intended boundary. (Retro 1.10) |
+| **Start ceremonies in a fresh session** | Release Planning (and other heavy ceremonies) start in a new chat session with a clean context window — re-read the docs and walk the story map fresh, rather than carrying implementation detail from the previous release's build session. (Retro 1.11) |
 
 ### Design principles
 
