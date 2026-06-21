@@ -208,7 +208,9 @@ function decodeFields(fields) {
 }
 
 function decodeDocument(doc) {
-  return { _id: doc.name.split('/').pop(), ...decodeFields(doc.fields || {}) };
+  // Real document name must win: some legacy docs carry a stale stored `_id`
+  // field (e.g. ""), which would otherwise overwrite the true id.
+  return { ...decodeFields(doc.fields || {}), _id: doc.name.split('/').pop() };
 }
 
 // ── Public API ──
