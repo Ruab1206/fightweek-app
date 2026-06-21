@@ -25,6 +25,7 @@ The Fighter Team is a tight unit with clear roles. Everyone has a say, but the m
 |------|-------------|-------------|
 | **Instructor** | Træner/Instruktør | Read-only on relevant sessions — external coaches at clubs |
 | **Stakeholder** | Interessent | Read-only on relevant schedule/fight data — managers, family |
+| **Promoter / Matchmaker** | Promotor | Public read-only on *published* fighter profiles — no login, no access to private schedule data |
 
 ---
 
@@ -108,13 +109,42 @@ The Fighter Team is a tight unit with clear roles. Everyone has a say, but the m
 
 ---
 
+### 🎤 Mark O — The Promoter / Matchmaker (💭 Envisioned)
+
+**Domain role:** Promotor (external)
+**Real person:** Regional fight promoter / matchmaker who runs 2–6 events per year and works with multiple gyms and managers at once. He never logs in — he discovers a fighter through a shared link and decides, in under a minute, whether this fighter is worth a bout offer. He is matching *competitive, entertaining* fights, so he weighs both ability and marketability.
+
+**What he needs to decide on a match (from how matchmakers actually scout):**
+- **Fight record first** — W–L–D, *and how the wins come* (finish rate: KO/submission vs decision). "Does this fighter finish opponents?" is the single biggest signal.
+- **Weight class / division** — the primary matching filter; must be unambiguous.
+- **Experience level** — amateur vs professional, and the calibre of promotions fought in.
+- **Fighting style & disciplines** — striker, grappler, or well-rounded; the standout strengths that make an exciting fight.
+- **Physical attributes for matchmaking** — age, height, reach, stance.
+- **Gym / team affiliation** — who coaches and trains the fighter (credibility + a contact path).
+- **Accomplishments** — titles, performance bonuses, "top prospect" recognition.
+- **Availability & readiness** — is the fighter open to offers right now (and medically clear)?
+- **Fight footage** — a highlight/video link; promoters want to *see* the fighter.
+- **A clear way to make contact** — how to reach the fighter or coach with an offer.
+
+**What Mark O does with FightWeek:**
+- Opens a fighter's **public profile** from a shared link — no account, no login
+- Scans the headline facts (record, division, gym, style) above the fold in seconds
+- Trusts the profile because the team curates it — verified, up-to-date stats
+- Reaches out to the coach/fighter when there's a fit
+- 💭 Later: browses and **filters** a roster of published fighters by weight, record, availability
+
+> **Design implications for the profile page (effective-profile research):** lead with the most decision-relevant facts (record + finish rate + weight class) above the fold; keep it scannable, not a wall of text; signal credibility (curated/verified, recently updated); give one obvious next action (contact); mobile-first, since the link is opened on a phone. The fighter controls what's public and whether the profile is published at all (Poka-Yoke: nothing private is ever exposed by accident).
+
+---
+
 ## Access Control
 
 | Level | Who | Can do |
 |-------|-----|--------|
-| **Admin** | Rune, Frodi | Full CRUD on all data. Backlog access. Catalogue curation. Process docs. |
-| **Coach** | Frodi | View all fighters, manage team schedules, curate catalogue, set goals |
-| **Fighter** | Karl + others | Own schedule only. Team view read-only. Catalogue read-only. Feedback submission. |
+| **Admin** | Rune, Frodi | Full CRUD on all data. Backlog access. Catalogue curation. Process docs. Publish/unpublish any fighter profile. |
+| **Coach** | Frodi | View all fighters, manage team schedules, curate catalogue, set goals. Edit and publish/unpublish fighter profiles. |
+| **Fighter** | Karl + others | Own schedule only. Team view read-only. Catalogue read-only. Feedback submission. Edit and publish/unpublish **own** profile. |
+| **Promoter / Matchmaker** | External, no login | Read-only on **published** fighter profiles via public link. No access to schedules or private data. |
 
 Access is determined by the \`USER_MAPPING\` in the app config, matching Firebase Auth email to role.
 
