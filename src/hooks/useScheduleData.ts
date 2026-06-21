@@ -17,6 +17,26 @@ export function stripEvents(weekData: DocumentData): DocumentData {
   return data;
 }
 
+/**
+ * Materialise the standard-week template for a specific week, applying each
+ * session's recurrence pattern. Pure & testable. A session with no/weekly
+ * recurrence appears every week; an every-N-weeks session only appears on weeks
+ * aligned to its recurrenceStartWeek.
+ */
+export function filterTemplateForWeek(rawTemplate: DocumentData, weekNum: number): DocumentData {
+  const data: Record<string, any> = { lastUpdated: new Date().toISOString() };
+  for (const key of Object.keys(rawTemplate)) {
+    if (key === 'lastUpdated') continue;
+    if (!Array.isArray(rawTemplate[key])) { data[key] = rawTemplate[key]; continue; }
+    data[key] = rawTemplate[key].filter((s: any) => {
+      if (!s.recurrenceInterval || s.recurrenceInterval <= 1) return true;
+      const diff = weekNum - (s.recurrenceStartWeek || weekNum);
+      return diff >= 0 && diff % s.recurrenceInterval === 0;
+    });
+  }
+  return data;
+}
+
 interface ScheduleDataParams {
   user: User | null;
   activeFighter: string;
@@ -137,18 +157,7 @@ export function useMultiWeekData(
             const stdRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
             const stdSnap = await getDoc(stdRef);
             if (stdSnap.exists()) {
-              const raw = stdSnap.data();
-              // Filter out sessions whose recurrence pattern doesn't match this week
-              const data: Record<string, any> = { lastUpdated: new Date().toISOString() };
-              for (const key of Object.keys(raw)) {
-                if (key === 'lastUpdated') continue;
-                if (!Array.isArray(raw[key])) { data[key] = raw[key]; continue; }
-                data[key] = raw[key].filter((s: any) => {
-                  if (!s.recurrenceInterval || s.recurrenceInterval <= 1) return true;
-                  const diff = weekNum - (s.recurrenceStartWeek || weekNum);
-                  return diff >= 0 && diff % s.recurrenceInterval === 0;
-                });
-              }
+              const data = filterTemplateForWeek(stdSnap.data(), weekNum);
               setMultiWeekData(prev => ({ ...prev, [weekNum]: data }));
               await setDoc(docRef, data);
             } else {
@@ -184,7 +193,20 @@ export function useMultiWeekData(
     return snap.exists() ? snap.data() : null;
   }, [activeFighter]);
 
-  return { multiWeekData, saveWeekToDb, fetchWeekData };
+  /**
+   * Build (but don't persist) the recurrence-filtered standard-week template for a
+   * week (#1183). Used by handleAddRecurring to seed a future week that has no doc
+   * yet, so writing a recurring session into it doesn't drop the standard sessions.
+   * Returns null when the fighter has no template.
+   */
+  const seedWeekFromTemplate = useCallback(async (weekNum: number): Promise<DocumentData | null> => {
+    const stdRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
+    const stdSnap = await getDoc(stdRef);
+    if (!stdSnap.exists()) return null;
+    return filterTemplateForWeek(stdSnap.data(), weekNum);
+  }, [activeFighter]);
+
+  return { multiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate };
 }
 
 /**

@@ -1,6 +1,27 @@
-import { DAYS } from '../config/constants';
+import { DAYS, RECURRENCE_HORIZON_WEEKS } from '../config/constants';
 import { getDateForWeekDay, getISOWeekForDate } from '../utils/dateUtils';
 import type { CatalogueAddPayload } from '../components/InlineCataloguePicker';
+
+/**
+ * Compute the list of week numbers a recurring session should occupy (#1183).
+ * Pure & testable. From startWeek, stepping by `interval`, up to either the
+ * explicit endWeek or the horizon (for "Slutter ikke"). The previous code only
+ * wrote to the weeks currently loaded in the scroll window, so a never-ending
+ * series silently stopped at the window edge.
+ */
+export function computeRecurringWeeks(params: {
+  startWeek: number;
+  interval: number;
+  endWeek: number | null;
+  horizonWeek: number;
+}): number[] {
+  const { startWeek, interval, endWeek, horizonWeek } = params;
+  if (interval <= 0) return [];
+  const last = endWeek === null ? horizonWeek : Math.min(endWeek, horizonWeek);
+  const weeks: number[] = [];
+  for (let w = startWeek; w <= last; w += interval) weeks.push(w);
+  return weeks;
+}
 
 /**
  * Generate a stable, collision-resistant session id (A1 / #1185).
@@ -49,6 +70,7 @@ interface SessionHandlerDeps {
   saveToDb: (data: any) => Promise<void>;
   saveWeekToDb: (week: number, data: any) => Promise<void>;
   fetchWeekData: (week: number) => Promise<any | null>;
+  seedWeekFromTemplate: (week: number) => Promise<any | null>;
   showToast: (msg: string, type: string) => void;
   setModalOpen: (v: boolean) => void;
   setEditingWeek: (v: number | null) => void;
@@ -63,6 +85,7 @@ export function useSessionHandlers({
   editingDay, editingWeek, expandedDay, setExpandedDay,
   saveToDb, saveWeekToDb, fetchWeekData, showToast,
   setModalOpen, setEditingWeek, setEditingDay, setEditingSession, setAddScreenOpen,
+  seedWeekFromTemplate,
 }: SessionHandlerDeps) {
 
   const resolveSourceData = (weekNum: number): Promise<any> =>
@@ -173,7 +196,8 @@ export function useSessionHandlers({
     setModalOpen(true);
   };
 
-  // Add a recurring catalogue session — add to matching weeks, remove from non-matching
+  // Add a recurring catalogue session — materialise it across all target weeks up
+  // to a year-ahead horizon (#1183), not just the weeks currently loaded.
   const handleAddRecurring = async (session: any, dayName: string, startDate: Date, recurrence: { interval: number; endDate: string | null }) => {
     if (recurrence.interval === 0) return;
     const nameLC = (session.name || '').toLowerCase();
@@ -189,53 +213,67 @@ export function useSessionHandlers({
       endWeekNum = getISOWeekForDate(endD);
     }
 
+    const horizonWeek = systemWeek + RECURRENCE_HORIZON_WEEKS;
+    const targetWeeks = computeRecurringWeeks({
+      startWeek: startWeekNum,
+      interval: recurrence.interval,
+      endWeek: endWeekNum,
+      horizonWeek,
+    }).filter(w => w >= systemWeek);
+    const targetSet = new Set(targetWeeks);
+
     let added = 0;
     let removed = 0;
-    const loadedWeeks = Object.keys(multiWeekData).map(Number).sort((a, b) => a - b);
-    for (const weekNum of loadedWeeks) {
-      if (weekNum < systemWeek) continue;
-      const weekData = multiWeekData[weekNum];
-      if (!weekData) continue;
+
+    for (const weekNum of targetWeeks) {
+      // Resolve the week's current data: in-memory, else from Firestore, else seed
+      // from the standard template so writing this session doesn't drop the
+      // week's normal sessions. Only genuinely template-less weeks start empty.
+      let weekData = multiWeekData[weekNum];
+      if (weekData === undefined) {
+        weekData = (await fetchWeekData(weekNum)) ?? (await seedWeekFromTemplate(weekNum)) ?? {};
+      }
       const newData = structuredClone(weekData);
       if (!newData[dayName]) newData[dayName] = [];
 
-      const isTarget = weekNum >= startWeekNum
-        && (weekNum - startWeekNum) % recurrence.interval === 0
-        && (endWeekNum === null || weekNum <= endWeekNum);
-
-      if (isTarget) {
-        const existing = newData[dayName].find((s: any) =>
-          !s.isRestDay && (s.name || '').toLowerCase() === nameLC &&
-          s.start === startTime
-        );
-        if (existing) {
-          if (!existing.isRecurring) { existing.isRecurring = true; await saveWeekToDb(weekNum, newData); }
-        } else {
-          const newSession: any = { ...session, id: newSessionId(), status: 'active', day: dayName, isRecurring: true };
-          const sessionDate = getDateForWeekDay(weekNum, dayName);
-          if (sessionDate && startTime) {
-            const [h, m] = startTime.split(':').map(Number);
-            sessionDate.setHours(h, m);
-            newSession.sessionDate = sessionDate.toISOString();
-          }
-          newData[dayName].push(newSession);
-          newData[dayName].sort((a: any, b: any) => (a.start || '').localeCompare(b.start || ''));
-          await saveWeekToDb(weekNum, newData);
-          added++;
-        }
+      const existing = newData[dayName].find((s: any) =>
+        !s.isRestDay && (s.name || '').toLowerCase() === nameLC && s.start === startTime
+      );
+      if (existing) {
+        if (!existing.isRecurring) { existing.isRecurring = true; await saveWeekToDb(weekNum, newData); }
       } else {
-        if (recurrence.interval > 1) {
-          const before = newData[dayName].length;
-          newData[dayName] = newData[dayName].filter((s: any) =>
-            s.isRestDay || (s.name || '').toLowerCase() !== nameLC || s.start !== startTime
-          );
-          if (newData[dayName].length < before) {
-            await saveWeekToDb(weekNum, newData);
-            removed++;
-          }
+        const newSession: any = { ...session, id: newSessionId(), status: 'active', day: dayName, isRecurring: true };
+        const sessionDate = getDateForWeekDay(weekNum, dayName);
+        if (sessionDate && startTime) {
+          const [h, m] = startTime.split(':').map(Number);
+          sessionDate.setHours(h, m);
+          newSession.sessionDate = sessionDate.toISOString();
+        }
+        newData[dayName].push(newSession);
+        newData[dayName].sort((a: any, b: any) => (a.start || '').localeCompare(b.start || ''));
+        await saveWeekToDb(weekNum, newData);
+        added++;
+      }
+    }
+
+    // Remove stale copies from non-target loaded weeks (only matters for interval > 1).
+    if (recurrence.interval > 1) {
+      for (const weekNum of Object.keys(multiWeekData).map(Number)) {
+        if (weekNum < systemWeek || targetSet.has(weekNum)) continue;
+        const weekData = multiWeekData[weekNum];
+        if (!weekData?.[dayName]) continue;
+        const newData = structuredClone(weekData);
+        const before = newData[dayName].length;
+        newData[dayName] = newData[dayName].filter((s: any) =>
+          s.isRestDay || (s.name || '').toLowerCase() !== nameLC || s.start !== startTime
+        );
+        if (newData[dayName].length < before) {
+          await saveWeekToDb(weekNum, newData);
+          removed++;
         }
       }
     }
+
     const intervalLabel = recurrence.interval === 1 ? 'hver uge' : `hver ${recurrence.interval}. uge`;
     showToast(`${session.name} ${intervalLabel} (+${added} -${removed})`, 'success');
     setAddScreenOpen(false);

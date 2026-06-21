@@ -43,6 +43,10 @@ export const RECURRENCE_OPTIONS = [
   { label: 'Hver 4. uge', value: 4 },
 ];
 
+// #1183: how far ahead a recurring session is materialised when it has no end date.
+// "Slutter ikke" effectively means "the next year"; it re-extends as time passes.
+export const RECURRENCE_HORIZON_WEEKS = 52;
+
 // Google Maps search link
 export function googleMapsUrl(address: string) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;

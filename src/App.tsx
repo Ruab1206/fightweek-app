@@ -80,7 +80,7 @@ const App = () => {
   const neededWeeks = useMemo(() => [...new Set(scrollDays.map(d => d.weekNumber))], [scrollDays]);
   const loadMoreFuture = useCallback(() => setWeeksAhead(prev => prev + 4), []);
   const loadMorePast = useCallback(() => setWeeksBack(prev => prev + 4), []);
-  const { multiWeekData: rawMultiWeekData, saveWeekToDb, fetchWeekData } = useMultiWeekData(user, activeFighter, neededWeeks, accessDenied, isBrowserBlocked);
+  const { multiWeekData: rawMultiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate } = useMultiWeekData(user, activeFighter, neededWeeks, accessDenied, isBrowserBlocked);
 
   // Event-session merge (personal + team calendars)
   const { multiWeekData, mergedScheduleData, mergedTeamData } = useEventMerge(
@@ -158,6 +158,7 @@ const App = () => {
     editingDay, editingWeek, expandedDay, setExpandedDay,
     saveToDb, saveWeekToDb, fetchWeekData, showToast,
     setModalOpen, setEditingWeek, setEditingDay, setEditingSession, setAddScreenOpen,
+    seedWeekFromTemplate,
   });
 
   // Scroll orchestration (scroll-to-today, month tracking, initial alignment)
