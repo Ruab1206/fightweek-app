@@ -12,23 +12,60 @@ interface NotesEditorProps {
   isDark: boolean;
 }
 
+/**
+ * Decide what the textarea should show when an external value arrives (#1189).
+ * While the user is editing we keep their in-progress local text — otherwise an
+ * incoming snapshot (which is trimmed) would overwrite the edit, deleting a
+ * trailing space and jumping the cursor to the end. When not editing, the
+ * external value wins (first load, updates from another device).
+ */
+export function nextNoteText(params: { local: string; external: string; isEditing: boolean }): string {
+  return params.isEditing ? params.local : params.external;
+}
+
 export function NotesEditor({ noteKey, getNote, saveNote, isDark }: NotesEditorProps) {
   const savedText = getNote(noteKey);
   const [isOpen, setIsOpen] = useState(false);
   const [text, setText] = useState(savedText);
+  const [isFocused, setIsFocused] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout>>();
+  // Latest values for flushing a pending save on unmount without stale closures.
+  const pending = useRef({ noteKey, text: savedText, dirty: false });
+  pending.current.noteKey = noteKey;
 
-  // Sync when external value changes (e.g. first load)
-  useEffect(() => { setText(savedText); }, [savedText]);
+  // Sync from external value only when the user isn't actively editing (#1189).
+  useEffect(() => {
+    const next = nextNoteText({ local: text, external: savedText, isEditing: isFocused });
+    if (next !== text) setText(next);
+    if (!isFocused) { pending.current.text = savedText; pending.current.dirty = false; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedText, isFocused]);
 
   const handleChange = (val: string) => {
     setText(val);
+    pending.current.text = val;
+    pending.current.dirty = true;
     clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => { saveNote(noteKey, val); }, 800);
+    debounce.current = setTimeout(() => {
+      saveNote(noteKey, val);
+      pending.current.dirty = false;
+    }, 800);
   };
 
-  // Flush on unmount
-  useEffect(() => () => clearTimeout(debounce.current), []);
+  const handleBlur = () => {
+    setIsFocused(false);
+    clearTimeout(debounce.current);
+    if (pending.current.dirty) {
+      saveNote(noteKey, text);
+      pending.current.dirty = false;
+    }
+  };
+
+  // Flush any pending change on unmount (e.g. parent sheet closes mid-edit).
+  useEffect(() => () => {
+    clearTimeout(debounce.current);
+    if (pending.current.dirty) saveNote(pending.current.noteKey, pending.current.text);
+  }, [saveNote]);
 
   const hasNote = !!savedText;
 
@@ -51,6 +88,8 @@ export function NotesEditor({ noteKey, getNote, saveNote, isDark }: NotesEditorP
       <textarea
         value={text}
         onChange={e => handleChange(e.target.value)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={handleBlur}
         rows={3}
         className={`w-full px-3 py-2 rounded-lg border text-sm resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 ${isDark ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-surface-border text-ds-text placeholder-slate-400'}`}
         placeholder="Skriv noter til denne aktivitet..."
