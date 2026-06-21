@@ -5,12 +5,13 @@
  * Falls back to hardcoded constants if the config doc hasn't loaded yet.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { doc, onSnapshot, setDoc, collection, getDocs, writeBatch, deleteDoc as firestoreDeleteDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { PUBLIC_DATA_PATH } from '../config/constants';
 import {
   USER_MAPPING as HARDCODED_USER_MAPPING,
   FIGHTERS as HARDCODED_FIGHTERS,
+  EMAIL_FOR_NAME as HARDCODED_EMAIL_FOR_NAME,
 } from '../config/constants';
 
 const CONFIG_DOC_PATH = `${PUBLIC_DATA_PATH}/config/roles`;
@@ -42,6 +43,13 @@ function configToFighters(config: RolesConfig): string[] {
     .map(([, name]) => name);
 }
 
+/** Invert the members map (email → name) into a display-name → email path key map (#1191). */
+function configToEmailForName(config: RolesConfig): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const [email, name] of Object.entries(config.members)) map[name] = email;
+  return map;
+}
+
 export function useRolesConfig() {
   const [config, setConfig] = useState<RolesConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,6 +70,7 @@ export function useRolesConfig() {
 
   const userMapping: UserMapping = config ? configToMapping(config) : HARDCODED_USER_MAPPING;
   const fighters: string[] = config ? configToFighters(config) : HARDCODED_FIGHTERS;
+  const emailForName: Record<string, string> = config ? configToEmailForName(config) : HARDCODED_EMAIL_FOR_NAME;
   const allMembers: string[] = config ? Object.values(config.members) : [...HARDCODED_FIGHTERS, 'Frodi', 'Rune'];
 
   const addMember = useCallback(async (email: string, name: string, role: UserRole) => {
@@ -98,22 +107,11 @@ export function useRolesConfig() {
     const lower = email.toLowerCase();
     const oldName = config.members[lower];
     if (!oldName || oldName === newName) return;
-    // 1. Update config doc
+    // #1191: schedule data is keyed by EMAIL, so a rename is purely a display
+    // change — only the config doc needs updating. No data migration required.
     const updated = { ...config };
     updated.members = { ...updated.members, [lower]: newName };
     await setDoc(doc(db, CONFIG_DOC_PATH), updated);
-    // 2. Migrate Firestore schedule data: copy old → new, delete old
-    const ROOT = 'artifacts/production/users';
-    const oldWeeksRef = collection(db, ROOT, oldName, 'weeks');
-    const snap = await getDocs(oldWeeksRef);
-    if (!snap.empty) {
-      const batch = writeBatch(db);
-      snap.docs.forEach(d => {
-        batch.set(doc(db, ROOT, newName, 'weeks', d.id), d.data());
-        batch.delete(d.ref);
-      });
-      await batch.commit();
-    }
   }, [config]);
 
   const updateRole = useCallback(async (email: string, newRole: UserRole) => {
@@ -134,6 +132,7 @@ export function useRolesConfig() {
     loading,
     userMapping,
     fighters,
+    emailForName,
     allMembers,
     addMember,
     removeMember,

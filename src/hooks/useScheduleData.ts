@@ -3,7 +3,7 @@ import { doc, setDoc, getDoc, onSnapshot, type Unsubscribe, type DocumentData } 
 import type { User } from 'firebase/auth';
 
 import { db } from '../config/firebase';
-import { FIGHTERS as DEFAULT_FIGHTERS, ROOT_COLLECTION } from '../config/constants';
+import { FIGHTERS as DEFAULT_FIGHTERS, ROOT_COLLECTION, resolveFighterKey } from '../config/constants';
 import { getISOWeek } from '../utils/dateUtils';
 
 /** Strip virtual event sessions before persisting (events are merged at render time by useEventMerge). */
@@ -43,11 +43,22 @@ interface ScheduleDataParams {
   accessDenied: boolean;
   isBrowserBlocked: boolean;
   fighters?: string[];
+  emailForName?: Record<string, string>;
 }
 
-export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked, fighters }: ScheduleDataParams) {
+export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked, fighters, emailForName }: ScheduleDataParams) {
   const fightersKey = fighters ? fighters.join(',') : '';
   const FIGHTERS = useMemo(() => fighters || DEFAULT_FIGHTERS, [fightersKey]);
+  const emailMap = useMemo(() => emailForName || {}, [emailForName]);
+  // #1191: per-user data is keyed by email in Firestore; resolve the active
+  // fighter's display name to their email path key (falls back to the name).
+  const activeKey = resolveFighterKey(activeFighter, emailMap);
+  // Stable, value-based signature of the team's name→key resolution so the sync
+  // effect re-subscribes to the email paths once the roles config loads.
+  const teamKeysSig = useMemo(
+    () => FIGHTERS.map(f => `${f}:${resolveFighterKey(f, emailMap)}`).join(','),
+    [FIGHTERS, emailMap]
+  );
   const [systemWeek] = useState(getISOWeek());
   const [currentWeek, setCurrentWeek] = useState(getISOWeek());
   const [scheduleData, setScheduleData] = useState<DocumentData>({});
@@ -59,7 +70,7 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
     if (!user || accessDenied || isBrowserBlocked) return;
     const docId = `week_${currentWeek}`;
 
-    const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'weeks', docId);
+    const docRef = doc(db, ROOT_COLLECTION, activeKey, 'weeks', docId);
     const unsubPersonal = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -74,7 +85,7 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
         // canonical (recurrence-filtered) doc, and this onSnapshot then converges to it.
         setScheduleData({});
         setLastUpdated(null);
-        const stdRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
+        const stdRef = doc(db, ROOT_COLLECTION, activeKey, 'templates', 'standard');
         getDoc(stdRef).then(snap => {
           if (snap.exists()) {
             const data = { ...snap.data(), lastUpdated: new Date().toISOString() };
@@ -96,7 +107,8 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
 
     const unsubsTeam: Unsubscribe[] = [];
     FIGHTERS.forEach(fighter => {
-      const fRef = doc(db, ROOT_COLLECTION, fighter, 'weeks', docId);
+      const fighterKey = resolveFighterKey(fighter, emailMap);
+      const fRef = doc(db, ROOT_COLLECTION, fighterKey, 'weeks', docId);
       const unsub = onSnapshot(fRef, (snap) => {
         if (snap.exists()) setTeamData(prev => ({ ...prev, [fighter]: snap.data() }));
         else setTeamData(prev => ({ ...prev, [fighter]: {} }));
@@ -104,11 +116,12 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
       unsubsTeam.push(unsub);
     });
     return () => { unsubPersonal(); unsubsTeam.forEach(u => u()); };
-  }, [user, activeFighter, currentWeek, accessDenied, isBrowserBlocked, FIGHTERS]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, activeKey, currentWeek, accessDenied, isBrowserBlocked, FIGHTERS, teamKeysSig]);
 
   const saveToDb = async (newData: DocumentData) => {
     const clean = stripEvents(newData);
-    const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'weeks', `week_${currentWeek}`);
+    const docRef = doc(db, ROOT_COLLECTION, activeKey, 'weeks', `week_${currentWeek}`);
     clean.lastUpdated = new Date().toISOString();
     await setDoc(docRef, clean);
   };
@@ -127,7 +140,7 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
  */
 export function useMultiWeekData(
   user: User | null,
-  activeFighter: string,
+  fighterKey: string,
   weekNumbers: number[],
   accessDenied: boolean,
   isBrowserBlocked: boolean,
@@ -146,7 +159,7 @@ export function useMultiWeekData(
     }
 
     for (const weekNum of weekNumbers) {
-      const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'weeks', `week_${weekNum}`);
+      const docRef = doc(db, ROOT_COLLECTION, fighterKey, 'weeks', `week_${weekNum}`);
       const unsub = onSnapshot(docRef, async (snap) => {
         if (snap.exists()) {
           setMultiWeekData(prev => ({ ...prev, [weekNum]: snap.data() }));
@@ -154,7 +167,7 @@ export function useMultiWeekData(
           // Auto-feed from program template for current/future weeks
           const systemWeek = getISOWeek();
           if (weekNum >= systemWeek) {
-            const stdRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
+            const stdRef = doc(db, ROOT_COLLECTION, fighterKey, 'templates', 'standard');
             const stdSnap = await getDoc(stdRef);
             if (stdSnap.exists()) {
               const data = filterTemplateForWeek(stdSnap.data(), weekNum);
@@ -172,14 +185,14 @@ export function useMultiWeekData(
     }
 
     return () => { unsubs.current.forEach(u => u()); unsubs.current = []; };
-  }, [user, activeFighter, weekNumbers.join(','), accessDenied, isBrowserBlocked]);
+  }, [user, fighterKey, weekNumbers.join(','), accessDenied, isBrowserBlocked]);
 
   const saveWeekToDb = useCallback(async (weekNum: number, newData: DocumentData) => {
     const clean = stripEvents(newData);
-    const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'weeks', `week_${weekNum}`);
+    const docRef = doc(db, ROOT_COLLECTION, fighterKey, 'weeks', `week_${weekNum}`);
     clean.lastUpdated = new Date().toISOString();
     await setDoc(docRef, clean);
-  }, [activeFighter]);
+  }, [fighterKey]);
 
   /**
    * Read a single week document straight from Firestore (A3 / #1187).
@@ -188,10 +201,10 @@ export function useMultiWeekData(
    * Returns the stored data, or null if the document does not exist.
    */
   const fetchWeekData = useCallback(async (weekNum: number): Promise<DocumentData | null> => {
-    const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'weeks', `week_${weekNum}`);
+    const docRef = doc(db, ROOT_COLLECTION, fighterKey, 'weeks', `week_${weekNum}`);
     const snap = await getDoc(docRef);
     return snap.exists() ? snap.data() : null;
-  }, [activeFighter]);
+  }, [fighterKey]);
 
   /**
    * Build (but don't persist) the recurrence-filtered standard-week template for a
@@ -200,11 +213,11 @@ export function useMultiWeekData(
    * Returns null when the fighter has no template.
    */
   const seedWeekFromTemplate = useCallback(async (weekNum: number): Promise<DocumentData | null> => {
-    const stdRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
+    const stdRef = doc(db, ROOT_COLLECTION, fighterKey, 'templates', 'standard');
     const stdSnap = await getDoc(stdRef);
     if (!stdSnap.exists()) return null;
     return filterTemplateForWeek(stdSnap.data(), weekNum);
-  }, [activeFighter]);
+  }, [fighterKey]);
 
   return { multiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate };
 }
@@ -220,9 +233,16 @@ export function useMultiWeekTeamData(
   weekNumbers: number[],
   accessDenied: boolean,
   isBrowserBlocked: boolean,
+  emailForName?: Record<string, string>,
 ) {
   const [friendWeekData, setFriendWeekData] = useState<Record<string, Record<number, DocumentData>>>({});
   const unsubs = useRef<Unsubscribe[]>([]);
+  const emailMap = useMemo(() => emailForName || {}, [emailForName]);
+  // Stable signature so the effect re-subscribes to email paths once config loads.
+  const friendKeysSig = useMemo(
+    () => visibleFriends.map(f => `${f}:${resolveFighterKey(f, emailMap)}`).join(','),
+    [visibleFriends, emailMap]
+  );
 
   useEffect(() => {
     unsubs.current.forEach(u => u());
@@ -234,8 +254,9 @@ export function useMultiWeekTeamData(
     }
 
     for (const fighter of visibleFriends) {
+      const fighterKey = resolveFighterKey(fighter, emailMap);
       for (const weekNum of weekNumbers) {
-        const docRef = doc(db, ROOT_COLLECTION, fighter, 'weeks', `week_${weekNum}`);
+        const docRef = doc(db, ROOT_COLLECTION, fighterKey, 'weeks', `week_${weekNum}`);
         const unsub = onSnapshot(docRef, (snap) => {
           const data = snap.exists() ? snap.data() : {};
           setFriendWeekData(prev => ({
@@ -248,7 +269,8 @@ export function useMultiWeekTeamData(
     }
 
     return () => { unsubs.current.forEach(u => u()); unsubs.current = []; };
-  }, [user, visibleFriends.join(','), weekNumbers.join(','), accessDenied, isBrowserBlocked]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, friendKeysSig, weekNumbers.join(','), accessDenied, isBrowserBlocked]);
 
   return { friendWeekData };
 }

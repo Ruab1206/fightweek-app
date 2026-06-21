@@ -41,16 +41,23 @@ service cloud.firestore {
     }
 
     // ─── Per-user schedule data ───
-    // Path: artifacts/production/users/{fighterName}/...
+    // ─── Per-user schedule data ───
+    // Path: artifacts/production/users/{userKey}/...
+    //
+    // #1191: data is migrating from name-keyed to EMAIL-keyed paths. During the
+    // transition a fighter may legitimately own a doc keyed by either their
+    // display name OR their email, so writes are allowed for both. Once the app
+    // and data are fully on email paths, the name branch can be removed.
     //
     // Team members can READ all fighters (needed for team view).
     // Only the fighter themselves or admin/coach can WRITE.
-    match /artifacts/production/users/{fighterName}/{document=**} {
+    match /artifacts/production/users/{userKey}/{document=**} {
       allow read: if isTeamMember();
 
       allow write: if isAdminOrCoach();
       allow write: if isAuthenticated()
-        && fighterNameForEmail(request.auth.token.email) == fighterName;
+        && (fighterNameForEmail(request.auth.token.email) == userKey
+            || request.auth.token.email == userKey);
     }
 
     // ─── Public catalogue & gyms ───

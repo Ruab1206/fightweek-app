@@ -10,7 +10,7 @@ import {
   Search, Menu, ArrowLeft,
 } from 'lucide-react';
 
-import { DAYS } from './config/constants';
+import { DAYS, resolveFighterKey } from './config/constants';
 import { useRolesConfig } from './hooks/useRolesConfig';
 import { getDateForWeekDay, getWeekDateMap, getTodayDayName, getFullWeekDateMap, getDaysInRange, getISOWeekForDate } from './utils/dateUtils';
 
@@ -47,7 +47,7 @@ import type { AddType } from './components/AddScreen';
 
 const App = () => {
   // --- Hooks ---
-  const { userMapping: USER_MAPPING, fighters: FIGHTERS } = useRolesConfig();
+  const { userMapping: USER_MAPPING, fighters: FIGHTERS, emailForName } = useRolesConfig();
   const {
     user, authLoading, accessDenied, loginError,
     isBrowserBlocked,
@@ -56,18 +56,23 @@ const App = () => {
     triggerLoginPopup, triggerLoginRedirect, handleLogout,
   } = useAuth(USER_MAPPING);
 
+  // #1191: schedule data is keyed by email (a stable id) in Firestore. Resolve the
+  // active fighter's display name to their email path key for all data hooks; the
+  // UI/merge layer keeps using the display name.
+  const activeFighterKey = useMemo(() => resolveFighterKey(activeFighter, emailForName), [activeFighter, emailForName]);
+
   const {
     systemWeek, currentWeek, setCurrentWeek,
     scheduleData, setScheduleData,
     teamData,
     saveToDb,
-  } = useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked, fighters: FIGHTERS });
+  } = useScheduleData({ user, activeFighter, accessDenied, isBrowserBlocked, fighters: FIGHTERS, emailForName });
 
   const { toast, showToast, hideToast } = useToast();
   const { isDark, toggleTheme } = useTheme();
   const { classes: catalogueClasses, loading: catalogueLoading } = useCatalogue();
   const { events: allEvents } = useEvents();
-  const { getNote, saveNote } = useActivityNotes(activeFighter);
+  const { getNote, saveNote } = useActivityNotes(activeFighterKey);
 
   // --- Refs & scroll-to-today (must be before early returns) ---
   const todayRef = useRef<HTMLDivElement | null>(null);
@@ -80,7 +85,7 @@ const App = () => {
   const neededWeeks = useMemo(() => [...new Set(scrollDays.map(d => d.weekNumber))], [scrollDays]);
   const loadMoreFuture = useCallback(() => setWeeksAhead(prev => prev + 4), []);
   const loadMorePast = useCallback(() => setWeeksBack(prev => prev + 4), []);
-  const { multiWeekData: rawMultiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate } = useMultiWeekData(user, activeFighter, neededWeeks, accessDenied, isBrowserBlocked);
+  const { multiWeekData: rawMultiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate } = useMultiWeekData(user, activeFighterKey, neededWeeks, accessDenied, isBrowserBlocked);
 
   // Event-session merge (personal + team calendars)
   const { multiWeekData, mergedScheduleData, mergedTeamData } = useEventMerge(
@@ -113,7 +118,7 @@ const App = () => {
   const [editingFravær, setEditingFravær] = useState<{ groupId: string; titel: string; beskrivelse: string; startDate: string; startTime: string; endDate: string; endTime: string } | null>(null);
   const [fabSheetOpen, setFabSheetOpen] = useState(false);
   const [classInfoSession, setClassInfoSession] = useState<{ cls: CatalogueClass; session: any; day: string; weekNum: number } | null>(null);
-  const { friendWeekData } = useMultiWeekTeamData(user, visibleFriends, neededWeeks, accessDenied, isBrowserBlocked);
+  const { friendWeekData } = useMultiWeekTeamData(user, visibleFriends, neededWeeks, accessDenied, isBrowserBlocked, emailForName);
 
   const toggleFriend = useCallback((name: string) => {
     setVisibleFriends(prev => prev.includes(name) ? prev.filter(f => f !== name) : [...prev, name]);

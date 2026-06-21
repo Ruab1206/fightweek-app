@@ -31,6 +31,24 @@ export const USER_MAPPING: Record<string, { name: string; role: 'fighter' | 'coa
 
 export const FIGHTERS = ['Caroline', 'Chris', 'San', 'Enea', 'Anton', 'Jonas', 'Karl', 'Frode'];
 
+// #1191: fallback display-name → email-path-key map, derived from USER_MAPPING,
+// used only until the live roles config loads. Per-user schedule data is keyed by
+// EMAIL in Firestore (a stable id), so renaming a fighter never moves their data.
+export const EMAIL_FOR_NAME: Record<string, string> = Object.fromEntries(
+  Object.entries(USER_MAPPING).map(([email, { name }]) => [name, email])
+);
+
+/**
+ * Resolve a fighter's display name to their Firestore path key (#1191).
+ * The key is the fighter's email; if unknown (e.g. config not yet loaded, or a
+ * member with no email mapping) we fall back to the name so reads still resolve
+ * against the legacy name-keyed docs that are kept until cleanup.
+ */
+export function resolveFighterKey(name: string, emailForName: Record<string, string>): string {
+  return emailForName[name] || name;
+}
+
+
 // Shared day-of-week mapping (ISO: 1=Monday … 7=Sunday)
 export const DAY_NAMES: Record<number, string> = { 1: 'Mandag', 2: 'Tirsdag', 3: 'Onsdag', 4: 'Torsdag', 5: 'Fredag', 6: 'Lørdag', 7: 'Søndag' };
 
