@@ -92,6 +92,8 @@ We use **semantic versioning lite** with an outcome name:
 | 1.7 — Events | Team can discover, sign up for, and track events like tournaments and seminars | Apr 2026 |
 | 1.8 — Robustness | Code quality, test coverage, centralized save logic, iOS scroll fixes, recurring session management | Apr 2026 |
 | 1.9 — Roles & Security | Dynamic role management from Firestore, security rules without code deploy, admin UI for team members | Apr 2026 |
+| 1.10 — Stabilisation | The weekly schedule is trustworthy — recurring sessions, past-week edits, and notes behave predictably; recurring-session corruption fixed at the root | Jun 2026 |
+| 1.11 — Resilience | The app survives mistakes (error boundary) and gains a rename-proof, email-keyed data foundation for public profiles | Jun 2026 |
 
 ---
 

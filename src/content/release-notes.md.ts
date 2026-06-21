@@ -5,6 +5,78 @@ export const RELEASE_NOTES = `# Release Notes
 > Releases follow the \`1.x — Outcome Name\` convention. See the Team Charter for how we plan releases using the story map.
 
 ---
+## 1.11 — Resilience
+*June 2026*
+
+**Outcome:** The app survives mistakes (a crash in one area no longer takes down the whole screen) and gains a rename-proof data foundation that public fighter profiles can build on.
+
+### What changed
+
+**Notes on activities (#1171)**
+- Fighters can attach a free-text note to any training session or event — goals, focus, or learnings
+- Notes live per-fighter and persist across devices in real time
+
+**Auto-growing notes field (#1173)**
+- The note box now expands to fit its content as you type (Google-Calendar style), instead of staying a fixed-size box
+- Grows up to a max height, then scrolls — so a long note never pushes the rest of the screen away
+
+**Error boundary around the admin area (#1190)**
+- A render crash inside the admin area (e.g. a missing import) now shows a recoverable fallback with Retry/Close instead of a silent black screen
+- New reusable \\\`ErrorBoundary\\\` component in \\\`components/shared/\\\`
+
+**Email-based data paths (#1191)**
+- Schedule data is now keyed by a fighter's email (a stable id) instead of their display name — \\\`users/{email}/weeks/*\\\`
+- Renaming a fighter is now a pure config change: no data migration, links never break
+- Non-destructive migration copied all existing data (445 docs) to the new paths; team view still shows names, resolved from the roles config
+- Transitional security rules accept both keys during the soak; tightening to email-only is tracked for a later cleanup release
+
+**useRef stabilisation pattern in the DoD (#1192)**
+- The team's Definition of Done now includes item #16: stabilise objects/callbacks passed to hooks (\\\`useRef\\\`/\\\`useMemo\\\`/\\\`useCallback\\\`) and prune stale keys from accumulated state — capturing the lessons from the \\\`activeFighter\\\` reset and stale \\\`teamData\\\` bugs
+
+### Bug fixes
+- Removed Chris from the hardcoded fallback (deleted member, no schedule data)
+
+### Retro learnings
+- **Keep:** \`expand → migrate → contract\` for data migrations — migrate + run code against new paths first, defer destructive cleanup until it has soaked in prod.
+- **Keep:** Pure helper extraction (\`resolveFighterKey\`) keeps migrations unit-testable.
+- **Lesson:** A done release stays closed — soak-then-cleanup follow-ups belong in a later release (1.13), not reopened into the shipped one.
+
+---
+## 1.10 — Stabilisation
+*June 2026*
+
+**Outcome:** The weekly schedule is trustworthy — recurring sessions, past-week edits, and training notes behave predictably, and the data corruption behind the recurring-session bugs is fixed at the root.
+
+### What changed
+
+**Notes on historic trainings (#1177)**
+- Fighters can add and read notes on past training sessions, not just upcoming ones
+
+**Cancel a single recurring session (#1179)**
+- A single occurrence of a recurring training can be cancelled without affecting the rest of the series
+
+**Edit past weeks (#1180, #1184)**
+- Previous weeks and their sessions/events can be edited again, with the right week fetched before saving so an existing week is never overwritten with empty data
+
+**Recurrency bug fixed (#1183)**
+- Fixed two distinct bugs: edits/cancellations of an existing recurring instance were discarded (every save was routed through "add recurring"), and never-ending series silently stopped at the loaded scroll-window edge
+- Recurring sessions now extend across a full one-year horizon; delete-this-and-future walks the same horizon, reading unloaded weeks from the database
+
+**Root-cause stabilisation (A1–A4)**
+- **#1185** — Sessions get collision-safe, stable IDs (\\\`crypto.randomUUID()\\\`) that never change on edit or week auto-fill, so training logs stay attached to the right session
+- **#1186** — Only one hook hydrates and writes a missing week document; the other is read-only, removing the double-write race that produced divergent sessions
+- **#1187** — Editing a past or not-yet-loaded week first fetches the real document; an existing week is never overwritten with empty data
+- **#1188** — Deleting a session with a log note preserves the note as history; athlete-entered data is never silently lost
+
+**Notes saving bug fixed (#1189)**
+- Fixed the notes field deleting a trailing space and jumping the cursor to the end while typing (a save round-trip overwrote the in-progress edit); edits now flush correctly on blur and unmount
+
+### Retro learnings
+- **Keep:** Extracting decision logic into pure, unit-tested helpers (\`computeRecurringWeeks\`, \`computeDeleteFutureWeeks\`, \`nextNoteText\`) — bugs became reproducible tests.
+- **Lesson:** "Stops after a few weeks" was a *loaded-window* artefact, not a recurrence-rule bug — operations that span the future must walk a real horizon, not just what's currently scrolled into memory.
+- **Lesson:** A single reported symptom (#1169) can hide several root causes; splitting it into A1–A4 made each fix verifiable.
+
+---
 ## 1.9 — Roles & Security
 *April 2026*
 
