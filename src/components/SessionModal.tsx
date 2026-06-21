@@ -9,6 +9,20 @@ import { sessionNoteKey } from '../hooks/useActivityNotes';
 
 import { RECURRENCE_OPTIONS } from '../config/constants';
 
+/**
+ * Decide whether saving the session should (re)apply a recurring series
+ * (handleAddRecurring) vs. just update this single instance (handleSaveSession).
+ *
+ * #1183: existing recurring instances default `interval` to 1 for display, so
+ * routing on `interval > 0` alone made every edit (incl. cancelling one instance)
+ * rebuild the series and discard the change. Only apply recurrence for a NEW
+ * session, or when the user explicitly changed the recurrence selector.
+ */
+export function shouldApplyRecurrence(params: { interval: number; isNew: boolean; recurrenceTouched: boolean }): boolean {
+  const { interval, isNew, recurrenceTouched } = params;
+  return interval > 0 && (isNew || recurrenceTouched);
+}
+
 interface SessionForm {
     id?: string;
     name: string;
@@ -45,6 +59,12 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
         name: '', category: 'MMA', start: '17:00', end: '18:30', location: '', status: 'active', cancellationReason: '', cancellationTime: null
     });
     const [recurrenceInterval, setRecurrenceInterval] = useState(0);
+    // #1183: was the recurrence selector actually changed by the user this session?
+    // Existing recurring instances default recurrenceInterval to 1 for display, but
+    // editing/cancelling a single instance must NOT re-run handleAddRecurring (which
+    // would discard the change and rebuild the series). Only (re)apply recurrence when
+    // it's a new session or the user explicitly touched the Gentagelse selector.
+    const [recurrenceTouched, setRecurrenceTouched] = useState(false);
     const [endType, setEndType] = useState<'never' | 'date'>('never');
     const [endDate, setEndDate] = useState('');
     const [showDeleteOptions, setShowDeleteOptions] = useState(false);
@@ -82,7 +102,7 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
     const inputCls = `w-full px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-surface-border text-ds-text'}`;
 
     const handleSave = () => {
-        if (recurrenceInterval > 0) {
+        if (shouldApplyRecurrence({ interval: recurrenceInterval, isNew, recurrenceTouched })) {
             onRecurrenceSave(form, day, date, {
                 interval: recurrenceInterval,
                 endDate: endType === 'date' && endDate ? endDate : null,
@@ -161,7 +181,7 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                     <div className={`px-5 py-3 border-t space-y-3 ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
                         <div>
                             <label className={labelCls}>Gentagelse</label>
-                            <select value={recurrenceInterval} onChange={e => setRecurrenceInterval(Number(e.target.value))} className={inputCls}>
+                            <select value={recurrenceInterval} onChange={e => { setRecurrenceInterval(Number(e.target.value)); setRecurrenceTouched(true); }} className={inputCls}>
                                 {RECURRENCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                         </div>
