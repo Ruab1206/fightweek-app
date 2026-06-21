@@ -13,7 +13,7 @@ describe('resolveFighterKey (#1191)', () => {
   });
 
   it('falls back to the name when there is no email mapping', () => {
-    expect(resolveFighterKey('Chris', emailForName)).toBe('Chris');
+    expect(resolveFighterKey('Unmapped', emailForName)).toBe('Unmapped');
   });
 
   it('falls back to the name when the map is empty (config not yet loaded)', () => {
