@@ -62,6 +62,13 @@ We follow a release-based cadence. Every release goes through four phases:
 - Evaluate AI collaboration
 - Update documentation with learnings and process changes
 
+**Conversation start (Daily Standup)**
+- Runs at the beginning of every working session, in a fresh context window.
+- **Re-read context** — the AI reads the roadmap and any session handoff note before doing anything else, so it knows where we left off.
+- **Summarise the standup three** — what shipped last, the current release/backlog state, and what's next.
+- **Surface blockers** — call out anything pending PO verification, deferred, or at risk.
+- **Confirm this session's goal** — agree what we're doing before any work starts. For a planning session specifically, read the handoff brief and walk the story map (per the "Start ceremonies in a fresh session" agreement).
+
 ---
 
 ## Release Naming Convention
