@@ -29,9 +29,21 @@ export function NotesEditor({ noteKey, getNote, saveNote, isDark }: NotesEditorP
   const [text, setText] = useState(savedText);
   const [isFocused, setIsFocused] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout>>();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Latest values for flushing a pending save on unmount without stale closures.
   const pending = useRef({ noteKey, text: savedText, dirty: false });
   pending.current.noteKey = noteKey;
+
+  // Grow the textarea to fit its content (Google-Calendar style, #1173), capped
+  // at a max height after which it scrolls. Runs after the value changes.
+  const MAX_HEIGHT = 320;
+  const autoGrow = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`;
+    el.style.overflowY = el.scrollHeight > MAX_HEIGHT ? 'auto' : 'hidden';
+  };
 
   // Sync from external value only when the user isn't actively editing (#1189).
   useEffect(() => {
@@ -40,6 +52,11 @@ export function NotesEditor({ noteKey, getNote, saveNote, isDark }: NotesEditorP
     if (!isFocused) { pending.current.text = savedText; pending.current.dirty = false; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedText, isFocused]);
+
+  // Re-fit the height whenever the value changes or the editor opens.
+  useEffect(() => {
+    if (isOpen) autoGrow();
+  }, [text, isOpen]);
 
   const handleChange = (val: string) => {
     setText(val);
@@ -86,6 +103,7 @@ export function NotesEditor({ noteKey, getNote, saveNote, isDark }: NotesEditorP
         <FileText className="w-3.5 h-3.5" /> Skjul noter
       </button>
       <textarea
+        ref={textareaRef}
         value={text}
         onChange={e => handleChange(e.target.value)}
         onFocus={() => setIsFocused(true)}
