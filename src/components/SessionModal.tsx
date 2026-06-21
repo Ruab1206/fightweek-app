@@ -48,6 +48,10 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
     const [endType, setEndType] = useState<'never' | 'date'>('never');
     const [endDate, setEndDate] = useState('');
     const [showDeleteOptions, setShowDeleteOptions] = useState(false);
+    // A4 (#1188): when deleting a session that has a training-log note, confirm first
+    // so a logged session isn't silently removed. The note itself is preserved
+    // (handleDeleteSession never deletes it); surfacing/recovering it is tracked in #1164.
+    const [confirmNoteDelete, setConfirmNoteDelete] = useState(false);
 
     useEffect(() => {
         if (initialData) {
@@ -216,9 +220,27 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
 
                 {/* Footer */}
                 {showDeleteOptions ? (
+                    confirmNoteDelete ? (
+                        <div className={`px-5 py-3 border-t space-y-1.5 shrink-0 ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
+                            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-slate-200' : 'text-ds-text'}`}>Denne træning har en træningslog (note).</p>
+                            <p className={`text-xs mb-2 ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>Vil du slette træningen alligevel? Noten bevares.</p>
+                            <button onClick={() => { onDelete(form.id!); }}
+                                className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-red-400 hover:bg-red-900/20' : 'text-red-600 hover:bg-red-50'}`}>
+                                Slet alligevel
+                            </button>
+                            <button onClick={() => { setConfirmNoteDelete(false); setShowDeleteOptions(false); }}
+                                className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-ds-text-subtle hover:bg-surface-hover'}`}>
+                                Behold træning
+                            </button>
+                        </div>
+                    ) : (
                     <div className={`px-5 py-3 border-t space-y-1.5 shrink-0 ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
                         <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Slet træning</p>
-                        <button onClick={() => { onDelete(form.id!); }}
+                        <button onClick={() => {
+                            const hasNote = !!getNote(sessionNoteKey(date.toISOString().slice(0, 10), form.id || `${form.name}_${form.start}`)).trim();
+                            if (hasNote) setConfirmNoteDelete(true);
+                            else onDelete(form.id!);
+                        }}
                             className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-red-400 hover:bg-red-900/20' : 'text-red-600 hover:bg-red-50'}`}>
                             Denne træning
                         </button>
@@ -233,6 +255,7 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                             Annuller
                         </button>
                     </div>
+                    )
                 ) : (
                     <div className={`px-5 py-4 border-t flex justify-between items-center shrink-0 ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
                         {!isNew ? (

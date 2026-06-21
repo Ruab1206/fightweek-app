@@ -80,7 +80,7 @@ const App = () => {
   const neededWeeks = useMemo(() => [...new Set(scrollDays.map(d => d.weekNumber))], [scrollDays]);
   const loadMoreFuture = useCallback(() => setWeeksAhead(prev => prev + 4), []);
   const loadMorePast = useCallback(() => setWeeksBack(prev => prev + 4), []);
-  const { multiWeekData: rawMultiWeekData, saveWeekToDb } = useMultiWeekData(user, activeFighter, neededWeeks, accessDenied, isBrowserBlocked);
+  const { multiWeekData: rawMultiWeekData, saveWeekToDb, fetchWeekData } = useMultiWeekData(user, activeFighter, neededWeeks, accessDenied, isBrowserBlocked);
 
   // Event-session merge (personal + team calendars)
   const { multiWeekData, mergedScheduleData, mergedTeamData } = useEventMerge(
@@ -156,7 +156,7 @@ const App = () => {
   } = useSessionHandlers({
     scheduleData, setScheduleData, multiWeekData, currentWeek, systemWeek,
     editingDay, editingWeek, expandedDay, setExpandedDay,
-    saveToDb, saveWeekToDb, showToast,
+    saveToDb, saveWeekToDb, fetchWeekData, showToast,
     setModalOpen, setEditingWeek, setEditingDay, setEditingSession, setAddScreenOpen,
   });
 
@@ -183,7 +183,12 @@ const App = () => {
   if (!user) return <LoginScreen onLoginPopup={triggerLoginPopup} onLoginRedirect={triggerLoginRedirect} error={loginError} />;
   if (accessDenied) return <div className={`min-h-screen flex items-center justify-center flex-col gap-4 ${isDark ? 'bg-slate-950 text-white' : 'bg-surface-subtle text-ds-text'}`}><span>Ingen adgang</span><button onClick={handleLogout} className={`px-4 py-2 rounded ${isDark ? 'bg-slate-700 text-white' : 'bg-brand-500 text-white'}`}>Log ud</button></div>;
 
-  const isReadOnly = view === 'personal' && currentWeek < systemWeek;
+  const isPastWeek = view === 'personal' && currentWeek < systemWeek;
+  // #1184: past training weeks are now fully editable (open / edit / delete / add).
+  // A3 (#1187) guards the save path so editing an unloaded past week can't wipe it.
+  // We keep a "Tidligere uge / Historik" label (isPastWeek) so the user still knows
+  // they are looking at the past, but no longer lock the UI.
+  const isReadOnly = false;
   const isAdmin = ['admin', 'coach'].includes(USER_MAPPING[user.email.toLowerCase()]?.role);
   const weekDates = getWeekDateMap(currentWeek);
   const fullWeekDates = getFullWeekDateMap(currentWeek);
@@ -374,7 +379,7 @@ const App = () => {
               </div>
               <button onClick={() => setCurrentWeek(currentWeek + 1)} className={`p-2 rounded-lg ${isDark ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-surface-hover text-ds-text-subtle'}`}><ChevronRight className="w-6 h-6" /></button>
             </div>
-            {isReadOnly && (
+            {isPastWeek && (
               <div className="flex items-center px-1">
                 <span className={`flex items-center text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}><History className="w-3 h-3 mr-1" /> Historik</span>
               </div>

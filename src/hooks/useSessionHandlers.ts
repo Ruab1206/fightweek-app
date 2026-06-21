@@ -2,6 +2,40 @@ import { DAYS } from '../config/constants';
 import { getDateForWeekDay, getISOWeekForDate } from '../utils/dateUtils';
 import type { CatalogueAddPayload } from '../components/InlineCataloguePicker';
 
+/**
+ * Generate a stable, collision-resistant session id (A1 / #1185).
+ * Replaces the previous Date.now()-based ids, which could collide when sessions
+ * were created in the same millisecond and changed when a session was removed and
+ * re-added — orphaning its training-log note (keyed by session id). UUIDs are
+ * unique and are never regenerated for an existing session.
+ */
+export function newSessionId(): string {
+  return crypto.randomUUID();
+}
+
+/**
+ * Resolve the source week data to edit (A3 / #1187) — pure & testable.
+ * For an explicitly-edited week, the in-memory copy may be missing simply
+ * because that week isn't currently loaded into multiWeekData. Falling back to
+ * {} would overwrite (wipe) the stored week on save. So when the week isn't in
+ * memory, read the real document from Firestore first. Only a genuinely
+ * non-existent week resolves to {}.
+ */
+export async function resolveWeekSourceData(params: {
+  editingWeek: number | null;
+  weekNum: number;
+  scheduleData: any;
+  multiWeekData: Record<number, any>;
+  fetchWeekData: (week: number) => Promise<any | null>;
+}): Promise<any> {
+  const { editingWeek, weekNum, scheduleData, multiWeekData, fetchWeekData } = params;
+  if (!editingWeek) return scheduleData;
+  const inMemory = multiWeekData[weekNum];
+  if (inMemory !== undefined) return inMemory;
+  const fromDb = await fetchWeekData(weekNum);
+  return fromDb || {};
+}
+
 interface SessionHandlerDeps {
   scheduleData: any;
   setScheduleData: (data: any) => void;
@@ -14,6 +48,7 @@ interface SessionHandlerDeps {
   setExpandedDay: (d: string | null) => void;
   saveToDb: (data: any) => Promise<void>;
   saveWeekToDb: (week: number, data: any) => Promise<void>;
+  fetchWeekData: (week: number) => Promise<any | null>;
   showToast: (msg: string, type: string) => void;
   setModalOpen: (v: boolean) => void;
   setEditingWeek: (v: number | null) => void;
@@ -26,13 +61,16 @@ export function useSessionHandlers({
   scheduleData, setScheduleData,
   multiWeekData, currentWeek, systemWeek,
   editingDay, editingWeek, expandedDay, setExpandedDay,
-  saveToDb, saveWeekToDb, showToast,
+  saveToDb, saveWeekToDb, fetchWeekData, showToast,
   setModalOpen, setEditingWeek, setEditingDay, setEditingSession, setAddScreenOpen,
 }: SessionHandlerDeps) {
 
+  const resolveSourceData = (weekNum: number): Promise<any> =>
+    resolveWeekSourceData({ editingWeek, weekNum, scheduleData, multiWeekData, fetchWeekData });
+
   const handleSaveSession = async (session: any) => {
     const weekNum = editingWeek || currentWeek;
-    const sourceData = editingWeek ? (multiWeekData[weekNum] || {}) : scheduleData;
+    const sourceData = await resolveSourceData(weekNum);
     const newData = structuredClone(sourceData);
     if (!newData[editingDay]) newData[editingDay] = [];
 
@@ -48,7 +86,7 @@ export function useSessionHandlers({
       if (idx > -1) newData[editingDay][idx] = session;
       else newData[editingDay].push(session);
     } else {
-      session.id = Date.now();
+      session.id = newSessionId();
       newData[editingDay].push(session);
     }
     newData[editingDay].sort((a: any, b: any) => a.start.localeCompare(b.start));
@@ -64,7 +102,7 @@ export function useSessionHandlers({
 
   const handleDeleteSession = async (sessionId: any) => {
     const weekNum = editingWeek || currentWeek;
-    const sourceData = editingWeek ? (multiWeekData[weekNum] || {}) : scheduleData;
+    const sourceData = await resolveSourceData(weekNum);
     const newData = structuredClone(sourceData);
     if (newData[editingDay]) {
       newData[editingDay] = newData[editingDay].filter((s: any) => s.id !== sessionId);
@@ -90,7 +128,7 @@ export function useSessionHandlers({
     const sourceData = weekOverride ? (multiWeekData[weekNum] || {}) : scheduleData;
     const newData = structuredClone(sourceData);
     if (!newData[day]) newData[day] = [];
-    const newSession: any = { ...session, id: Date.now(), status: 'active', day };
+    const newSession: any = { ...session, id: newSessionId(), status: 'active', day };
     const sessionDate = getDateForWeekDay(weekNum, day);
     if (sessionDate && session.start) {
       const [h, m] = session.start.split(':').map(Number);
@@ -112,7 +150,7 @@ export function useSessionHandlers({
   const handleAddFromDesktopCatalogue = async (day: string, session: CatalogueAddPayload) => {
     const newData = structuredClone(scheduleData);
     if (!newData[day]) newData[day] = [];
-    const newSession: any = { ...session, id: Date.now(), status: 'active', day };
+    const newSession: any = { ...session, id: newSessionId(), status: 'active', day };
     const sessionDate = getDateForWeekDay(currentWeek, day);
     if (sessionDate && session.start) {
       const [h, m] = session.start.split(':').map(Number);
@@ -173,7 +211,7 @@ export function useSessionHandlers({
         if (existing) {
           if (!existing.isRecurring) { existing.isRecurring = true; await saveWeekToDb(weekNum, newData); }
         } else {
-          const newSession: any = { ...session, id: Date.now() + weekNum, status: 'active', day: dayName, isRecurring: true };
+          const newSession: any = { ...session, id: newSessionId(), status: 'active', day: dayName, isRecurring: true };
           const sessionDate = getDateForWeekDay(weekNum, dayName);
           if (sessionDate && startTime) {
             const [h, m] = startTime.split(':').map(Number);
@@ -230,7 +268,7 @@ export function useSessionHandlers({
       weekChanges[weekNum].push({
         dayName,
         session: {
-          id: Date.now() + count,
+          id: newSessionId(),
           type: 'fravær',
           name: fravær.titel || 'Fravær',
           fraværTitel: fravær.titel,

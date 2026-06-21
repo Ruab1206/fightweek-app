@@ -46,7 +46,12 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
         setScheduleData(data);
         if (data.lastUpdated) setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' }));
       } else if (currentWeek >= systemWeek) {
-        // Auto-feed from program template for current/future weeks
+        // Auto-feed from program template for current/future weeks — DISPLAY ONLY.
+        // A2 / #1186: useMultiWeekData is the single source of truth for *persisting*
+        // a missing week (it applies recurrence filtering). This subscription must not
+        // also write the doc, or the two hooks race and can persist divergent data.
+        // We show the template locally for an instant view; useMultiWeekData saves the
+        // canonical (recurrence-filtered) doc, and this onSnapshot then converges to it.
         setScheduleData({});
         setLastUpdated(null);
         const stdRef = doc(db, ROOT_COLLECTION, activeFighter, 'templates', 'standard');
@@ -55,7 +60,6 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
             const data = { ...snap.data(), lastUpdated: new Date().toISOString() };
             setScheduleData(data);
             setLastUpdated(new Date(data.lastUpdated).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' }));
-            setDoc(docRef, data);
           } else {
             setLastUpdated('Aldrig');
           }
@@ -168,7 +172,19 @@ export function useMultiWeekData(
     await setDoc(docRef, clean);
   }, [activeFighter]);
 
-  return { multiWeekData, saveWeekToDb };
+  /**
+   * Read a single week document straight from Firestore (A3 / #1187).
+   * Used by save/delete handlers to distinguish "week not loaded yet" from
+   * "week is genuinely empty" — so we never overwrite an existing week with {}.
+   * Returns the stored data, or null if the document does not exist.
+   */
+  const fetchWeekData = useCallback(async (weekNum: number): Promise<DocumentData | null> => {
+    const docRef = doc(db, ROOT_COLLECTION, activeFighter, 'weeks', `week_${weekNum}`);
+    const snap = await getDoc(docRef);
+    return snap.exists() ? snap.data() : null;
+  }, [activeFighter]);
+
+  return { multiWeekData, saveWeekToDb, fetchWeekData };
 }
 
 /**

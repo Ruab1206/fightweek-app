@@ -291,6 +291,27 @@ These are explicitly parked. Don't engineer toward them, but don't block them ei
 
 ---
 
+## Platform & Integration Decisions
+
+Conscious decisions about the platforms we build *on*. Recorded so we don't drift into rework or vendor traps by accident.
+
+### Calendar: own the model, integrate at the edge
+
+**Decision (2026-06-05):** We do **not** rebuild FightWeek on top of Google Calendar. The calendar is the *surface* of the app, not the product — the value lives in the Activity annotation underneath (readiness, intensity, W/L/D results, fravær-vs-health, training log). Google Calendar events only store title + time + description and would force us to cram a rich domain model into a string, surrendering our data model and queries to Google.
+
+- **Rejected:** Google Calendar as the backing engine (conflicts with Principles 1, 7, 9; kills the analytics roadmap; adds per-user OAuth complexity).
+- **Accepted as a future thin slice:** a one-way, read-only **iCal (.ics) subscription feed** per fighter so training/events show up in their own Google *or* Apple calendar. No OAuth, low maintenance, keeps our model intact. Tracked as backlog #1181. Two-way sync is explicitly out of scope.
+
+### Data store: Firestore now, revisit when analytics lands
+
+**Decision (2026-06-05):** Firebase/Firestore stays — and was a defensible choice. For a PO + AI pair building a real-time, mobile-first PWA it pulls real weight: live \`onSnapshot\` updates, zero backend to operate, bundled auth that maps directly to *Person = Auth user* (Principle 2), security rules as the authorization layer (Release 1.9), offline persistence, and a free tier that covers a fight team.
+
+- **Known weakness / tripwire:** Firestore is weakest at exactly the workload we will eventually want — joins, aggregations, full-text search, "training volume per fighter per discipline per camp". **When a release goal centers on *analysing* training data, revisit the data store.** Tracked as backlog #1182.
+- **Strongest alternative if we migrate:** Supabase (Postgres + realtime + RLS + auth).
+- **Hedge until then:** keep the domain model clean in \`src/types/\` so app logic isn't over-coupled to Firestore's shape, keeping a future migration tractable. Do **not** migrate pre-emptively.
+
+---
+
 ## How This Document Is Used
 
 | Ceremony | What we do with it |
@@ -307,4 +328,5 @@ These are explicitly parked. Don't engineer toward them, but don't block them ei
 |---------|------|---------|
 | 1.0 | 2026-04-18 | Initial version. Synthesised from PO's conceptual DBML proposal + AI Agent's critical analysis. Key decisions: Activity as universal calendar atom, Person = Auth user, Team independent of Gym, Firestore-native physical model. |
 | 1.1 | 2026-04-19 | Updated for Release 1.9 (Roles & Security). Phase 3 partially complete: config/roles Firestore doc live, dynamic security rules deployed, admin UI built. Person and TeamMember current-state annotations updated. Roles Config added to Firestore path map. Remaining: full Person profile per UID, email-based data keys. |
+| 1.2 | 2026-06-05 | Added "Platform & Integration Decisions" section. Recorded two conscious decisions: (1) do not rebuild on Google Calendar — own the domain model, integrate via a read-only per-fighter iCal feed (backlog #1181); (2) keep Firestore now, with a tripwire to revisit the data store (Supabase/Postgres) when analytics features land (backlog #1182). |
 `;

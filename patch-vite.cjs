@@ -8,7 +8,7 @@ let content = fs.readFileSync(file, 'utf8');
 const oldImport = "import crypto$2, { createHash as createHash$2 } from 'node:crypto';";
 const newImport = [
   "import crypto_orig, { createHash as createHash$2, webcrypto as _wc } from 'node:crypto';",
-  "const crypto$2 = new Proxy(crypto_orig, { get(t, p) { return (_wc && _wc[p]) ? _wc[p] : t[p]; } });"
+  "const crypto$2 = new Proxy(crypto_orig, { get(t, p) { const o = (_wc && _wc[p] !== undefined) ? _wc : t; const v = o[p]; return typeof v === 'function' ? v.bind(o) : v; } });"
 ].join('\n');
 
 if (content.includes(oldImport)) {
