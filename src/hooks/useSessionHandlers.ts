@@ -24,6 +24,26 @@ export function computeRecurringWeeks(params: {
 }
 
 /**
+ * Compute the week range a "delete this and all future" must cover (#1183 follow-up).
+ * Pure & testable. Spans from fromWeek up to whichever is later: the recurrence
+ * horizon (systemWeek + RECURRENCE_HORIZON_WEEKS) or the furthest loaded week.
+ * Using only the loaded scroll window meant future occurrences of a year-long
+ * series survived the delete and could never be removed.
+ */
+export function computeDeleteFutureWeeks(params: {
+  fromWeek: number;
+  systemWeek: number;
+  loadedWeeks: number[];
+}): number[] {
+  const { fromWeek, systemWeek, loadedWeeks } = params;
+  const horizonWeek = systemWeek + RECURRENCE_HORIZON_WEEKS;
+  const lastWeek = Math.max(horizonWeek, fromWeek, ...loadedWeeks);
+  const weeks: number[] = [];
+  for (let w = fromWeek; w <= lastWeek; w++) weeks.push(w);
+  return weeks;
+}
+
+/**
  * Generate a stable, collision-resistant session id (A1 / #1185).
  * Replaces the previous Date.now()-based ids, which could collide when sessions
  * were created in the same millisecond and changed when a session was removed and
@@ -383,12 +403,21 @@ export function useSessionHandlers({
     showToast(`Fravær slettet (${deleted} dag${deleted > 1 ? 'e' : ''})`, 'success');
   };
 
-  // Delete a session in this and all future weeks by name+start match
+  // Delete a session in this and all future weeks by name+start match. Walks to
+  // the same year-ahead horizon as handleAddRecurring (#1183 follow-up): a
+  // recurring series now extends far beyond the loaded scroll window, so deleting
+  // only the loaded weeks left every occurrence past the window edge orphaned and
+  // undeletable. Unloaded weeks are read from Firestore on demand.
   const handleDeleteThisAndFuture = async (dayName: string, name: string, start: string, fromWeek: number) => {
     const nameLC = name.toLowerCase();
-    for (const wk of Object.keys(multiWeekData).map(Number).sort((a, b) => a - b)) {
-      if (wk < fromWeek) continue;
-      const wd = multiWeekData[wk];
+    const targetWeeks = computeDeleteFutureWeeks({
+      fromWeek,
+      systemWeek,
+      loadedWeeks: Object.keys(multiWeekData).map(Number),
+    });
+    for (const wk of targetWeeks) {
+      let wd = multiWeekData[wk];
+      if (wd === undefined) wd = await fetchWeekData(wk);
       if (!wd?.[dayName]) continue;
       const nd = structuredClone(wd);
       const before = nd[dayName].length;
