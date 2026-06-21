@@ -40,6 +40,7 @@ import { useActivityNotes } from './hooks/useActivityNotes';
 import MobileScrollView from './components/MobileScrollView';
 import PersonalSchedule from './components/PersonalSchedule';
 import BacklogPage from './pages/BacklogPage';
+import ErrorBoundary from './components/shared/ErrorBoundary';
 import EventsPage from './pages/EventsPage';
 import type { EventsPageHandle } from './pages/EventsPage';
 import AddScreen from './components/AddScreen';
@@ -609,7 +610,11 @@ const App = () => {
       />}
       {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
       {feedbackContext && <FeedbackModal user={user} currentContext={feedbackContext} onClose={() => setFeedbackContext(null)} onShowToast={showToast} />}
-      {adminOpen && <BacklogPage isAdmin={isAdmin} onClose={() => setAdminOpen(false)} onShowToast={showToast} />}
+      {adminOpen && (
+        <ErrorBoundary isDark={isDark} label="Admin Error" onClose={() => setAdminOpen(false)}>
+          <BacklogPage isAdmin={isAdmin} onClose={() => setAdminOpen(false)} onShowToast={showToast} />
+        </ErrorBoundary>
+      )}
       <Toast message={toast.message} type={toast.type} visible={toast.visible} onClose={hideToast} />
     </div>
   );

@@ -163,6 +163,7 @@ A backlog item is done when:
 13. **Search all callers when removing props** — When a child component's Props interface drops a member, grep for all usages of that prop name in the codebase before considering it done. (Retro 1.3 A4)
 14. **Auth-gate all Firestore hooks** — Any hook using \`onSnapshot\` on auth-protected collections must wait for \`onAuthStateChanged\` before subscribing, and auto-retry on transient errors. Subscribing before auth resolves kills the listener permanently. (Retro 1.7)
 15. **Verify event-session stripping on new save paths** — When adding a new code path that writes week data to Firestore, verify it uses the centralized save wrapper or \`cloneWithoutEvents()\` to prevent virtual event sessions from leaking into persisted data. (Retro 1.7)
+16. **Stabilise object/callback references passed to hooks** — When passing an object, array, or callback into a hook's dependency array (or into a hook that subscribes on it), give it a stable reference with \`useRef\`/\`useMemo\`/\`useCallback\`. A fresh reference every render re-runs the effect — this caused the \`activeFighter\` reset (\`useAuth\` re-subscribed on a new \`externalMapping\` object) and stale \`teamData\` from un-pruned removed members. Also prune stale keys from accumulated state when the source list changes. (Retro 1.11)
 
 ---
 
