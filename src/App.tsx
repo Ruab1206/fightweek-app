@@ -3,11 +3,12 @@
  * Thin orchestrator — all logic lives in hooks / components.
  */
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ChevronDown, ChevronLeft, ChevronRight,
   Plus, X, Calendar, CalendarDays,
   History, LogOut, ClipboardList, MessageSquarePlus, Sun, Moon, Users,
-  Search, Menu, ArrowLeft,
+  Search, Menu, ArrowLeft, UserCircle,
 } from 'lucide-react';
 
 import { DAYS, resolveFighterKey } from './config/constants';
@@ -48,6 +49,7 @@ import type { AddType } from './components/AddScreen';
 
 const App = () => {
   // --- Hooks ---
+  const navigate = useNavigate();
   const { userMapping: USER_MAPPING, fighters: FIGHTERS, emailForName } = useRolesConfig();
   const {
     user, authLoading, accessDenied, loginError,
@@ -295,6 +297,9 @@ const App = () => {
                       <button onClick={() => { toggleTheme(); setMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${isDark ? 'text-slate-300 hover:bg-slate-700' : 'text-ds-text hover:bg-surface-hover'}`}>
                         {isDark ? <Sun className="w-4 h-4 text-yellow-400" /> : <Moon className="w-4 h-4" />}
                         <span className="font-medium">{isDark ? 'Lys tilstand' : 'Mørk tilstand'}</span>
+                      </button>
+                      <button onClick={() => { navigate('/profile'); setMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${isDark ? 'text-slate-300 hover:bg-slate-700' : 'text-ds-text hover:bg-surface-hover'}`}>
+                        <UserCircle className="w-4 h-4" /><span className="font-medium">Profilside</span>
                       </button>
                       <button onClick={() => { setFeedbackContext({ location: 'menu' }); setMenuOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${isDark ? 'text-slate-300 hover:bg-slate-700' : 'text-ds-text hover:bg-surface-hover'}`}>
                         <MessageSquarePlus className="w-4 h-4" /><span className="font-medium">Feedback</span>

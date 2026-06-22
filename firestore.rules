@@ -72,6 +72,20 @@ service cloud.firestore {
       allow write: if isAdminOrCoach();
     }
 
+    // ─── Public fighter profiles (#1196) ───
+    // Path: artifacts/production/public/data/profiles/{emailKey}
+    //
+    // A profile is keyed by the fighter's email (the stable id from #1191).
+    // Public (unauthenticated) readers see ONLY published profiles; team members
+    // can also see unpublished drafts (for editing/preview). Writes are scoped:
+    // admin/coach can edit any profile; a fighter can edit only their own
+    // (the doc key equals their email).
+    match /artifacts/production/public/data/profiles/{emailKey} {
+      allow read: if resource.data.published == true || isTeamMember();
+      allow write: if isAdminOrCoach()
+                   || (isAuthenticated() && request.auth.token.email == emailKey);
+    }
+
     // ─── Events (tournaments, seminars, social) ───
     // Readable by all team members.
     // Admin/coach can create/update/delete events.
