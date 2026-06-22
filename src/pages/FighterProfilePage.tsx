@@ -92,7 +92,7 @@ export default function FighterProfilePage() {
                   <img
                     src={profile.photoUrl}
                     alt={profile.name}
-                    className="w-full aspect-[4/5] sm:aspect-[3/2] object-cover bg-slate-800"
+                    className="w-full aspect-[4/5] sm:aspect-[3/2] object-cover object-top bg-slate-800"
                   />
                 ) : (
                   <div className="w-full aspect-[4/5] sm:aspect-[3/2] bg-slate-800 flex items-center justify-center text-7xl font-bold text-white">
