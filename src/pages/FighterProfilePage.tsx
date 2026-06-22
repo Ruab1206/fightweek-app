@@ -84,28 +84,31 @@ export default function FighterProfilePage() {
 
         {!loading && visible && profile && (
           <article className="space-y-4">
-            {/* Hero: the decision-relevant facts above the fold */}
-            <header className={`rounded-2xl border p-5 ${card}`}>
-              <div className="flex items-start gap-4">
+            {/* Hero: a large portrait makes the first impression for promoters/
+                matchmakers; identity facts sit directly on the photo. */}
+            <header className={`rounded-2xl border overflow-hidden ${card}`}>
+              <div className="relative">
                 {profile.photoUrl ? (
                   <img
                     src={profile.photoUrl}
                     alt={profile.name}
-                    className="w-20 h-20 rounded-xl object-cover bg-slate-700 shrink-0"
+                    className="w-full aspect-[4/5] sm:aspect-[3/2] object-cover bg-slate-800"
                   />
                 ) : (
-                  <div className="w-20 h-20 rounded-xl bg-slate-700 flex items-center justify-center text-2xl font-bold text-white shrink-0">
+                  <div className="w-full aspect-[4/5] sm:aspect-[3/2] bg-slate-800 flex items-center justify-center text-7xl font-bold text-white">
                     {profile.name.charAt(0) || '?'}
                   </div>
                 )}
-                <div className="min-w-0">
-                  <h2 className={`text-2xl font-bold leading-tight ${isDark ? 'text-white' : 'text-ds-text'}`}>{profile.name}</h2>
-                  <p className={`text-sm ${subtle}`}>
+                {/* Gradient scrim keeps the name legible over any photo */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-5">
+                  <h2 className="text-3xl font-bold leading-tight text-white drop-shadow">{profile.name}</h2>
+                  <p className="text-sm text-slate-200 drop-shadow">
                     {profile.level === 'professional' ? 'Professional' : 'Amateur'}
                     {profile.weightClass ? ` · ${profile.weightClass}` : ''}
                   </p>
                   {profile.gym && (
-                    <p className={`text-sm flex items-center gap-1 mt-1 ${subtle}`}>
+                    <p className="text-sm flex items-center gap-1 mt-1 text-slate-200 drop-shadow">
                       <MapPin className="w-3.5 h-3.5" /> {profile.gym}
                     </p>
                   )}
@@ -113,7 +116,7 @@ export default function FighterProfilePage() {
               </div>
 
               {/* Record — the headline metric */}
-              <div className="mt-4 flex flex-wrap gap-3">
+              <div className="p-5 flex flex-wrap gap-3">
                 <div className={`rounded-xl px-4 py-2 ${isDark ? 'bg-slate-800' : 'bg-surface-subtle'}`}>
                   <div className={`text-[11px] uppercase tracking-wide ${subtle}`}>Record</div>
                   <div className="text-xl font-bold">{formatRecord(profile.record)}</div>
