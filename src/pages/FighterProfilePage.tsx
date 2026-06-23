@@ -130,6 +130,13 @@ export default function FighterProfilePage() {
               </div>
             </header>
 
+            {/* Description — a quick human read of who the fighter is (#1200) */}
+            {profile.description && (
+              <section className={`rounded-2xl border p-5 ${card}`}>
+                <p className="whitespace-pre-line leading-relaxed">{profile.description}</p>
+              </section>
+            )}
+
             {/* Physical attributes */}
             {stats.length > 0 && (
               <section className={`rounded-2xl border p-5 grid grid-cols-2 sm:grid-cols-4 gap-3 ${card}`}>

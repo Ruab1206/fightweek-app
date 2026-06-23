@@ -28,6 +28,8 @@ export interface FighterProfile {
   gym: string;
   /** Striker / grappler / well-rounded etc. — free text or comma list. */
   disciplines: string;
+  /** Short narrative bio — who the fighter is, their style and story (#1200). */
+  description: string;
   age: number | null;
   /** Centimetres. */
   heightCm: number | null;
@@ -59,6 +61,7 @@ export function emptyFighterProfile(emailKey: string, name = ''): FighterProfile
     level: 'amateur',
     gym: '',
     disciplines: '',
+    description: '',
     age: null,
     heightCm: null,
     reachCm: null,

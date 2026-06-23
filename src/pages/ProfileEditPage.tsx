@@ -346,6 +346,16 @@ export default function ProfileEditPage() {
                 <label className={labelCls}>Style / disciplines</label>
                 <input className={`${inputCls} mt-1`} value={form.disciplines} placeholder="e.g. Striker, BJJ" onChange={(e) => set('disciplines', e.target.value)} />
               </div>
+              <div>
+                <label className={labelCls}>Description</label>
+                <textarea
+                  className={`${inputCls} mt-1`}
+                  rows={4}
+                  value={form.description}
+                  placeholder="A few sentences a promoter can read at a glance — fighting style, story, what makes this fighter stand out."
+                  onChange={(e) => set('description', e.target.value)}
+                />
+              </div>
             </section>
 
             {/* Record */}
