@@ -32,22 +32,16 @@ service cloud.firestore {
           && request.auth.token.email in getRolesDoc().members;
     }
 
-    function fighterNameForEmail(email) {
-      return getRolesDoc().members[email];
-    }
-
     function isAuthenticated() {
       return request.auth != null;
     }
 
     // ─── Per-user schedule data ───
-    // ─── Per-user schedule data ───
     // Path: artifacts/production/users/{userKey}/...
     //
-    // #1191: data is migrating from name-keyed to EMAIL-keyed paths. During the
-    // transition a fighter may legitimately own a doc keyed by either their
-    // display name OR their email, so writes are allowed for both. Once the app
-    // and data are fully on email paths, the name branch can be removed.
+    // #1191/#1193: data is keyed by EMAIL (the stable id). The transitional
+    // name-keyed branch has been removed (#1193) now that the app and data are
+    // fully on email paths — a fighter owns only the doc keyed by their email.
     //
     // Team members can READ all fighters (needed for team view).
     // Only the fighter themselves or admin/coach can WRITE.
@@ -56,8 +50,7 @@ service cloud.firestore {
 
       allow write: if isAdminOrCoach();
       allow write: if isAuthenticated()
-        && (fighterNameForEmail(request.auth.token.email) == userKey
-            || request.auth.token.email == userKey);
+        && request.auth.token.email == userKey;
     }
 
     // ─── Public catalogue & gyms ───
