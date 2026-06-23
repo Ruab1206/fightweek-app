@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/__/auth/:path*", "destination": "https://fightweek-app.firebaseapp.com/__/auth/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
