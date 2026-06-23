@@ -5,6 +5,49 @@ export const RELEASE_NOTES = `# Release Notes
 > Releases follow the \`1.x — Outcome Name\` convention. See the Team Charter for how we plan releases using the story map.
 
 ---
+## 1.12 — Fighter Profiles
+*June 2026*
+
+**Outcome:** A promoter or matchmaker can open a fighter's profile from a shared link — no login — and size up the fighter at a glance: who they are, their record, their style, and how to reach them.
+
+### What changed
+
+**Public fighter profile page (#1058)**
+- A new public, read-only page at \\\`/fighter/<email>\\\` shows a fighter's photo, name, level, weight class, gym, record, style, physical stats, accomplishments, and footage/contact links
+- No sign-in required — built to be shared with promoters and matchmakers outside the team
+- Only **published** profiles are visible; an unshared or draft profile shows a neutral "not available" state
+
+**Fighter profile editor (#1079)**
+- Fighters edit their own profile from the new **Profilside** link in the user menu
+- Coaches and admins can edit any fighter's profile via a fighter selector
+- Profiles are keyed by email (the stable id from 1.11), so a rename never breaks a profile link
+
+**Publish / unpublish (#1195)**
+- Profiles are **draft by default** — nothing is public until the fighter chooses to publish
+- Publishing (or unpublishing) saves immediately, so a shared link reflects the change at once
+
+**Public profile security rules (#1196)**
+- Firestore rules allow anyone to read a *published* profile, while writes are limited to the profile's owner, coaches, and admins
+
+**Large hero photo**
+- The profile leads with a full-width hero portrait so the fighter — not a thumbnail — is the first impression
+- The photo crop is anchored to the top so a fighter's face is never cut off
+
+**Fighter description / bio (#1200, shipped as 1.12.1)**
+- A free-text description appears just below the hero photo, giving a promoter a quick human read of the fighter's style and story before the stats
+
+### Deferred
+- **Native photo upload (#1198)** — Firebase Storage now requires a paid plan, and a future data-store migration is expected to bring its own file storage. For now, photos are added by pasting an image URL (e.g. Imgur). The decision is recorded in the Target Architecture (v1.3). Upload is parked until the platform migration.
+
+### Retro learnings
+- **Keep:** Outcome-first adaptation under a hard constraint — when native upload hit a paywall, we pivoted to photo-by-URL and still delivered the promoter's first impression rather than stalling or paying for throwaway infrastructure.
+- **Keep:** Reusing the existing public-route pattern (\`/catalogue\`) for \`/fighter/:key\` kept the new public page low-risk and consistent.
+- **Keep:** Live PO testing drove the hero-photo redesign and the bio field — improvements a written spec wouldn't have surfaced.
+- **Lesson:** Firebase multi-tab auth desync delivers a transient \`onAuthStateChanged(null)\` to other tabs; a page that performs authenticated writes must guard on the live auth token (\`auth.currentUser\`), not on React UI state — caught after several rounds of the "reconnecting" banner.
+- **Lesson:** Confirm a platform actually supports a capability on our current plan *before* pulling it into a release — the photo-upload paywall was discovered only after the feature was built and then removed.
+- **Process:** Release notes are written during the Release Review (they describe what shipped); the Retrospective captures process learnings into this same entry.
+
+---
 ## 1.11 — Resilience
 *June 2026*
 
