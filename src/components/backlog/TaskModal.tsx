@@ -96,11 +96,21 @@ export default function TaskModal({ item, onSave, onDelete, onClose, readOnly = 
           </div>
 
           <div>
-            <label className={labelClasses}>Notes</label>
-            <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} readOnly={readOnly} rows={2} className={`${inputClasses} resize-none`} placeholder="Internal notes…" />
+            <label className={labelClasses}>Description</label>
+            <textarea value={form.desc} onChange={(e) => set('desc', e.target.value)} readOnly={readOnly} rows={3} className={`${inputClasses} resize-none`} placeholder="Detailed description…" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClasses}>Acceptance Criteria</label>
+            <textarea value={form.acceptance} onChange={(e) => set('acceptance', e.target.value)} readOnly={readOnly} rows={3} className={`${inputClasses} resize-none`} placeholder={"1. First criterion\n2. Second criterion"} />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className={labelClasses}>Release / Milestone</label>
+              <input value={form.release} onChange={(e) => set('release', e.target.value)} readOnly={readOnly} list="release-options" className={inputClasses} placeholder="e.g. v1.0, Sprint 3" />
+              <datalist id="release-options">{releases.map((r) => <option key={r} value={r} />)}</datalist>
+            </div>
             <div>
               <label className={labelClasses}>Status</label>
               <select value={form.status} onChange={(e) => set('status', e.target.value as BacklogStatus)} disabled={readOnly} className={inputClasses}>
@@ -118,19 +128,8 @@ export default function TaskModal({ item, onSave, onDelete, onClose, readOnly = 
           </div>
 
           <div>
-            <label className={labelClasses}>Release / Milestone</label>
-            <input value={form.release} onChange={(e) => set('release', e.target.value)} readOnly={readOnly} list="release-options" className={inputClasses} placeholder="e.g. v1.0, Sprint 3" />
-            <datalist id="release-options">{releases.map((r) => <option key={r} value={r} />)}</datalist>
-          </div>
-
-          <div>
-            <label className={labelClasses}>Description</label>
-            <textarea value={form.desc} onChange={(e) => set('desc', e.target.value)} readOnly={readOnly} rows={3} className={`${inputClasses} resize-none`} placeholder="Detailed description…" />
-          </div>
-
-          <div>
-            <label className={labelClasses}>Acceptance Criteria</label>
-            <textarea value={form.acceptance} onChange={(e) => set('acceptance', e.target.value)} readOnly={readOnly} rows={3} className={`${inputClasses} resize-none`} placeholder={"1. First criterion\n2. Second criterion"} />
+            <label className={labelClasses}>Notes</label>
+            <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} readOnly={readOnly} rows={2} className={`${inputClasses} resize-none`} placeholder="Internal notes…" />
           </div>
         </div>
 
