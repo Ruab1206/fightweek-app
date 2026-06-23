@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 
 import { CATEGORIES } from '../config/constants';
+import { getDateForWeekDay } from '../utils/dateUtils';
 import InlineCataloguePicker, { disciplineToCategory } from './InlineCataloguePicker';
 import type { CatalogueClass, ClassSchedule } from '../types/catalogue';
 
@@ -22,6 +23,7 @@ export interface PersonalScheduleProps {
   expandedDay: string | null;
   onAddClick: (day: string) => void;
   onEditSession: (day: string, session: any) => void;
+  onFraværClick?: (session: any, day: string) => void;
   onAddFromCatalogue: (payload: any, day: string) => void;
   onManualAdd: () => void;
   onCollapseDay: () => void;
@@ -38,12 +40,13 @@ export interface PersonalScheduleProps {
   currentWeek?: number;
 }
 
-const PersonalSchedule = ({ days, scheduleData, weekDates, fullWeekDates, isReadOnly, isDark, expandedDay, onAddClick, onEditSession, onAddFromCatalogue, onManualAdd, onCollapseDay, showDesktopCatalogue, catalogueByDay, catalogueLoading, onAddFromDesktopCatalogue, onDesktopManual, todayDayName, todayRef, visibleFriends = [], friendWeekData = {}, friendColors = {}, currentWeek = 0 }: PersonalScheduleProps) => (
+const PersonalSchedule = ({ days, scheduleData, weekDates, fullWeekDates, isReadOnly, isDark, expandedDay, onAddClick, onEditSession, onFraværClick, onAddFromCatalogue, onManualAdd, onCollapseDay, showDesktopCatalogue, catalogueByDay, catalogueLoading, onAddFromDesktopCatalogue, onDesktopManual, todayDayName, todayRef, visibleFriends = [], friendWeekData = {}, friendColors = {}, currentWeek = 0 }: PersonalScheduleProps) => (
   <div className="px-4 pb-32 fade-in">
     <div className="grid grid-cols-1 md:grid-cols-7 md:grid-rows-[1fr_auto] gap-3">
     {days.map(day => {
       const sessions = scheduleData[day] || [];
       const visibleSessions = sessions.filter(s => !s.isRestDay && s.type !== 'fravær');
+      const fraværSessions = sessions.filter(s => s.type === 'fravær');
       const isExpanded = expandedDay === day;
       const dayCatalogue = catalogueByDay?.[day] || [];
       const isToday = day === todayDayName;
@@ -64,7 +67,32 @@ const PersonalSchedule = ({ days, scheduleData, weekDates, fullWeekDates, isRead
             </div>
           </div>
           <div>
-          {visibleSessions.length === 0 && !isExpanded && !showDesktopCatalogue && <div className={`text-xs font-medium py-2 text-center border-2 border-dashed rounded-xl ${isDark ? 'text-slate-600 border-slate-800/50' : 'text-ds-text-subtlest border-surface-border'}`}>Ingen pas</div>}
+          {/* Fravær blocks */}
+          {fraværSessions.map(s => {
+            const title = s.fraværTitel || s.name || 'Fravær';
+            const total = s.fraværTotalDays || 1;
+            const dayIdx = s.fraværDayIndex || 1;
+            const isFirst = dayIdx === 1;
+            const isLast = dayIdx === total;
+            const isSingle = total === 1;
+            return (
+              <div key={s.id}
+                onClick={() => {
+                  if (isReadOnly || !onFraværClick) return;
+                  const d = getDateForWeekDay(currentWeek, day);
+                  const dayKey = d ? d.toISOString().slice(0, 10) : day;
+                  onFraværClick(s, dayKey);
+                }}
+                className={`px-2 py-1.5 rounded-lg text-[11px] font-medium mb-1.5 transition-all ${!isReadOnly ? 'cursor-pointer active:scale-[0.98]' : ''} ${isDark ? 'bg-yellow-900/30 text-yellow-300' : 'bg-yellow-100 text-yellow-800'}`}>
+                <span className="font-bold">{title}</span>
+                {!isSingle && <span className="opacity-70"> (dag {dayIdx}/{total})</span>}
+                {isSingle && <span className="opacity-70"> · {s.start} — {s.end}</span>}
+                {!isSingle && isFirst && <span className="opacity-70"> · Fra {s.start}</span>}
+                {!isSingle && isLast && <span className="opacity-70"> · Indtil {s.end}</span>}
+              </div>
+            );
+          })}
+          {visibleSessions.length === 0 && fraværSessions.length === 0 && !isExpanded && !showDesktopCatalogue && <div className={`text-xs font-medium py-2 text-center border-2 border-dashed rounded-xl ${isDark ? 'text-slate-600 border-slate-800/50' : 'text-ds-text-subtlest border-surface-border'}`}>Ingen pas</div>}
           {visibleSessions.map(s => {
             const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
             const isCancelled = s.status === 'cancelled';

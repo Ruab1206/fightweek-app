@@ -490,6 +490,19 @@ const App = () => {
                   }
                   setEditingDay(day); setEditingSession(session); setModalOpen(true);
                 }}
+                onFraværClick={(session, dayKey) => {
+                  setEditingFravær({
+                    groupId: session.fraværGroupId || `legacy_${session.id}`,
+                    titel: session.fraværTitel || session.name || '',
+                    beskrivelse: session.fraværBeskrivelse || '',
+                    startDate: session.fraværStartDate || dayKey,
+                    startTime: session.fraværStartTime || session.start || '09:00',
+                    endDate: session.fraværEndDate || dayKey,
+                    endTime: session.fraværEndTime || session.end || '17:00',
+                  });
+                  setAddScreenType('fravær');
+                  setAddScreenOpen(true);
+                }}
                 onAddFromCatalogue={handleAddFromCatalogue}
                 onManualAdd={handleManualFromPicker}
                 onCollapseDay={() => setExpandedDay(null)}
