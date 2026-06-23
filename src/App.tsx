@@ -53,7 +53,7 @@ const App = () => {
   const { userMapping: USER_MAPPING, fighters: FIGHTERS, emailForName } = useRolesConfig();
   const {
     user, authLoading, accessDenied, loginError,
-    isBrowserBlocked,
+    isBrowserBlocked, isMobile,
     activeFighter, setActiveFighter,
     isLocked,
     triggerLoginPopup, triggerLoginRedirect, handleLogout,
@@ -189,7 +189,7 @@ const App = () => {
   // --- Guard screens ---
   if (isBrowserBlocked) return <BrowserBlockScreen />;
   if (authLoading) return <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-950 text-slate-500' : 'bg-surface-subtle text-ds-text-subtlest'}`}>Loader...</div>;
-  if (!user) return <LoginScreen onLoginPopup={triggerLoginPopup} onLoginRedirect={triggerLoginRedirect} error={loginError} />;
+  if (!user) return <LoginScreen onLoginPopup={triggerLoginPopup} onLoginRedirect={triggerLoginRedirect} isMobile={isMobile} error={loginError} />;
   if (accessDenied) return <div className={`min-h-screen flex items-center justify-center flex-col gap-4 ${isDark ? 'bg-slate-950 text-white' : 'bg-surface-subtle text-ds-text'}`}><span>Ingen adgang</span><button onClick={handleLogout} className={`px-4 py-2 rounded ${isDark ? 'bg-slate-700 text-white' : 'bg-brand-500 text-white'}`}>Log ud</button></div>;
 
   const isPastWeek = view === 'personal' && currentWeek < systemWeek;

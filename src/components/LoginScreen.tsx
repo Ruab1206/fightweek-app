@@ -4,10 +4,11 @@ import { useTheme } from '../hooks/useTheme';
 interface LoginScreenProps {
   onLoginPopup: () => void;
   onLoginRedirect: () => void;
+  isMobile?: boolean;
   error: string | null;
 }
 
-const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }: LoginScreenProps) => {
+const LoginScreen = ({ onLoginPopup, onLoginRedirect, isMobile = false, error }: LoginScreenProps) => {
     const { isDark } = useTheme();
     const getFriendlyError = (msg) => {
         if (!msg) return null;
@@ -18,6 +19,12 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }: LoginScreenProps)
     };
     
     const friendlyError = getFriendlyError(error);
+
+    // On mobile, popup sign-in is unreliable (the OAuth window can't return the
+    // result to the page), so the primary button uses redirect. Desktop keeps
+    // popup. The secondary link always offers the other method as a fallback.
+    const onPrimaryLogin = isMobile ? onLoginRedirect : onLoginPopup;
+    const onAlternativeLogin = isMobile ? onLoginPopup : onLoginRedirect;
 
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center p-4 ${isDark ? 'bg-slate-950' : 'bg-surface-subtle'}`}>
@@ -36,14 +43,14 @@ const LoginScreen = ({ onLoginPopup, onLoginRedirect, error }: LoginScreenProps)
             </div>
           )}
 
-          <button onClick={onLoginPopup} className={`w-full font-bold py-3.5 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 mb-4 ${isDark ? 'bg-white text-slate-900 hover:bg-slate-100' : 'bg-brand-500 text-white hover:bg-brand-600'}`}>
+          <button onClick={onPrimaryLogin} className={`w-full font-bold py-3.5 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 mb-4 ${isDark ? 'bg-white text-slate-900 hover:bg-slate-100' : 'bg-brand-500 text-white hover:bg-brand-600'}`}>
             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
             Log ind med Google
           </button>
 
-          <button onClick={onLoginRedirect} className={`text-xs underline flex items-center justify-center w-full mt-2 ${isDark ? 'text-slate-500 hover:text-blue-400' : 'text-ds-text-subtlest hover:text-brand-500'}`}>
+          <button onClick={onAlternativeLogin} className={`text-xs underline flex items-center justify-center w-full mt-2 ${isDark ? 'text-slate-500 hover:text-blue-400' : 'text-ds-text-subtlest hover:text-brand-500'}`}>
             <MousePointerClick className="w-3 h-3 mr-1" />
-            Alternativ Login (Redirect)
+            {isMobile ? 'Alternativ Login (Popup)' : 'Alternativ Login (Redirect)'}
           </button>
         </div>
       </div>
