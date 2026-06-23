@@ -310,6 +310,14 @@ Conscious decisions about the platforms we build *on*. Recorded so we don't drif
 - **Strongest alternative if we migrate:** Supabase (Postgres + realtime + RLS + auth).
 - **Hedge until then:** keep the domain model clean in \`src/types/\` so app logic isn't over-coupled to Firestore's shape, keeping a future migration tractable. Do **not** migrate pre-emptively.
 
+### Media / file storage: URL-reference now, own storage at migration
+
+**Decision (2026-06-23, after Release 1.12):** FightWeek stores **references to media (URLs), not the media itself.** Fighter profile photos are pasted image URLs (\`photoUrl\`); footage is a pasted YouTube/Vimeo link (\`footageUrl\`). The app owns no binary blobs.
+
+- **Why:** Release 1.12 tried to add native photo upload (#1198) but Firebase Storage now requires the paid **Blaze** plan, and the planned data-store migration (Supabase/Postgres, above) is expected to bring its own object storage (e.g. Supabase Storage / S3-compatible bucket). Standing up Firebase Storage now would be throwaway infrastructure plus a second migration.
+- **Tripwire:** when we migrate the data store **or** a release goal genuinely needs user-uploaded files (not just links), provision object storage as part of *that* platform — don't bolt Firebase Storage on first. #1198 (photo upload) is parked against this trigger.
+- **Hedge until then:** profiles persist plain \`photoUrl\` strings, so URL-hosted photos carry over to any future storage backend with no data change. Keep media fields as URL strings in \`src/types/\`.
+
 ---
 
 ## How This Document Is Used
@@ -329,4 +337,5 @@ Conscious decisions about the platforms we build *on*. Recorded so we don't drif
 | 1.0 | 2026-04-18 | Initial version. Synthesised from PO's conceptual DBML proposal + AI Agent's critical analysis. Key decisions: Activity as universal calendar atom, Person = Auth user, Team independent of Gym, Firestore-native physical model. |
 | 1.1 | 2026-04-19 | Updated for Release 1.9 (Roles & Security). Phase 3 partially complete: config/roles Firestore doc live, dynamic security rules deployed, admin UI built. Person and TeamMember current-state annotations updated. Roles Config added to Firestore path map. Remaining: full Person profile per UID, email-based data keys. |
 | 1.2 | 2026-06-05 | Added "Platform & Integration Decisions" section. Recorded two conscious decisions: (1) do not rebuild on Google Calendar — own the domain model, integrate via a read-only per-fighter iCal feed (backlog #1181); (2) keep Firestore now, with a tripwire to revisit the data store (Supabase/Postgres) when analytics features land (backlog #1182). |
+| 1.3 | 2026-06-23 | Updated at Release 1.12 review. Recorded the **media / file storage** decision: store media as URL references, not blobs; defer native upload (#1198) until the data-store migration brings its own object storage. Surfaced when Firebase Storage required the paid Blaze plan. |
 `;
