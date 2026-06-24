@@ -35,7 +35,7 @@ We follow a release-based cadence. Every release goes through four phases:
 **Release Planning**
 - Re-read project documentation for context
 - **Consult the target architecture** — Before selecting items, review the Target Architecture document. Ask: *"Does this slice align with the architectural direction? Will we need to rework this later?"* This prevents incremental drift — locally sensible decisions that create global structural problems. (Added after 1.7 retro)
-- **Walk the story map** — Before selecting items, walk the backbone left-to-right (Jeff Patton method). For each Activity, ask: *"What's the next thin slice of value we can deliver here?"* Look at the vertical priority under each User Task. The goal is to find the thinnest horizontal slice that delivers end-to-end value — a *walking skeleton*, not a finished feature.
+- **Investigate the story map *or* the backlog** — Pick the lens that fits the release. For a new feature slice, walk the story map backbone left-to-right (Jeff Patton method): for each Activity ask *"What's the next thin slice of value we can deliver here?"* and look at the vertical priority under each User Task to find the thinnest end-to-end slice — a *walking skeleton*, not a finished feature. For maintenance, cleanup, bug-fix, or hardening releases (which often have no natural map slice), drive from the backlog instead — review open items, group related ones, and pick a coherent set against the release goal. In practice most releases start from the backlog; reach for the story map when you're extending the product's user journey. (Clarified after 1.13 retro)
 - **Name the release slice** — Every release gets a number and an outcome-based name using the format \`1.x — Name\`. The name should describe the outcome, not the features (e.g. "1.3 — Catalogue" means *"coaches can manage training offerings without code changes"*, not *"build CRUD for sources and catalogue items"*).
 - **Define success metrics** — For each release, answer: *"What would we measure to determine this was successful?"* This could be a user behaviour change, a workflow that's now possible, or a pain point that's removed.
 - Review the backlog and refine selected items against the release goal
@@ -66,10 +66,17 @@ We follow a release-based cadence. Every release goes through four phases:
 
 **Conversation start (Daily Standup)**
 - Runs at the beginning of every working session, in a fresh context window.
-- **Re-read context** — the AI reads the roadmap and any session handoff note before doing anything else, so it knows where we left off.
+- **Re-read context** — the AI reads the roadmap and the latest session handoff note before doing anything else, so it knows where we left off.
 - **Summarise the standup three** — what shipped last, the current release/backlog state, and what's next.
 - **Surface blockers** — call out anything pending PO verification, deferred, or at risk.
-- **Confirm this session's goal** — agree what we're doing before any work starts. For a planning session specifically, read the handoff brief and walk the story map (per the "Start ceremonies in a fresh session" agreement).
+- **Confirm this session's goal** — agree what we're doing before any work starts. For a planning session specifically, read the handoff note and investigate the story map or backlog (per the "Start ceremonies in a fresh session" agreement).
+
+**Conversation end (Session handoff)**
+- Runs before a working session closes, so the next session (a fresh context window) can pick up cleanly. (Added after 1.13 retro — transitions between sessions had been rough.)
+- **Write the handoff note** — the AI updates the roadmap / handoff note with: what shipped this session (with commit refs), the current branch and deploy state, anything still pending PO verification, and the single most important next action.
+- **State is in the repo, not the chat** — assume nothing carries over in memory between sessions. Anything the next session needs must be written down (roadmap note, backlog item, or charter), not left implicit in the conversation.
+- **Leave the tree clean** — commit or note any work-in-progress, and remove temporary scripts, so the next session doesn't start by untangling a half-finished state.
+- **Confirm the handoff with the PO** — end by telling the PO where we stopped and what the obvious next step is, so they can resume just by saying "continue."
 
 ---
 
