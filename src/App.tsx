@@ -121,7 +121,13 @@ const App = () => {
   const [editingFravær, setEditingFravær] = useState<{ groupId: string; titel: string; beskrivelse: string; startDate: string; startTime: string; endDate: string; endTime: string } | null>(null);
   const [fabSheetOpen, setFabSheetOpen] = useState(false);
   const [classInfoSession, setClassInfoSession] = useState<{ cls: CatalogueClass; session: any; day: string; weekNum: number } | null>(null);
-  const { friendWeekData } = useMultiWeekTeamData(user, visibleFriends, neededWeeks, accessDenied, isBrowserBlocked, emailForName);
+  // #1206: the friends overlay (Holdkammerater) indexes friendWeekData by the
+  // viewed currentWeek, but neededWeeks is a fixed window centered on TODAY and
+  // does not move with the desktop week navigation. Past ~systemWeek+weeksAhead
+  // friends silently disappeared while own sessions (per-week subscription) kept
+  // showing. Always include the currently-viewed week so friends load there too.
+  const teamWeeks = useMemo(() => [...new Set([...neededWeeks, currentWeek])], [neededWeeks, currentWeek]);
+  const { friendWeekData } = useMultiWeekTeamData(user, visibleFriends, teamWeeks, accessDenied, isBrowserBlocked, emailForName);
 
   const toggleFriend = useCallback((name: string) => {
     setVisibleFriends(prev => prev.includes(name) ? prev.filter(f => f !== name) : [...prev, name]);
