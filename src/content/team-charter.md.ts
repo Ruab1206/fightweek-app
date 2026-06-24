@@ -20,7 +20,7 @@ The development team is a **PO + AI Agent pair**. The Product Owner drives what 
 
 ## Our Ceremonies
 
-We follow a release-based cadence. Every release goes through four phases:
+We follow a release-based cadence. Every release goes through four phases, and every working session is bookended by a kickoff and a handoff:
 
 | Our ceremony | Scrum equivalent | When it happens |
 |---|---|---|
@@ -28,7 +28,8 @@ We follow a release-based cadence. Every release goes through four phases:
 | **Implementation** | The Sprint | Continuous during the release |
 | **Release Review** | Sprint Review | After the release ships |
 | **Release Retrospective** | Sprint Retrospective | After the review |
-| **Conversation start** | Daily Standup | At the beginning of each working session |
+| **Session kickoff** | (context rebuild — no Scrum equivalent) | At the start of each working session, before its real work |
+| **Session handoff** | (context handover — no Scrum equivalent) | Before each working session closes |
 
 ### What happens in each ceremony
 
@@ -64,14 +65,14 @@ We follow a release-based cadence. Every release goes through four phases:
 - Evaluate AI collaboration
 - Update documentation with learnings and process changes
 
-**Conversation start (Daily Standup)**
-- Runs at the beginning of every working session, in a fresh context window.
+**Session kickoff (Conversation start)**
+- Runs at the beginning of every working session, in a fresh context window. It is *not* a standup — there's no daily cadence or team to sync; it's simply how the AI rebuilds context, since nothing carries over in memory between sessions. The session's actual ceremony or work (planning, implementation, review, etc.) follows immediately after.
 - **Re-read context** — the AI reads the roadmap and the latest session handoff note before doing anything else, so it knows where we left off.
-- **Summarise the standup three** — what shipped last, the current release/backlog state, and what's next.
+- **Summarise where we are** — what shipped last, the current release/backlog state, and what's next.
 - **Surface blockers** — call out anything pending PO verification, deferred, or at risk.
 - **Confirm this session's goal** — agree what we're doing before any work starts. For a planning session specifically, read the handoff note and investigate the story map or backlog (per the "Start ceremonies in a fresh session" agreement).
 
-**Conversation end (Session handoff)**
+**Session handoff (Conversation end)**
 - Runs before a working session closes, so the next session (a fresh context window) can pick up cleanly. (Added after 1.13 retro — transitions between sessions had been rough.)
 - **Write the handoff note** — the AI updates the roadmap / handoff note with: what shipped this session (with commit refs), the current branch and deploy state, anything still pending PO verification, and the single most important next action.
 - **State is in the repo, not the chat** — assume nothing carries over in memory between sessions. Anything the next session needs must be written down (roadmap note, backlog item, or charter), not left implicit in the conversation.
