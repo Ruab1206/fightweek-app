@@ -54,6 +54,7 @@ We follow a release-based cadence. Every release goes through four phases:
 - Review the backlog — reprioritise, clean up stale items, check release tags
 - Design system review — verify UI changes adhere to the design system
 - **Write the release notes** — Capture what shipped, in "what you can now *do*" language, in the Release Notes page. Release notes describe the *outcome* and belong to the review; the retrospective later appends its process learnings to the same entry. (Clarified after 1.12 review)
+- **Update the release history table** — Add the release's row (number, outcome, period) to the release-history table in this charter. (Added after 1.13 review — 1.12's row had been missed)
 - **Target architecture review** — Did we move toward or away from the north star? Did we learn something that changes the target? Update the Target Architecture document if understanding evolved. (Added after 1.7 retro)
 - **Important:** don't code during review — thinking is fine, but build decisions belong in planning
 

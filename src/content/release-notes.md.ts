@@ -30,7 +30,12 @@ export const RELEASE_NOTES = `# Release Notes
 - The leftover duplicate (name-keyed) schedule data from that migration has been safely removed after verifying every fighter's current data was intact — no schedules were lost
 
 ### Retro learnings
-*(to be appended during the Release Retrospective)*
+- **Keep:** Cautious destructive rollout — dry-run first, a gate that confirms the email-keyed copy exists before deleting any name-keyed doc, and deleting one fighter before the full 445-doc sweep. Zero data loss on an irreversible operation.
+- **Keep:** Folding discovered bugs into the running release instead of deferring — the mobile sign-in fix (#1205) and the teammate-calendar cutoff (#1206) made the release more valuable than planned while we still hit the cleanup outcome.
+- **Keep:** Live PO testing caught a real bug — #1206 surfaced during verification, not from a ticket.
+- **Lesson:** Hosting on a custom domain (Vercel) while Firebase auth uses the default \\\`*.firebaseapp.com\\\` domain breaks mobile sign-in via browser storage partitioning. Fix = reverse-proxy \\\`/__/auth/*\\\` and set \\\`authDomain\\\` to the app's own domain on prod. Worth remembering for the next host or domain change.
+- **Lesson:** Google blocks OAuth inside embedded webviews (Messenger / Instagram / Facebook) by policy — not fixable, only detectable. The block-screen with a copy-link is the correct pattern.
+- **Process:** A couple of releases shipped without their release-history row (1.12 was missing, added this release). "Update the release-history table" is now an explicit Release Review step.
 
 ---
 ## 1.12 — Fighter Profiles
