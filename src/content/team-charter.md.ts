@@ -102,6 +102,8 @@ We use **semantic versioning lite** with an outcome name:
 | 1.9 — Roles & Security | Dynamic role management from Firestore, security rules without code deploy, admin UI for team members | Apr 2026 |
 | 1.10 — Stabilisation | The weekly schedule is trustworthy — recurring sessions, past-week edits, and notes behave predictably; recurring-session corruption fixed at the root | Jun 2026 |
 | 1.11 — Resilience | The app survives mistakes (error boundary) and gains a rename-proof, email-keyed data foundation for public profiles | Jun 2026 |
+| 1.12 — Fighter Profiles | A promoter can open a fighter's profile from a shared link — no login — and size them up at a glance | Jun 2026 |
+| 1.13 — Cleanup | The email-keyed data foundation is fully realized (legacy data removed, rules locked to it) and everyday rough edges — mobile sign-in, missing absences, teammate calendar — are fixed | Jun 2026 |
 
 ---
 

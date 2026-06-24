@@ -5,6 +5,34 @@ export const RELEASE_NOTES = `# Release Notes
 > Releases follow the \`1.x — Outcome Name\` convention. See the Team Charter for how we plan releases using the story map.
 
 ---
+## 1.13 — Cleanup
+*June 2026*
+
+**Outcome:** The rename-proof, email-keyed data foundation from 1.11 is now fully realized — the old duplicate data is gone and access rules are locked to it — and a cluster of rough edges that hurt everyday use (mobile sign-in, missing absences, teammates dropping off the calendar) is fixed.
+
+### What changed
+
+**Sign in on your phone (#1205)**
+- Signing in with Google now works reliably on mobile browsers — the previous redirect would silently bounce you back to the login screen
+- If you open the app inside Messenger, Facebook, or Instagram, it tells you to open it in Chrome or Safari (Google blocks sign-in inside those in-app browsers) and gives you a one-tap "copy link"
+
+**Absences show everywhere (#1202)**
+- An absence (fravær) now appears in the desktop one-week view, not just the mobile scroll view — an ongoing absence shows on every day it covers
+
+**Teammates show for every week (#1206)**
+- With **Holdkammerater** turned on, your teammates' sessions now appear for whatever week you navigate to — previously they disappeared a few weeks into the future while your own sessions stayed
+
+**Tidier backlog item view (#1204)**
+- In the backlog detail view, the description now sits directly under the title, with release, status, and label grouped on one row
+
+**Locked-down, tidied data (#1193, #1194)**
+- Access rules are now keyed strictly to each member's email, completing the foundation introduced in 1.11
+- The leftover duplicate (name-keyed) schedule data from that migration has been safely removed after verifying every fighter's current data was intact — no schedules were lost
+
+### Retro learnings
+*(to be appended during the Release Retrospective)*
+
+---
 ## 1.12 — Fighter Profiles
 *June 2026*
 
