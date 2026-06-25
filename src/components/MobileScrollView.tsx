@@ -4,7 +4,7 @@
  */
 import React, { useRef, useEffect } from 'react';
 import {
-  Clock, MapPin, AlertCircle, Repeat, CalendarDays,
+  Clock, MapPin, AlertCircle, Repeat, CalendarDays, UserPlus,
 } from 'lucide-react';
 
 import { CATEGORIES } from '../config/constants';
@@ -111,9 +111,10 @@ const MobileScrollView = ({ scrollDays, multiWeekData, isDark, onEditSession, on
                 const isCancelled = s.status === 'cancelled';
                 const isRecurring = !!s.isRecurring;
                 const isEvent = s.type === 'event';
+                const isInvitation = s.type === 'invitation';
                 return (
                   <div key={s.id} onClick={() => onEditSession(scrollDay.dayName, s, scrollDay.weekNumber)}
-                    className={`relative flex items-start p-2 rounded-xl border shadow-sm transition-all cursor-pointer active:scale-[0.98] ${isCancelled ? (isDark ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-red-50 border-red-200 opacity-75') : isEvent ? (isDark ? 'bg-indigo-950/30 border-indigo-800/50' : 'bg-indigo-50 border-indigo-200') : (isDark ? 'bg-slate-800 border-slate-700/50' : 'bg-white border-surface-border')}`}>
+                    className={`relative flex items-start p-2 rounded-xl border shadow-sm transition-all cursor-pointer active:scale-[0.98] ${isCancelled ? (isDark ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-red-50 border-red-200 opacity-75') : isInvitation ? (isDark ? 'bg-emerald-950/30 border-emerald-800/50' : 'bg-emerald-50 border-emerald-200') : isEvent ? (isDark ? 'bg-indigo-950/30 border-indigo-800/50' : 'bg-indigo-50 border-indigo-200') : (isDark ? 'bg-slate-800 border-slate-700/50' : 'bg-white border-surface-border')}`}>
                     <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl ${cat.color} ${isCancelled ? 'opacity-50' : ''}`}></div>
                     <div className="flex-1 pl-2.5 min-w-0">
                       <div className="flex items-start justify-between gap-1">
@@ -124,6 +125,7 @@ const MobileScrollView = ({ scrollDays, multiWeekData, isDark, onEditSession, on
                         <span className="flex items-center"><Clock className="w-2.5 h-2.5 mr-0.5 shrink-0" />{s.start} - {s.end}</span>
                         <span className="flex items-center truncate"><MapPin className="w-2.5 h-2.5 mr-0.5 shrink-0" />{s.location}</span>
                       </div>
+                      {isInvitation && <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase mt-0.5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}><UserPlus className="w-2.5 h-2.5" />{s.invitedByName ? `Fra ${s.invitedByName}` : 'Invitation'}</span>}
                       {isEvent && <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase mt-0.5 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}><CalendarDays className="w-2.5 h-2.5" />Event</span>}
                       {isCancelled && <div className="mt-0.5 text-[9px] text-red-400 flex items-center"><AlertCircle className="w-2.5 h-2.5 mr-0.5" />Aflyst{s.cancellationReason ? `: ${s.cancellationReason}` : ''}</div>}
                     </div>

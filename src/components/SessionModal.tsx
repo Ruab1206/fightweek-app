@@ -6,6 +6,8 @@ import { addMinutes } from '../utils/dateUtils';
 import { useTheme } from '../hooks/useTheme';
 import { NotesEditor } from './NotesEditor';
 import { sessionNoteKey } from '../hooks/useActivityNotes';
+import { InvitePicker, type InviteCandidate } from './shared/InvitePicker';
+import type { InvitationResponse } from '../types/invitation';
 
 import { RECURRENCE_OPTIONS } from '../config/constants';
 
@@ -50,9 +52,14 @@ interface SessionModalProps {
     onFeedback: (context: string) => void;
     getNote: (key: string) => string;
     saveNote: (key: string, text: string) => Promise<void>;
+    // #1201 — invite FightWeek users to this activity. Optional so other callers
+    // (and read-only contexts) don't need to provide it.
+    inviteCandidates?: InviteCandidate[];
+    existingInvitees?: Record<string, InvitationResponse>;
+    onInvite?: (form: SessionForm, inviteeEmails: string[]) => void;
 }
 
-const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote }: SessionModalProps) => {
+const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite }: SessionModalProps) => {
     const { isDark } = useTheme();
     const isNew = !initialData;
     const [form, setForm] = useState<SessionForm>({
@@ -72,6 +79,8 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
     // so a logged session isn't silently removed. The note itself is preserved
     // (handleDeleteSession never deletes it); surfacing/recovering it is tracked in #1164.
     const [confirmNoteDelete, setConfirmNoteDelete] = useState(false);
+    // #1201: emails of FightWeek users to invite to this activity on save.
+    const [selectedInvitees, setSelectedInvitees] = useState<string[]>([]);
 
     useEffect(() => {
         if (initialData) {
@@ -102,6 +111,11 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
     const inputCls = `w-full px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-surface-border text-ds-text'}`;
 
     const handleSave = () => {
+        // #1201: fire any pending invitations alongside the save. The invitation
+        // snapshots the current form (title/time/location) for the activity's day.
+        if (onInvite && selectedInvitees.length > 0) {
+            onInvite(form, selectedInvitees);
+        }
         if (shouldApplyRecurrence({ interval: recurrenceInterval, isNew, recurrenceTouched })) {
             onRecurrenceSave(form, day, date, {
                 interval: recurrenceInterval,
@@ -206,6 +220,24 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                             </div>
                         )}
                     </div>
+
+                    {/* Invite people (#1201) */}
+                    {onInvite && inviteCandidates && (
+                        <div className={`px-5 py-3 border-t ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
+                            <InvitePicker
+                                candidates={inviteCandidates}
+                                selected={selectedInvitees}
+                                onToggle={(email) => setSelectedInvitees(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email])}
+                                existing={existingInvitees}
+                                isDark={isDark}
+                            />
+                            {selectedInvitees.length > 0 && (
+                                <p className={`mt-2 text-xs ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
+                                    {selectedInvitees.length} {selectedInvitees.length === 1 ? 'person' : 'personer'} inviteres når du gemmer.
+                                </p>
+                            )}
+                        </div>
+                    )}
 
                     {/* Notes (existing sessions only) */}
                     {!isNew && (

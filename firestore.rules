@@ -89,6 +89,30 @@ service cloud.firestore {
       allow update: if isAdminOrCoach() || isTeamMember();
     }
 
+    // ─── Invitations (#1201) ───
+    // Path: artifacts/production/public/data/invitations/{docId}
+    //
+    // A team member invites others to an activity. The doc snapshots the
+    // activity and maps invitees by EMAIL → response. Merged into each invitee's
+    // calendar at render time (like event sign-ups).
+    //  • read   — any team member (the merge needs to see all invitations).
+    //  • create — a team member, and only as themselves (invitedBy == own email).
+    //  • delete — the inviter, or an admin/coach.
+    //  • update — the inviter/admin may change anything; an invitee may change
+    //             ONLY their own response key in the invitees map.
+    match /artifacts/production/public/data/invitations/{docId} {
+      allow read: if isTeamMember();
+      allow create: if isTeamMember()
+                    && request.resource.data.invitedBy == request.auth.token.email;
+      allow delete: if isAdminOrCoach()
+                    || (isAuthenticated() && resource.data.invitedBy == request.auth.token.email);
+      allow update: if isAdminOrCoach()
+                    || (isAuthenticated() && resource.data.invitedBy == request.auth.token.email)
+                    || (isTeamMember()
+                        && request.resource.data.invitees.diff(resource.data.invitees)
+                             .affectedKeys().hasOnly([request.auth.token.email]));
+    }
+
     // ─── Config documents (roles, settings) ───
     // Path: artifacts/production/public/data/config/{docId}
     //

@@ -24,6 +24,8 @@ import { useCatalogue } from './hooks/useCatalogue';
 import { useCatalogueFilter } from './hooks/useCatalogueFilter';
 import { useEvents } from './hooks/useEvents';
 import { useEventMerge } from './hooks/useEventMerge';
+import { useInvitations } from './hooks/useInvitations';
+import { useInvitationMerge } from './hooks/useInvitationMerge';
 import { useScrollController } from './hooks/useScrollController';
 
 import Toast from './components/Toast';
@@ -37,6 +39,8 @@ import FeedbackModal from './components/FeedbackModal';
 import MonthPicker from './components/MonthPicker';
 import TeamSchedule from './components/TeamSchedule';
 import SessionDetailSheet from './components/SessionDetailSheet';
+import { InvitationDetailSheet } from './components/InvitationDetailSheet';
+import type { Invitation } from './types/invitation';
 import { useActivityNotes } from './hooks/useActivityNotes';
 import MobileScrollView from './components/MobileScrollView';
 import PersonalSchedule from './components/PersonalSchedule';
@@ -64,6 +68,20 @@ const App = () => {
   // UI/merge layer keeps using the display name.
   const activeFighterKey = useMemo(() => resolveFighterKey(activeFighter, emailForName), [activeFighter, emailForName]);
 
+  // #1201: people who can be invited to an activity (every member except me),
+  // and a helper to show a friendly name for an invitee email.
+  const inviteCandidates = useMemo(() => {
+    const me = activeFighterKey.toLowerCase();
+    return Object.entries(USER_MAPPING)
+      .filter(([email]) => email.toLowerCase() !== me)
+      .map(([email, info]) => ({ email: email.toLowerCase(), name: info.name }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'da-DK'));
+  }, [USER_MAPPING, activeFighterKey]);
+
+  const nameForEmail = useCallback((email: string) => {
+    return USER_MAPPING[email.toLowerCase()]?.name || email;
+  }, [USER_MAPPING]);
+
   const {
     systemWeek, currentWeek, setCurrentWeek,
     scheduleData, setScheduleData,
@@ -75,6 +93,7 @@ const App = () => {
   const { isDark, toggleTheme } = useTheme();
   const { classes: catalogueClasses, loading: catalogueLoading } = useCatalogue();
   const { events: allEvents } = useEvents();
+  const { invitations, createInvitation, respondToInvitation, removeInvitation } = useInvitations();
   const { getNote, saveNote } = useActivityNotes(activeFighterKey);
 
   // --- Refs & scroll-to-today (must be before early returns) ---
@@ -91,8 +110,19 @@ const App = () => {
   const { multiWeekData: rawMultiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate } = useMultiWeekData(user, activeFighterKey, neededWeeks, accessDenied, isBrowserBlocked);
 
   // Event-session merge (personal + team calendars)
-  const { multiWeekData, mergedScheduleData, mergedTeamData } = useEventMerge(
+  const {
+    multiWeekData: eventMultiWeekData,
+    mergedScheduleData: eventScheduleData,
+    mergedTeamData: eventTeamData,
+  } = useEventMerge(
     allEvents, activeFighter, rawMultiWeekData, scheduleData, teamData, currentWeek,
+  );
+
+  // #1201: invitation merge — chained AFTER the event merge so both events and
+  // invitations render in the calendar. Keyed by EMAIL (not name) and hides
+  // invitations the user has declined.
+  const { multiWeekData, mergedScheduleData, mergedTeamData } = useInvitationMerge(
+    invitations, activeFighterKey, eventMultiWeekData, eventScheduleData, eventTeamData, currentWeek, emailForName,
   );
 
   // --- Local UI State ---
@@ -103,6 +133,7 @@ const App = () => {
   const [editingDay, setEditingDay] = useState(null);
   const [editingSession, setEditingSession] = useState(null);
   const [editingWeek, setEditingWeek] = useState<number | null>(null);
+  const [activeInvitation, setActiveInvitation] = useState<Invitation | null>(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [feedbackContext, setFeedbackContext] = useState(null);
   const [adminOpen, setAdminOpen] = useState(false);
@@ -456,6 +487,10 @@ const App = () => {
                   setAddScreenOpen(true);
                 }}
                 onEditSession={(day, session, weekNum) => {
+                  if (session.type === 'invitation' && session.invitationId) {
+                    const inv = invitations.find(i => i.id === session.invitationId);
+                    if (inv) { setActiveInvitation(inv); return; }
+                  }
                   if (session.type === 'event' && session.eventId) {
                     setInitialEventId(session.eventId);
                     setView('events');
@@ -489,6 +524,10 @@ const App = () => {
                 expandedDay={expandedDay}
                 onAddClick={handleAddClick}
                 onEditSession={(day, session) => {
+                  if (session.type === 'invitation' && session.invitationId) {
+                    const inv = invitations.find(i => i.id === session.invitationId);
+                    if (inv) { setActiveInvitation(inv); return; }
+                  }
                   if (session.type === 'event' && session.eventId) {
                     setInitialEventId(session.eventId);
                     setView('events');
@@ -585,6 +624,26 @@ const App = () => {
         />
       )}
 
+      {/* Invitation detail / RSVP sheet (#1201) */}
+      {activeInvitation && (
+        <InvitationDetailSheet
+          invitation={activeInvitation}
+          myEmail={activeFighterKey}
+          nameForEmail={nameForEmail}
+          onRespond={(response) => {
+            respondToInvitation(activeInvitation.id, activeFighterKey, response);
+            setActiveInvitation(null);
+            showToast(response === 'declined' ? 'Du har afslået' : 'Dit svar er gemt', 'success');
+          }}
+          onCancel={() => {
+            removeInvitation(activeInvitation.id);
+            setActiveInvitation(null);
+            showToast('Invitation annulleret', 'success');
+          }}
+          onClose={() => setActiveInvitation(null)}
+        />
+      )}
+
       {/* AddScreen full-screen overlay */}
       {addScreenOpen && (() => {
         const ad = activeDayRef.current || (() => {
@@ -631,6 +690,46 @@ const App = () => {
         onFeedback={(ctx) => setFeedbackContext(ctx)}
         getNote={getNote}
         saveNote={saveNote}
+        inviteCandidates={inviteCandidates}
+        existingInvitees={(() => {
+          // Surface anyone already invited to *this* activity (same title + day)
+          // by me, so the picker shows their current response instead of a toggle.
+          const wk = editingWeek || currentWeek;
+          const d = getDateForWeekDay(wk, editingDay);
+          const iso = d ? d.toISOString().slice(0, 10) : '';
+          const me = activeFighterKey.toLowerCase();
+          const name = (editingSession?.name || '').trim();
+          const merged: Record<string, import('./types/invitation').InvitationResponse> = {};
+          if (iso && name) {
+            for (const inv of invitations) {
+              if (inv.invitedBy.toLowerCase() !== me) continue;
+              if (inv.activity.date !== iso) continue;
+              if ((inv.activity.title || '').trim() !== name) continue;
+              for (const [email, resp] of Object.entries(inv.invitees)) merged[email] = resp;
+            }
+          }
+          return merged;
+        })()}
+        onInvite={(savedForm, inviteeEmails) => {
+          const wk = editingWeek || currentWeek;
+          const d = getDateForWeekDay(wk, editingDay);
+          const iso = d ? d.toISOString().slice(0, 10) : '';
+          if (!iso) { showToast('Kunne ikke bestemme datoen for invitationen', 'error'); return; }
+          createInvitation(
+            {
+              title: savedForm.name,
+              category: savedForm.category,
+              date: iso,
+              start: savedForm.start || '',
+              end: savedForm.end || '',
+              location: savedForm.location || '',
+            },
+            activeFighterKey,
+            activeFighter,
+            inviteeEmails,
+          );
+          showToast(`${inviteeEmails.length} ${inviteeEmails.length === 1 ? 'person inviteret' : 'personer inviteret'}`, 'success');
+        }}
       />}
       {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
       {feedbackContext && <FeedbackModal user={user} currentContext={feedbackContext} onClose={() => setFeedbackContext(null)} onShowToast={showToast} />}

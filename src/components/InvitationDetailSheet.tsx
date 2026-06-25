@@ -1,0 +1,137 @@
+/**
+ * InvitationDetailSheet — view an invitation and respond to it (#1201, 1.14).
+ *
+ * Opened when a user taps an invitation on their calendar. The invitee sees the
+ * activity details and Accept / Tentative / Decline buttons. The inviter
+ * additionally sees the full invitee list with everyone's response ("who's
+ * coming") and can cancel the invitation.
+ */
+import { ArrowLeft, MapPin, Clock, CalendarDays, Trash2, UserPlus } from 'lucide-react';
+import { useTheme } from '../hooks/useTheme';
+import {
+  INVITATION_RESPONSE_OPTIONS, responseLabel,
+  type Invitation, type InvitationResponse,
+} from '../types/invitation';
+
+function formatDateDa(iso: string): string {
+  const d = new Date(iso + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('da-DK', { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+function responseColor(status: InvitationResponse | undefined, isDark: boolean): string {
+  switch (status) {
+    case 'accepted': return 'text-emerald-500';
+    case 'tentative': return 'text-amber-500';
+    case 'declined': return 'text-red-400';
+    case 'pending': return isDark ? 'text-slate-400' : 'text-ds-text-subtle';
+    default: return isDark ? 'text-slate-600' : 'text-ds-text-subtlest';
+  }
+}
+
+export function InvitationDetailSheet({
+  invitation,
+  myEmail,
+  nameForEmail,
+  onRespond,
+  onCancel,
+  onClose,
+}: {
+  invitation: Invitation;
+  myEmail: string;
+  nameForEmail: (email: string) => string;
+  onRespond: (response: InvitationResponse) => void;
+  onCancel: () => void;
+  onClose: () => void;
+}) {
+  const { isDark } = useTheme();
+  const lowerMe = myEmail.toLowerCase();
+  const isInviter = invitation.invitedBy.toLowerCase() === lowerMe;
+  const myStatus = invitation.invitees?.[lowerMe];
+  const inviteeEntries = Object.entries(invitation.invitees || {});
+  const a = invitation.activity;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 bg-black/40" onClick={onClose} />
+      <div className={`fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl border-t shadow-2xl max-h-[85vh] flex flex-col overflow-hidden ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-surface-border'}`}>
+        {/* Header */}
+        <div className={`p-4 border-b flex items-center gap-3 shrink-0 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border'}`}>
+          <button onClick={onClose} className={`p-2 rounded-lg ${isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-ds-text-subtle hover:text-ds-text hover:bg-surface-hover'}`}>
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h2 className={`font-bold text-sm truncate ${isDark ? 'text-white' : 'text-ds-text'}`}>{a.title}</h2>
+            <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
+              <UserPlus className="w-3 h-3" /> Invitation fra {invitation.invitedByName || nameForEmail(invitation.invitedBy)}
+            </span>
+          </div>
+          {isInviter && (
+            <button onClick={onCancel} className="p-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-900/20 shrink-0" title="Annuller invitation">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* When + where */}
+          <div className={`rounded-xl border p-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border'}`}>
+            <div className="flex items-center gap-2">
+              <CalendarDays className={`w-4 h-4 shrink-0 ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`} />
+              <span className={`text-sm font-medium capitalize ${isDark ? 'text-white' : 'text-ds-text'}`}>{formatDateDa(a.date)}</span>
+            </div>
+            {(a.start || a.end) && (
+              <div className="flex items-center gap-2 mt-1.5">
+                <Clock className={`w-4 h-4 shrink-0 ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`} />
+                <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-ds-text-subtle'}`}>{a.start}{a.end ? ` – ${a.end}` : ''}</span>
+              </div>
+            )}
+            {a.location && (
+              <div className="flex items-center gap-2 mt-1.5">
+                <MapPin className={`w-4 h-4 shrink-0 ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`} />
+                <span className={`text-sm ${isDark ? 'text-slate-300' : 'text-ds-text-subtle'}`}>{a.location}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Your response (invitees only — the inviter is not in the invitees map) */}
+          {myStatus && (
+            <div className="space-y-2">
+              <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Dit svar</p>
+              <div className="flex gap-2">
+                {INVITATION_RESPONSE_OPTIONS.map(opt => {
+                  const isActive = myStatus === opt.value;
+                  return (
+                    <button key={opt.value} onClick={() => onRespond(opt.value)}
+                      className={`flex-1 text-xs font-bold py-2.5 rounded-xl border transition-colors ${isActive ? opt.activeColor : (isDark ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700' : 'bg-white text-ds-text border-surface-border hover:bg-surface-hover')}`}>
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {myStatus === 'declined' && (
+                <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Du har afslået — invitationen fjernes fra din kalender.</p>
+              )}
+            </div>
+          )}
+
+          {/* Who's coming (#1100) */}
+          <div className={`rounded-xl border p-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border'}`}>
+            <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Inviterede</p>
+            <div className="space-y-1">
+              {inviteeEntries.length === 0 && (
+                <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Ingen inviterede.</p>
+              )}
+              {inviteeEntries.map(([email, status]) => (
+                <div key={email} className="flex justify-between items-center text-sm">
+                  <span className={`font-medium ${isDark ? 'text-slate-300' : 'text-ds-text'}`}>{nameForEmail(email)}</span>
+                  <span className={`text-xs font-bold ${responseColor(status, isDark)}`}>{responseLabel(status)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
