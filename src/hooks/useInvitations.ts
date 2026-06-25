@@ -7,7 +7,7 @@
  * time by useInvitationMerge — nothing is written into private week documents.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { collection, onSnapshot, query, doc, updateDoc, addDoc, deleteDoc as firestoreDeleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, addDoc, deleteDoc as firestoreDeleteDoc, FieldPath } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { PUBLIC_DATA_PATH } from '../config/constants';
@@ -80,10 +80,14 @@ export function useInvitations() {
     response: InvitationResponse,
   ): Promise<void> => {
     const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', invitationId);
-    await updateDoc(ref, {
-      [`invitees.${inviteeEmail.toLowerCase()}`]: response,
-      updatedAt: new Date().toISOString(),
-    });
+    // Use FieldPath so the email (which contains dots) is treated as a single
+    // literal map key. A dotted string key like `invitees.a.b@x.com` would be
+    // parsed by Firestore as a nested field path and corrupt the map.
+    await updateDoc(
+      ref,
+      new FieldPath('invitees', inviteeEmail.toLowerCase()), response,
+      'updatedAt', new Date().toISOString(),
+    );
   }, []);
 
   /** Cancel/delete an invitation (inviter only — enforced by rules). */

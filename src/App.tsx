@@ -630,15 +630,27 @@ const App = () => {
           invitation={activeInvitation}
           myEmail={activeFighterKey}
           nameForEmail={nameForEmail}
-          onRespond={(response) => {
-            respondToInvitation(activeInvitation.id, activeFighterKey, response);
-            setActiveInvitation(null);
-            showToast(response === 'declined' ? 'Du har afslået' : 'Dit svar er gemt', 'success');
+          onRespond={async (response) => {
+            const id = activeInvitation.id;
+            try {
+              await respondToInvitation(id, activeFighterKey, response);
+              setActiveInvitation(null);
+              showToast(response === 'declined' ? 'Du har afslået' : 'Dit svar er gemt', 'success');
+            } catch (err) {
+              console.error('[invitation] respond failed:', err);
+              showToast('Kunne ikke gemme dit svar — prøv igen', 'error');
+            }
           }}
-          onCancel={() => {
-            removeInvitation(activeInvitation.id);
-            setActiveInvitation(null);
-            showToast('Invitation annulleret', 'success');
+          onCancel={async () => {
+            const id = activeInvitation.id;
+            try {
+              await removeInvitation(id);
+              setActiveInvitation(null);
+              showToast('Invitation annulleret', 'success');
+            } catch (err) {
+              console.error('[invitation] cancel failed:', err);
+              showToast('Kunne ikke annullere invitationen', 'error');
+            }
           }}
           onClose={() => setActiveInvitation(null)}
         />
@@ -710,25 +722,30 @@ const App = () => {
           }
           return merged;
         })()}
-        onInvite={(savedForm, inviteeEmails) => {
+        onInvite={async (savedForm, inviteeEmails) => {
           const wk = editingWeek || currentWeek;
           const d = getDateForWeekDay(wk, editingDay);
           const iso = d ? d.toISOString().slice(0, 10) : '';
           if (!iso) { showToast('Kunne ikke bestemme datoen for invitationen', 'error'); return; }
-          createInvitation(
-            {
-              title: savedForm.name,
-              category: savedForm.category,
-              date: iso,
-              start: savedForm.start || '',
-              end: savedForm.end || '',
-              location: savedForm.location || '',
-            },
-            activeFighterKey,
-            activeFighter,
-            inviteeEmails,
-          );
-          showToast(`${inviteeEmails.length} ${inviteeEmails.length === 1 ? 'person inviteret' : 'personer inviteret'}`, 'success');
+          try {
+            await createInvitation(
+              {
+                title: savedForm.name,
+                category: savedForm.category,
+                date: iso,
+                start: savedForm.start || '',
+                end: savedForm.end || '',
+                location: savedForm.location || '',
+              },
+              activeFighterKey,
+              activeFighter,
+              inviteeEmails,
+            );
+            showToast(`${inviteeEmails.length} ${inviteeEmails.length === 1 ? 'person inviteret' : 'personer inviteret'}`, 'success');
+          } catch (err) {
+            console.error('[invitation] create failed:', err);
+            showToast('Kunne ikke sende invitationen — prøv igen', 'error');
+          }
         }}
       />}
       {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
