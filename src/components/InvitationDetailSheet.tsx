@@ -48,7 +48,11 @@ export function InvitationDetailSheet({
   const lowerMe = myEmail.toLowerCase();
   const isInviter = invitation.invitedBy.toLowerCase() === lowerMe;
   const myStatus = invitation.invitees?.[lowerMe];
-  const inviteeEntries = Object.entries(invitation.invitees || {});
+  // Defensive: only show invitees whose value is a real response string. Legacy
+  // docs may contain nested garbage from the old dotted-key write bug.
+  const VALID_RESPONSES = ['pending', 'accepted', 'declined', 'tentative'];
+  const inviteeEntries = Object.entries(invitation.invitees || {})
+    .filter(([, status]) => typeof status === 'string' && VALID_RESPONSES.includes(status));
   const a = invitation.activity;
 
   return (

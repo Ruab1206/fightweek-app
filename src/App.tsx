@@ -13,7 +13,7 @@ import {
 
 import { DAYS, resolveFighterKey } from './config/constants';
 import { useRolesConfig } from './hooks/useRolesConfig';
-import { getDateForWeekDay, getWeekDateMap, getTodayDayName, getFullWeekDateMap, getDaysInRange, getISOWeekForDate } from './utils/dateUtils';
+import { getDateForWeekDay, getWeekDateMap, getTodayDayName, getFullWeekDateMap, getDaysInRange, getISOWeekForDate, toLocalISODate } from './utils/dateUtils';
 
 import { useAuth } from './hooks/useAuth';
 import { useScheduleData, useMultiWeekData, useMultiWeekTeamData } from './hooks/useScheduleData';
@@ -708,7 +708,7 @@ const App = () => {
           // by me, so the picker shows their current response instead of a toggle.
           const wk = editingWeek || currentWeek;
           const d = getDateForWeekDay(wk, editingDay);
-          const iso = d ? d.toISOString().slice(0, 10) : '';
+          const iso = d ? toLocalISODate(d) : '';
           const me = activeFighterKey.toLowerCase();
           const name = (editingSession?.name || '').trim();
           const merged: Record<string, import('./types/invitation').InvitationResponse> = {};
@@ -725,7 +725,7 @@ const App = () => {
         onInvite={async (savedForm, inviteeEmails) => {
           const wk = editingWeek || currentWeek;
           const d = getDateForWeekDay(wk, editingDay);
-          const iso = d ? d.toISOString().slice(0, 10) : '';
+          const iso = d ? toLocalISODate(d) : '';
           if (!iso) { showToast('Kunne ikke bestemme datoen for invitationen', 'error'); return; }
           try {
             await createInvitation(

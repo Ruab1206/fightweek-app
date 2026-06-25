@@ -41,6 +41,20 @@ export const getDateForWeekDay = (weekNumber: number, dayName: string): Date | n
 };
 
 /**
+ * Format a Date as a LOCAL "YYYY-MM-DD" string.
+ *
+ * Do NOT use `date.toISOString().slice(0,10)` for calendar days: toISOString
+ * converts to UTC, so a local-midnight date in a UTC+N timezone (e.g. Denmark
+ * in summer, UTC+2) rolls back to the previous day. This keeps the local day.
+ */
+export const toLocalISODate = (date: Date): string => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+};
+
+/**
  * Get a map of days to dates for a given week
  * Format: { "Mandag": "12. feb", ... }
  */
