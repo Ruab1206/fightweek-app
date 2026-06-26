@@ -52,9 +52,10 @@ export function InvitePicker({
           const already = existing[email];
           const isSelected = selected.includes(email);
           // Already-invited members are shown as static chips and can't be re-toggled —
-          // EXCEPT people who declined: they get a "Inviter igen" button so a fresh
-          // invite resets them to pending (#1201 re-invite-after-decline).
-          if (already && already !== 'declined') {
+          // EXCEPT people who declined or were removed: they get a "Inviter igen"
+          // button so a fresh invite resets them to pending (#1201).
+          const reInvitable = already === 'declined' || already === 'cancelled';
+          if (already && !reInvitable) {
             return (
               <span key={email}
                 className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium border ${isDark ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-surface-subtle border-surface-border text-ds-text-subtle'}`}
@@ -71,7 +72,7 @@ export function InvitePicker({
               </span>
             );
           }
-          if (already === 'declined') {
+          if (reInvitable) {
             return (
               <button key={email} type="button" onClick={() => onToggle(email)}
                 title="Afslog tidligere — inviter igen"

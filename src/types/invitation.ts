@@ -9,8 +9,10 @@
 // written into a private week document.
 // ──────────────────────────────────────────────
 
-/** An invitee's response to an invitation. `pending` = invited, not yet replied. */
-export type InvitationResponse = 'pending' | 'accepted' | 'declined' | 'tentative';
+/** An invitee's response to an invitation. `pending` = invited, not yet replied.
+ * `cancelled` = the arranger removed this specific person (they see "Aflyst"
+ * until they remove it from their own calendar). */
+export type InvitationResponse = 'pending' | 'accepted' | 'declined' | 'tentative' | 'cancelled';
 
 /** Lifecycle of an invitation. `cancelled` = the arranger called it off; invitees
  * still see it (struck through) until they remove it from their own calendar. */
@@ -38,9 +40,9 @@ export interface Invitation {
   updatedAt: string;                              // ISO 8601
 }
 
-/** Response options offered to an invitee (excludes the implicit `pending`). */
+/** Response options offered to an invitee (excludes the implicit `pending`/`cancelled`). */
 export const INVITATION_RESPONSE_OPTIONS: {
-  value: Exclude<InvitationResponse, 'pending'>;
+  value: 'accepted' | 'tentative' | 'declined';
   label: string;
   activeColor: string;
 }[] = [
@@ -56,6 +58,7 @@ export function responseLabel(status: InvitationResponse | undefined): string {
     case 'tentative': return 'Måske';
     case 'declined': return 'Afslår';
     case 'pending': return 'Afventer svar';
+    case 'cancelled': return 'Aflyst';
     default: return '—';
   }
 }

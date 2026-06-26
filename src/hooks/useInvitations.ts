@@ -186,9 +186,11 @@ export function useInvitations() {
   }, []);
 
   /**
-   * Arranger un-invites a single person: removes that invitee's key from the
-   * invitees map so the invitation disappears from their calendar. Inviter/admin
-   * only (the inviter clause in the rules permits editing other invitees' keys).
+   * Arranger un-invites a single person (Outlook-style): sets that invitee's
+   * response to `cancelled` so they see the activity struck through as "Aflyst"
+   * and can remove it from their own calendar (instead of it vanishing without
+   * explanation). Inviter/admin only (the inviter clause permits editing other
+   * invitees' keys).
    */
   const removeInvitee = useCallback(async (
     invitationId: string,
@@ -197,7 +199,7 @@ export function useInvitations() {
     const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', invitationId);
     await updateDoc(
       ref,
-      new FieldPath('invitees', inviteeEmail.toLowerCase()), deleteField(),
+      new FieldPath('invitees', inviteeEmail.toLowerCase()), 'cancelled',
       'updatedAt', new Date().toISOString(),
     );
   }, []);

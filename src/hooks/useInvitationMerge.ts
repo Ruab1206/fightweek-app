@@ -35,9 +35,11 @@ export interface InvitationSession {
   invitedByName: string;
 }
 
-/** A response is shown on the invitee's calendar unless they declined. */
+/** A response is shown on the invitee's calendar unless they declined. A
+ * per-person `cancelled` (the arranger removed them) is still shown so they get
+ * the "Aflyst" notice and can dismiss it themselves. */
 function isVisibleResponse(status: InvitationResponse | undefined): boolean {
-  return status === 'pending' || status === 'accepted' || status === 'tentative';
+  return status === 'pending' || status === 'accepted' || status === 'tentative' || status === 'cancelled';
 }
 
 function buildInvitationSession(inv: Invitation, status: InvitationResponse): InvitationSession {
@@ -52,7 +54,7 @@ function buildInvitationSession(inv: Invitation, status: InvitationResponse): In
     type: 'invitation',
     invitationId: inv.id,
     invitationResponse: status,
-    invitationCancelled: inv.status === 'cancelled',
+    invitationCancelled: inv.status === 'cancelled' || status === 'cancelled',
     invitedByName: inv.invitedByName || inv.invitedBy,
   };
 }

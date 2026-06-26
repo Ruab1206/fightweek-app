@@ -50,10 +50,15 @@ export function InvitationDetailSheet({
   const { isDark } = useTheme();
   const lowerMe = myEmail.toLowerCase();
   const isInviter = invitation.invitedBy.toLowerCase() === lowerMe;
-  const isCancelled = invitation.status === 'cancelled';
   const myStatus = invitation.invitees?.[lowerMe];
+  // The whole activity was called off, or just this person was removed — either
+  // way the viewer sees an "Aflyst" notice and can remove it from their calendar.
+  const activityCancelled = invitation.status === 'cancelled';
+  const meRemoved = myStatus === 'cancelled';
+  const isCancelled = activityCancelled || meRemoved;
   // Defensive: only show invitees whose value is a real response string. Legacy
-  // docs may contain nested garbage from the old dotted-key write bug.
+  // docs may contain nested garbage from the old dotted-key write bug. Hide
+  // people the arranger removed (`cancelled`) from the "who's coming" list.
   const VALID_RESPONSES = ['pending', 'accepted', 'declined', 'tentative'];
   const inviteeEntries = Object.entries(invitation.invitees || {})
     .filter(([, status]) => typeof status === 'string' && VALID_RESPONSES.includes(status));
@@ -89,7 +94,9 @@ export function InvitationDetailSheet({
               <div>
                 <p className={`text-sm font-bold ${isDark ? 'text-red-300' : 'text-red-700'}`}>Aflyst</p>
                 <p className={`text-xs ${isDark ? 'text-red-300/80' : 'text-red-600'}`}>
-                  {invitation.invitedByName || nameForEmail(invitation.invitedBy)} har aflyst denne aktivitet.
+                  {meRemoved && !activityCancelled
+                    ? `${invitation.invitedByName || nameForEmail(invitation.invitedBy)} har fjernet dig fra denne aktivitet.`
+                    : `${invitation.invitedByName || nameForEmail(invitation.invitedBy)} har aflyst denne aktivitet.`}
                 </p>
               </div>
             </div>
