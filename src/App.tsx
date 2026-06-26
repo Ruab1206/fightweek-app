@@ -40,6 +40,7 @@ import MonthPicker from './components/MonthPicker';
 import TeamSchedule from './components/TeamSchedule';
 import SessionDetailSheet from './components/SessionDetailSheet';
 import { InvitationDetailSheet } from './components/InvitationDetailSheet';
+import { InvitationBell } from './components/InvitationBell';
 import type { Invitation } from './types/invitation';
 import { useActivityNotes } from './hooks/useActivityNotes';
 import MobileScrollView from './components/MobileScrollView';
@@ -302,6 +303,11 @@ const App = () => {
                 <text x="12" y="18.5" textAnchor="middle" fill="currentColor" stroke="none" fontSize="8" fontWeight="bold">{new Date().getDate()}</text>
               </svg>
             </button>
+            <InvitationBell
+              invitations={invitations}
+              myEmail={activeFighterKey}
+              onOpenInvitation={(inv) => setActiveInvitation(inv)}
+            />
             <div className="relative">
               <button onClick={() => setMenuOpen(!menuOpen)} className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-colors active:scale-95 ${menuOpen ? 'bg-blue-600 text-white' : (isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-surface-hover text-ds-text hover:bg-surface-raised')}`}>
                 {activeFighter.slice(0, 1)}
