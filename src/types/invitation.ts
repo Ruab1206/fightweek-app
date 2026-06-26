@@ -54,3 +54,22 @@ export function responseLabel(status: InvitationResponse | undefined): string {
     default: return '—';
   }
 }
+
+/**
+ * Compact badge for an invitation shown on the calendar — tells the viewer their
+ * own response state at a glance so they remember to answer. `tone` maps to a
+ * colour the calendar components turn into Tailwind classes.
+ */
+export interface InvitationBadge {
+  label: string;
+  tone: 'attention' | 'positive' | 'maybe';
+}
+
+export function invitationBadge(status: InvitationResponse | undefined): InvitationBadge {
+  switch (status) {
+    case 'accepted': return { label: 'Du deltager', tone: 'positive' };
+    case 'tentative': return { label: 'Du har svaret måske', tone: 'maybe' };
+    case 'declined': return { label: 'Afslået', tone: 'maybe' };
+    default: return { label: 'Svar mangler', tone: 'attention' };
+  }
+}

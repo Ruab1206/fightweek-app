@@ -17,6 +17,10 @@ export function useInvitations() {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Keep the latest invitations available inside callbacks (for upsert lookups)
+  // without re-creating those callbacks on every snapshot.
+  const invitationsRef = useRef<Invitation[]>([]);
+  invitationsRef.current = invitations;
 
   useEffect(() => {
     let unsub: (() => void) | null = null;
@@ -53,19 +57,49 @@ export function useInvitations() {
     };
   }, []);
 
-  /** Create an invitation to an activity for one or more invitees (all start as pending). */
+  /**
+   * Invite people to an activity. One invitation doc per (inviter + activity),
+   * so everyone invited to the same activity shares a single doc and can see
+   * each other's responses. If an invitation for this activity already exists,
+   * the new invitees are merged in as `pending` (re-inviting a previously
+   * declined person resets them to pending). Otherwise a new doc is created.
+   */
   const createInvitation = useCallback(async (
     activity: InvitationActivity,
     invitedBy: string,
     invitedByName: string,
     inviteeEmails: string[],
   ): Promise<void> => {
-    const invitees: Record<string, InvitationResponse> = {};
-    for (const email of inviteeEmails) invitees[email.toLowerCase()] = 'pending';
     const nowIso = new Date().toISOString();
+    const inviter = invitedBy.toLowerCase();
+    const emails = inviteeEmails.map((e) => e.toLowerCase());
+
+    // Find an existing invitation for the same activity by the same inviter.
+    const existing = invitationsRef.current.find((inv) =>
+      inv.invitedBy.toLowerCase() === inviter
+      && (inv.activity.title || '').trim() === (activity.title || '').trim()
+      && inv.activity.date === activity.date
+      && (inv.activity.start || '') === (activity.start || ''),
+    );
+
+    if (existing) {
+      // Merge: set each invitee to pending via FieldPath (emails contain dots).
+      const args: unknown[] = [];
+      for (const email of emails) {
+        args.push(new FieldPath('invitees', email), 'pending');
+      }
+      args.push('updatedAt', nowIso);
+      const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', existing.id);
+      // updateDoc(ref, field, value, ...moreFieldsAndValues)
+      await (updateDoc as (...a: unknown[]) => Promise<void>)(ref, ...args);
+      return;
+    }
+
+    const invitees: Record<string, InvitationResponse> = {};
+    for (const email of emails) invitees[email] = 'pending';
     await addDoc(collection(db, PUBLIC_DATA_PATH, 'invitations'), {
       activity,
-      invitedBy: invitedBy.toLowerCase(),
+      invitedBy: inviter,
       invitedByName,
       invitees,
       createdAt: nowIso,

@@ -19,13 +19,14 @@ function formatDateDa(iso: string): string {
   return d.toLocaleDateString('da-DK', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
-function responseColor(status: InvitationResponse | undefined, isDark: boolean): string {
+/** Colour-coded pill classes (bg + text) for an invitee's response, for the overview list. */
+function responseChip(status: InvitationResponse | undefined, isDark: boolean): string {
   switch (status) {
-    case 'accepted': return 'text-emerald-500';
-    case 'tentative': return 'text-amber-500';
-    case 'declined': return 'text-red-400';
-    case 'pending': return isDark ? 'text-slate-400' : 'text-ds-text-subtle';
-    default: return isDark ? 'text-slate-600' : 'text-ds-text-subtlest';
+    case 'accepted': return isDark ? 'bg-emerald-900/40 text-emerald-300' : 'bg-emerald-100 text-emerald-700';
+    case 'tentative': return isDark ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-100 text-amber-700';
+    case 'declined': return isDark ? 'bg-red-900/40 text-red-300' : 'bg-red-100 text-red-700';
+    case 'pending':
+    default: return isDark ? 'bg-slate-800 text-slate-400' : 'bg-surface-subtle text-ds-text-subtle';
   }
 }
 
@@ -119,17 +120,21 @@ export function InvitationDetailSheet({
             </div>
           )}
 
-          {/* Who's coming (#1100) */}
+          {/* Who's coming (#1100) — visible to everyone invited, colour-coded */}
           <div className={`rounded-xl border p-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border'}`}>
             <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Inviterede</p>
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               {inviteeEntries.length === 0 && (
                 <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Ingen inviterede.</p>
               )}
               {inviteeEntries.map(([email, status]) => (
-                <div key={email} className="flex justify-between items-center text-sm">
-                  <span className={`font-medium ${isDark ? 'text-slate-300' : 'text-ds-text'}`}>{nameForEmail(email)}</span>
-                  <span className={`text-xs font-bold ${responseColor(status, isDark)}`}>{responseLabel(status)}</span>
+                <div key={email} className="flex justify-between items-center gap-2 text-sm">
+                  <span className={`font-medium truncate ${email === lowerMe ? (isDark ? 'text-white' : 'text-ds-text') : (isDark ? 'text-slate-300' : 'text-ds-text')}`}>
+                    {nameForEmail(email)}{email === lowerMe ? ' (dig)' : ''}
+                  </span>
+                  <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${responseChip(status as InvitationResponse, isDark)}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current" />{responseLabel(status as InvitationResponse)}
+                  </span>
                 </div>
               ))}
             </div>

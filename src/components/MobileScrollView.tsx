@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 
 import { CATEGORIES } from '../config/constants';
+import { invitationBadge } from '../types/invitation';
 import { getISOWeekForDate } from '../utils/dateUtils';
 import type { ScrollDay } from '../utils/dateUtils';
 
@@ -125,7 +126,18 @@ const MobileScrollView = ({ scrollDays, multiWeekData, isDark, onEditSession, on
                         <span className="flex items-center"><Clock className="w-2.5 h-2.5 mr-0.5 shrink-0" />{s.start} - {s.end}</span>
                         <span className="flex items-center truncate"><MapPin className="w-2.5 h-2.5 mr-0.5 shrink-0" />{s.location}</span>
                       </div>
-                      {isInvitation && <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase mt-0.5 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}><UserPlus className="w-2.5 h-2.5" />{s.invitedByName ? `Fra ${s.invitedByName}` : 'Invitation'}</span>}
+                      {isInvitation && (() => {
+                        const badge = invitationBadge(s.invitationResponse);
+                        const toneCls = badge.tone === 'positive'
+                          ? (isDark ? 'text-emerald-400' : 'text-emerald-600')
+                          : (isDark ? 'text-amber-400' : 'text-amber-600');
+                        return (
+                          <div className="mt-0.5 flex flex-col gap-0.5">
+                            <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}><UserPlus className="w-2.5 h-2.5" />{s.invitedByName ? `Fra ${s.invitedByName}` : 'Invitation'}</span>
+                            <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase ${toneCls}`}><span className="w-1.5 h-1.5 rounded-full bg-current" />{badge.label}</span>
+                          </div>
+                        );
+                      })()}
                       {isEvent && <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase mt-0.5 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}><CalendarDays className="w-2.5 h-2.5" />Event</span>}
                       {isCancelled && <div className="mt-0.5 text-[9px] text-red-400 flex items-center"><AlertCircle className="w-2.5 h-2.5 mr-0.5" />Aflyst{s.cancellationReason ? `: ${s.cancellationReason}` : ''}</div>}
                     </div>
