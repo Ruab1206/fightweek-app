@@ -5,7 +5,7 @@
  * decides what to do with them (create the invitation on save). Already-invited
  * members are shown with their current response and cannot be toggled off here.
  */
-import { UserPlus, Check } from 'lucide-react';
+import { UserPlus, Check, X } from 'lucide-react';
 import { responseLabel, type InvitationResponse } from '../../types/invitation';
 
 export interface InviteCandidate {
@@ -18,12 +18,14 @@ export function InvitePicker({
   selected,
   onToggle,
   existing = {},
+  onRemoveExisting,
   isDark,
 }: {
   candidates: InviteCandidate[];
   selected: string[];          // selected emails (lower-case)
   onToggle: (email: string) => void;
   existing?: Record<string, InvitationResponse>; // already-invited email → response
+  onRemoveExisting?: (email: string) => void;    // un-invite an already-invited person
   isDark: boolean;
 }) {
   const labelCls = `text-[10px] font-bold uppercase tracking-wider mb-1.5 block ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`;
@@ -59,6 +61,13 @@ export function InvitePicker({
                 title={`Allerede inviteret — ${responseLabel(already)}`}>
                 {c.name}
                 <span className="opacity-70">· {responseLabel(already)}</span>
+                {onRemoveExisting && (
+                  <button type="button" onClick={() => onRemoveExisting(email)}
+                    title="Fjern invitationen for denne person"
+                    className={`-mr-1 ml-0.5 rounded-full p-0.5 transition-colors ${isDark ? 'hover:bg-red-900/40 hover:text-red-300' : 'hover:bg-red-100 hover:text-red-600'}`}>
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
               </span>
             );
           }

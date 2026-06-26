@@ -93,7 +93,7 @@ const App = () => {
   const { isDark, toggleTheme } = useTheme();
   const { classes: catalogueClasses, loading: catalogueLoading } = useCatalogue();
   const { events: allEvents } = useEvents();
-  const { invitations, createInvitation, respondToInvitation, cancelInvitation, cancelInvitationForActivity, dismissInvitation } = useInvitations();
+  const { invitations, createInvitation, respondToInvitation, cancelInvitation, cancelInvitationForActivity, dismissInvitation, removeInvitee } = useInvitations();
   const { getNote, saveNote } = useActivityNotes(activeFighterKey);
 
   // --- Refs & scroll-to-today (must be before early returns) ---
@@ -772,6 +772,28 @@ const App = () => {
           } catch (err) {
             console.error('[invitation] create failed:', err);
             showToast('Kunne ikke sende invitationen — prøv igen', 'error');
+          }
+        }}
+        onUninvite={async (email) => {
+          // Arranger removes one person from the invitation for this activity.
+          const wk = editingWeek || currentWeek;
+          const d = getDateForWeekDay(wk, editingDay);
+          const iso = d ? toLocalISODate(d) : '';
+          const me = activeFighterKey.toLowerCase();
+          const name = (editingSession?.name || '').trim();
+          const inv = invitations.find(i =>
+            i.invitedBy.toLowerCase() === me
+            && i.activity.date === iso
+            && (i.activity.title || '').trim() === name
+            && (i.activity.start || '') === (editingSession?.start || ''),
+          );
+          if (!inv) return;
+          try {
+            await removeInvitee(inv.id, email);
+            showToast(`${nameForEmail(email)} er ikke længere inviteret`, 'success');
+          } catch (err) {
+            console.error('[invitation] uninvite failed:', err);
+            showToast('Kunne ikke fjerne invitationen', 'error');
           }
         }}
       />}

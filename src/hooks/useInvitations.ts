@@ -185,8 +185,25 @@ export function useInvitations() {
     );
   }, []);
 
+  /**
+   * Arranger un-invites a single person: removes that invitee's key from the
+   * invitees map so the invitation disappears from their calendar. Inviter/admin
+   * only (the inviter clause in the rules permits editing other invitees' keys).
+   */
+  const removeInvitee = useCallback(async (
+    invitationId: string,
+    inviteeEmail: string,
+  ): Promise<void> => {
+    const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', invitationId);
+    await updateDoc(
+      ref,
+      new FieldPath('invitees', inviteeEmail.toLowerCase()), deleteField(),
+      'updatedAt', new Date().toISOString(),
+    );
+  }, []);
+
   return {
     invitations, loading, createInvitation, respondToInvitation,
-    removeInvitation, cancelInvitation, cancelInvitationForActivity, dismissInvitation,
+    removeInvitation, cancelInvitation, cancelInvitationForActivity, dismissInvitation, removeInvitee,
   };
 }

@@ -57,9 +57,10 @@ interface SessionModalProps {
     inviteCandidates?: InviteCandidate[];
     existingInvitees?: Record<string, InvitationResponse>;
     onInvite?: (form: SessionForm, inviteeEmails: string[]) => void;
+    onUninvite?: (email: string) => void;
 }
 
-const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite }: SessionModalProps) => {
+const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onUninvite }: SessionModalProps) => {
     const { isDark } = useTheme();
     const isNew = !initialData;
     const [form, setForm] = useState<SessionForm>({
@@ -229,6 +230,7 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                                 selected={selectedInvitees}
                                 onToggle={(email) => setSelectedInvitees(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email])}
                                 existing={existingInvitees}
+                                onRemoveExisting={onUninvite}
                                 isDark={isDark}
                             />
                             {selectedInvitees.length > 0 && (
