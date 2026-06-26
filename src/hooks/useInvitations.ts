@@ -88,6 +88,10 @@ export function useInvitations() {
       for (const email of emails) {
         args.push(new FieldPath('invitees', email), 'pending');
       }
+      // Re-inviting reactivates the activity: if the doc was previously
+      // cancelled, clear that so invitees don't see a stale "Aflyst" while the
+      // arranger sees them as pending.
+      args.push('status', 'active');
       args.push('updatedAt', nowIso);
       const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', existing.id);
       // updateDoc(ref, field, value, ...moreFieldsAndValues)
