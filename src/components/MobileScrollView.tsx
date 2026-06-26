@@ -109,10 +109,10 @@ const MobileScrollView = ({ scrollDays, multiWeekData, isDark, onEditSession, on
               )}
               {visibleSessions.map((s: any) => {
                 const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
-                const isCancelled = s.status === 'cancelled';
+                const isInvitation = s.type === 'invitation';
+                const isCancelled = s.status === 'cancelled' || (isInvitation && s.invitationCancelled);
                 const isRecurring = !!s.isRecurring;
                 const isEvent = s.type === 'event';
-                const isInvitation = s.type === 'invitation';
                 return (
                   <div key={s.id} onClick={() => onEditSession(scrollDay.dayName, s, scrollDay.weekNumber)}
                     className={`relative flex items-start p-2 rounded-xl border shadow-sm transition-all cursor-pointer active:scale-[0.98] ${isCancelled ? (isDark ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-red-50 border-red-200 opacity-75') : isInvitation ? (isDark ? 'bg-emerald-950/30 border-emerald-800/50' : 'bg-emerald-50 border-emerald-200') : isEvent ? (isDark ? 'bg-indigo-950/30 border-indigo-800/50' : 'bg-indigo-50 border-indigo-200') : (isDark ? 'bg-slate-800 border-slate-700/50' : 'bg-white border-surface-border')}`}>
@@ -133,8 +133,8 @@ const MobileScrollView = ({ scrollDays, multiWeekData, isDark, onEditSession, on
                           : (isDark ? 'text-amber-400' : 'text-amber-600');
                         return (
                           <div className="mt-0.5 flex flex-col gap-0.5">
-                            <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}><UserPlus className="w-2.5 h-2.5" />{s.invitedByName ? `Fra ${s.invitedByName}` : 'Invitation'}</span>
-                            <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase ${toneCls}`}><span className="w-1.5 h-1.5 rounded-full bg-current" />{badge.label}</span>
+                            <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase ${isCancelled ? 'text-red-400' : (isDark ? 'text-emerald-400' : 'text-emerald-600')}`}><UserPlus className="w-2.5 h-2.5" />{s.invitedByName ? `Fra ${s.invitedByName}` : 'Invitation'}</span>
+                            {!isCancelled && <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase ${toneCls}`}><span className="w-1.5 h-1.5 rounded-full bg-current" />{badge.label}</span>}
                           </div>
                         );
                       })()}

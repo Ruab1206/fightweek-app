@@ -7,7 +7,7 @@
  * time by useInvitationMerge — nothing is written into private week documents.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { collection, onSnapshot, query, doc, updateDoc, addDoc, deleteDoc as firestoreDeleteDoc, FieldPath } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc, addDoc, deleteDoc as firestoreDeleteDoc, deleteField, FieldPath } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { PUBLIC_DATA_PATH } from '../config/constants';
@@ -102,6 +102,7 @@ export function useInvitations() {
       invitedBy: inviter,
       invitedByName,
       invitees,
+      status: 'active',
       createdAt: nowIso,
       updatedAt: nowIso,
     });
@@ -130,5 +131,62 @@ export function useInvitations() {
     await firestoreDeleteDoc(ref);
   }, []);
 
-  return { invitations, loading, createInvitation, respondToInvitation, removeInvitation };
+  /**
+   * Arranger calls off an invitation (Outlook-style): the doc is kept but marked
+   * `cancelled`, so invitees still see it struck through until they remove it
+   * from their own calendar (dismissInvitation). Inviter-only, enforced by rules.
+   */
+  const cancelInvitation = useCallback(async (invitationId: string): Promise<void> => {
+    const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', invitationId);
+    await updateDoc(ref, { status: 'cancelled', updatedAt: new Date().toISOString() });
+  }, []);
+
+  /**
+   * Cancel the invitation that matches an activity the current user arranged
+   * (same inviter + title + date + start). Used when the arranger deletes the
+   * underlying activity, so invitees see it was called off. No-op if none match.
+   */
+  const cancelInvitationForActivity = useCallback(async (
+    invitedBy: string,
+    title: string,
+    date: string,
+    start: string,
+  ): Promise<void> => {
+    const inviter = invitedBy.toLowerCase();
+    const t = (title || '').trim();
+    const matches = invitationsRef.current.filter((inv) =>
+      inv.status !== 'cancelled'
+      && inv.invitedBy.toLowerCase() === inviter
+      && (inv.activity.title || '').trim() === t
+      && inv.activity.date === date
+      && (inv.activity.start || '') === (start || ''),
+    );
+    const nowIso = new Date().toISOString();
+    for (const inv of matches) {
+      const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', inv.id);
+      await updateDoc(ref, { status: 'cancelled', updatedAt: nowIso });
+    }
+  }, []);
+
+  /**
+   * An invitee removes a (usually cancelled) invitation from their own calendar
+   * by deleting their own key from the invitees map. Allowed by rules because it
+   * only affects the caller's own key.
+   */
+  const dismissInvitation = useCallback(async (
+    invitationId: string,
+    inviteeEmail: string,
+  ): Promise<void> => {
+    const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', invitationId);
+    await updateDoc(
+      ref,
+      new FieldPath('invitees', inviteeEmail.toLowerCase()), deleteField(),
+      'updatedAt', new Date().toISOString(),
+    );
+  }, []);
+
+  return {
+    invitations, loading, createInvitation, respondToInvitation,
+    removeInvitation, cancelInvitation, cancelInvitationForActivity, dismissInvitation,
+  };
 }

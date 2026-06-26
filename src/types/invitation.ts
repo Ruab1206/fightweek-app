@@ -12,6 +12,10 @@
 /** An invitee's response to an invitation. `pending` = invited, not yet replied. */
 export type InvitationResponse = 'pending' | 'accepted' | 'declined' | 'tentative';
 
+/** Lifecycle of an invitation. `cancelled` = the arranger called it off; invitees
+ * still see it (struck through) until they remove it from their own calendar. */
+export type InvitationStatus = 'active' | 'cancelled';
+
 /** Snapshot of the activity an invitation was created from (taken at invite time). */
 export interface InvitationActivity {
   title: string;          // Activity name, e.g. "MMA Sparring"
@@ -29,6 +33,7 @@ export interface Invitation {
   invitedBy: string;                              // Inviter's email (lower-case)
   invitedByName?: string;                         // Inviter's display name (denormalised for UI)
   invitees: Record<string, InvitationResponse>;   // email → response
+  status?: InvitationStatus;                      // undefined = active (legacy docs)
   createdAt: string;                              // ISO 8601
   updatedAt: string;                              // ISO 8601
 }

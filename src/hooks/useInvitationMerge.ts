@@ -31,6 +31,7 @@ export interface InvitationSession {
   type: 'invitation';
   invitationId: string;
   invitationResponse: InvitationResponse;
+  invitationCancelled: boolean;
   invitedByName: string;
 }
 
@@ -51,6 +52,7 @@ function buildInvitationSession(inv: Invitation, status: InvitationResponse): In
     type: 'invitation',
     invitationId: inv.id,
     invitationResponse: status,
+    invitationCancelled: inv.status === 'cancelled',
     invitedByName: inv.invitedByName || inv.invitedBy,
   };
 }

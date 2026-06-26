@@ -6,7 +6,7 @@
  * additionally sees the full invitee list with everyone's response ("who's
  * coming") and can cancel the invitation.
  */
-import { ArrowLeft, MapPin, Clock, CalendarDays, Trash2, UserPlus } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, CalendarDays, Trash2, UserPlus, AlertCircle, CalendarX } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import {
   INVITATION_RESPONSE_OPTIONS, responseLabel,
@@ -36,6 +36,7 @@ export function InvitationDetailSheet({
   nameForEmail,
   onRespond,
   onCancel,
+  onDismiss,
   onClose,
 }: {
   invitation: Invitation;
@@ -43,11 +44,13 @@ export function InvitationDetailSheet({
   nameForEmail: (email: string) => string;
   onRespond: (response: InvitationResponse) => void;
   onCancel: () => void;
+  onDismiss: () => void;
   onClose: () => void;
 }) {
   const { isDark } = useTheme();
   const lowerMe = myEmail.toLowerCase();
   const isInviter = invitation.invitedBy.toLowerCase() === lowerMe;
+  const isCancelled = invitation.status === 'cancelled';
   const myStatus = invitation.invitees?.[lowerMe];
   // Defensive: only show invitees whose value is a real response string. Legacy
   // docs may contain nested garbage from the old dotted-key write bug.
@@ -71,7 +74,7 @@ export function InvitationDetailSheet({
               <UserPlus className="w-3 h-3" /> Invitation fra {invitation.invitedByName || nameForEmail(invitation.invitedBy)}
             </span>
           </div>
-          {isInviter && (
+          {isInviter && !isCancelled && (
             <button onClick={onCancel} className="p-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-900/20 shrink-0" title="Annuller invitation">
               <Trash2 className="w-4 h-4" />
             </button>
@@ -79,6 +82,18 @@ export function InvitationDetailSheet({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Cancelled banner (#1201 step A) */}
+          {isCancelled && (
+            <div className={`rounded-xl border p-3 flex items-start gap-2 ${isDark ? 'bg-red-950/30 border-red-900/50' : 'bg-red-50 border-red-200'}`}>
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+              <div>
+                <p className={`text-sm font-bold ${isDark ? 'text-red-300' : 'text-red-700'}`}>Aflyst</p>
+                <p className={`text-xs ${isDark ? 'text-red-300/80' : 'text-red-600'}`}>
+                  {invitation.invitedByName || nameForEmail(invitation.invitedBy)} har aflyst denne aktivitet.
+                </p>
+              </div>
+            </div>
+          )}
           {/* When + where */}
           <div className={`rounded-xl border p-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border'}`}>
             <div className="flex items-center gap-2">
@@ -100,7 +115,7 @@ export function InvitationDetailSheet({
           </div>
 
           {/* Your response (invitees only — the inviter is not in the invitees map) */}
-          {myStatus && (
+          {myStatus && !isCancelled && (
             <div className="space-y-2">
               <p className={`text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Dit svar</p>
               <div className="flex gap-2">
@@ -118,6 +133,14 @@ export function InvitationDetailSheet({
                 <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Du har afslået — invitationen fjernes fra din kalender.</p>
               )}
             </div>
+          )}
+
+          {/* Remove a cancelled invitation from your own calendar (#1201 step A) */}
+          {myStatus && isCancelled && (
+            <button onClick={onDismiss}
+              className={`w-full flex items-center justify-center gap-2 text-sm font-bold py-3 rounded-xl border transition-colors ${isDark ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700' : 'bg-white text-ds-text border-surface-border hover:bg-surface-hover'}`}>
+              <CalendarX className="w-4 h-4" /> Fjern fra kalender
+            </button>
           )}
 
           {/* Who's coming (#1100) — visible to everyone invited, colour-coded */}

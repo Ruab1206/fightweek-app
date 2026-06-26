@@ -93,7 +93,7 @@ const App = () => {
   const { isDark, toggleTheme } = useTheme();
   const { classes: catalogueClasses, loading: catalogueLoading } = useCatalogue();
   const { events: allEvents } = useEvents();
-  const { invitations, createInvitation, respondToInvitation, removeInvitation } = useInvitations();
+  const { invitations, createInvitation, respondToInvitation, cancelInvitation, cancelInvitationForActivity, dismissInvitation } = useInvitations();
   const { getNote, saveNote } = useActivityNotes(activeFighterKey);
 
   // --- Refs & scroll-to-today (must be before early returns) ---
@@ -644,12 +644,23 @@ const App = () => {
           onCancel={async () => {
             const id = activeInvitation.id;
             try {
-              await removeInvitation(id);
+              await cancelInvitation(id);
               setActiveInvitation(null);
-              showToast('Invitation annulleret', 'success');
+              showToast('Invitation aflyst', 'success');
             } catch (err) {
               console.error('[invitation] cancel failed:', err);
-              showToast('Kunne ikke annullere invitationen', 'error');
+              showToast('Kunne ikke aflyse invitationen', 'error');
+            }
+          }}
+          onDismiss={async () => {
+            const id = activeInvitation.id;
+            try {
+              await dismissInvitation(id, activeFighterKey);
+              setActiveInvitation(null);
+              showToast('Fjernet fra din kalender', 'success');
+            } catch (err) {
+              console.error('[invitation] dismiss failed:', err);
+              showToast('Kunne ikke fjerne invitationen', 'error');
             }
           }}
           onClose={() => setActiveInvitation(null)}
@@ -687,7 +698,23 @@ const App = () => {
         existingSessions={editingWeek ? ((multiWeekData[editingWeek] || {})[editingDay] || []) : (scheduleData[editingDay] || [])}
         onClose={() => { setModalOpen(false); setEditingWeek(null); }}
         onSave={handleSaveSession}
-        onDelete={handleDeleteSession}
+        onDelete={async (id) => {
+          // If I arranged an invitation for this activity, cancel it too so
+          // invitees see it was called off (Outlook-style) instead of it
+          // silently lingering on their calendars (#1201 step A).
+          try {
+            const wk = editingWeek || currentWeek;
+            const d = getDateForWeekDay(wk, editingDay);
+            const iso = d ? toLocalISODate(d) : '';
+            const title = (editingSession?.name || '').trim();
+            if (iso && title) {
+              await cancelInvitationForActivity(activeFighterKey, title, iso, editingSession?.start || '');
+            }
+          } catch (err) {
+            console.error('[invitation] cancel-on-delete failed:', err);
+          }
+          handleDeleteSession(id);
+        }}
         onDeleteThisAndFuture={(dayName, name, start, fromWeek) => {
           setModalOpen(false);
           setEditingWeek(null);
