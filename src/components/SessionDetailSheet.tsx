@@ -4,7 +4,7 @@
  */
 import React, { useState, useMemo } from 'react';
 import {
-  Clock, MapPin, Calendar, ExternalLink, Link2, Phone, Mail,
+  Clock, MapPin, Calendar, ExternalLink, Link2, Phone, Mail, UserPlus,
 } from 'lucide-react';
 
 import { CATEGORIES, DAY_NAMES, RECURRENCE_OPTIONS, googleMapsUrl } from '../config/constants';
@@ -13,6 +13,8 @@ import { disciplineToCategory } from './InlineCataloguePicker';
 import { useGyms } from '../hooks/useGyms';
 import { NotesEditor } from './NotesEditor';
 import { sessionNoteKey } from '../hooks/useActivityNotes';
+import { InvitePicker, type InviteCandidate } from './shared/InvitePicker';
+import type { InvitationResponse } from '../types/invitation';
 import type { CatalogueClass } from '../types/catalogue';
 
 export interface SessionDetailSheetProps {
@@ -32,9 +34,14 @@ export interface SessionDetailSheetProps {
   onArrangerActivityRemoved?: (session: any, dayName: string, weekNum: number, scope: 'this' | 'future') => void;
   getNote: (key: string) => string;
   saveNote: (key: string, text: string) => Promise<void>;
+  /** Invite teammates to this activity from mobile (#1214 — desktop parity). */
+  inviteCandidates?: InviteCandidate[];
+  existingInvitees?: Record<string, InvitationResponse>;
+  onInvite?: (inviteeEmails: string[]) => void | Promise<void>;
+  onUninvite?: (email: string) => void;
 }
 
-const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData, systemWeek: _systemWeek, saveWeekToDb, showToast, onRecurrenceChange, onClose, onArrangerActivityRemoved, getNote, saveNote }: SessionDetailSheetProps) => {
+const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData, systemWeek: _systemWeek, saveWeekToDb, showToast, onRecurrenceChange, onClose, onArrangerActivityRemoved, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onUninvite }: SessionDetailSheetProps) => {
   const [showMore, setShowMore] = useState(false);
   const [showDeleteOptions, setShowDeleteOptions] = useState(false);
   const [interval, setRecurrenceInterval] = useState(session.isRecurring ? 1 : 0);
@@ -42,6 +49,9 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
   const [endDate, setEndDate] = useState('');
   const [isCancelled, setIsCancelled] = useState(session.status === 'cancelled');
   const [cancelReason, setCancelReason] = useState(session.cancellationReason || '');
+  // #1214: emails selected to invite to this activity (mobile parity with desktop).
+  const [selectedInvitees, setSelectedInvitees] = useState<string[]>([]);
+  const [inviting, setInviting] = useState(false);
   const cat = CATEGORIES.find(c => c.label === disciplineToCategory(cls.discipline)) || CATEGORIES[6];
   const { gyms } = useGyms();
   const gymEntity = gyms.find(g => g.name === cls.gym);
@@ -230,6 +240,33 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
             isDark={isDark}
           />
         </div>
+
+        {/* Invite people (#1214 — mobile parity with desktop SessionModal) */}
+        {onInvite && inviteCandidates && (
+          <div className={`px-5 py-3 border-t ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
+            <InvitePicker
+              candidates={inviteCandidates}
+              selected={selectedInvitees}
+              onToggle={(email) => setSelectedInvitees(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email])}
+              existing={existingInvitees}
+              onRemoveExisting={onUninvite}
+              isDark={isDark}
+            />
+            {selectedInvitees.length > 0 && (
+              <button
+                onClick={async () => {
+                  setInviting(true);
+                  try { await onInvite(selectedInvitees); setSelectedInvitees([]); }
+                  finally { setInviting(false); }
+                }}
+                disabled={inviting}
+                className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-50">
+                <UserPlus className="w-4 h-4" />
+                {inviting ? 'Inviterer…' : `Inviter ${selectedInvitees.length} ${selectedInvitees.length === 1 ? 'person' : 'personer'}`}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Cancel / Aflys toggle */}
         <div className={`px-5 py-3 border-t ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>

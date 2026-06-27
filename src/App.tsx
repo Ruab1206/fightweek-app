@@ -654,6 +654,75 @@ const App = () => {
           onArrangerActivityRemoved={arrangerActivityRemoved}
           getNote={getNote}
           saveNote={saveNote}
+          inviteCandidates={inviteCandidates}
+          existingInvitees={(() => {
+            // Anyone already invited by me to this Hold (same title + day + start),
+            // so the picker shows their response instead of a fresh toggle (#1214).
+            const { session, day, weekNum } = classInfoSession;
+            const d = getDateForWeekDay(weekNum, day);
+            const iso = d ? toLocalISODate(d) : '';
+            const me = activeFighterKey.toLowerCase();
+            const name = (session?.name || classInfoSession.cls.title || '').trim();
+            const start = session?.start || '';
+            const merged: Record<string, import('./types/invitation').InvitationResponse> = {};
+            if (iso && name) {
+              for (const inv of invitations) {
+                if (inv.invitedBy.toLowerCase() !== me) continue;
+                if (inv.activity.date !== iso) continue;
+                if ((inv.activity.title || '').trim() !== name) continue;
+                if ((inv.activity.start || '') !== start) continue;
+                for (const [email, resp] of Object.entries(inv.invitees)) merged[email] = resp;
+              }
+            }
+            return merged;
+          })()}
+          onInvite={async (inviteeEmails) => {
+            const { cls, session, day, weekNum } = classInfoSession;
+            const d = getDateForWeekDay(weekNum, day);
+            const iso = d ? toLocalISODate(d) : '';
+            if (!iso) { showToast('Kunne ikke bestemme datoen for invitationen', 'error'); return; }
+            try {
+              await createInvitation(
+                {
+                  title: session?.name || cls.title,
+                  category: session?.category || '',
+                  date: iso,
+                  start: session?.start || '',
+                  end: session?.end || '',
+                  location: cls.gym || session?.location || '',
+                },
+                activeFighterKey,
+                activeFighter,
+                inviteeEmails,
+              );
+              showToast(`${inviteeEmails.length} ${inviteeEmails.length === 1 ? 'person inviteret' : 'personer inviteret'}`, 'success');
+            } catch (err) {
+              console.error('[invitation] create failed:', err);
+              showToast('Kunne ikke sende invitationen — prøv igen', 'error');
+            }
+          }}
+          onUninvite={async (email) => {
+            const { session, day, weekNum } = classInfoSession;
+            const d = getDateForWeekDay(weekNum, day);
+            const iso = d ? toLocalISODate(d) : '';
+            const me = activeFighterKey.toLowerCase();
+            const name = (session?.name || classInfoSession.cls.title || '').trim();
+            const start = session?.start || '';
+            const inv = invitations.find(i =>
+              i.invitedBy.toLowerCase() === me
+              && i.activity.date === iso
+              && (i.activity.title || '').trim() === name
+              && (i.activity.start || '') === start,
+            );
+            if (!inv) return;
+            try {
+              await removeInvitee(inv.id, email);
+              showToast(`${nameForEmail(email)} er ikke længere inviteret`, 'success');
+            } catch (err) {
+              console.error('[invitation] uninvite failed:', err);
+              showToast('Kunne ikke fjerne invitationen', 'error');
+            }
+          }}
         />
       )}
 
