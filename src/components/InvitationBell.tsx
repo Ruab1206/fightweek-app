@@ -8,11 +8,13 @@
  *   • someone responded to an invite I sent (accepted / declined / tentative)
  *
  * A "last seen" marker (stored per-user in Firestore so it syncs across the
- * user's devices) drives the unread count: the red badge counts pending invites
- * plus feed items newer than the last time I opened the bell. Pending invites
- * always stay actionable (tapping opens the RSVP sheet); the rest are informational.
+ * user's devices) drives what shows: pending invites always appear (they're
+ * actionable until answered), while informational items (responses, cancellations)
+ * only appear while they're NEW since the last time the bell was opened, then drop
+ * off once seen — like a normal notification tray. The marker advances when the
+ * panel is closed (not on open) so items don't vanish while they're being read.
  */
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Bell, UserPlus, CalendarDays, CalendarX, Check, X, HelpCircle } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import type { Invitation, InvitationResponse } from '../types/invitation';
@@ -158,22 +160,26 @@ export function InvitationBell({
     return items;
   }, [invitations, lowerMe, nameForEmail]);
 
-  // Unread = pending invites (always need attention) plus informational items
-  // that changed since I last opened the bell.
-  const unreadCount = useMemo(
-    () => feed.filter((f) => f.kind === 'invite' || f.ts > lastSeen).length,
+  // What the bell shows: pending invites (always, until answered) plus
+  // informational items (responses / cancellations) that are NEW since the last
+  // time the bell was opened. Informational items older than `lastSeen` drop off
+  // so the tray stays clean instead of accumulating every past state change.
+  const visibleFeed = useMemo(
+    () => feed.filter((f) => f.kind === 'invite' || f.ts > lastSeen),
     [feed, lastSeen],
   );
 
-  // Mark everything seen when the panel opens (clears the "new" dot on
-  // informational items; pending invites keep counting until answered). The
-  // marker is persisted per-user in Firestore (via onMarkSeen) so it syncs
+  // Advance the "seen" marker when the panel CLOSES (not on open), so the items
+  // stay visible while they're being read and only drop off on the next open.
+  // The marker is persisted per-user in Firestore (via onMarkSeen) so it syncs
   // across the user's devices.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (open) onMarkSeen();
+    if (wasOpen.current && !open) onMarkSeen();
+    wasOpen.current = open;
   }, [open, onMarkSeen]);
 
-  const badge = unreadCount;
+  const badge = visibleFeed.length;
 
   return (
     <div className="relative">
@@ -197,16 +203,16 @@ export function InvitationBell({
             <div className={`px-4 py-3 border-b ${isDark ? 'border-slate-700' : 'border-surface-border'}`}>
               <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-ds-text'}`}>Notifikationer</p>
               <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
-                {feed.length > 0 ? `${feed.length} ${feed.length === 1 ? 'opdatering' : 'opdateringer'}` : 'Du er ajour'}
+                {visibleFeed.length > 0 ? `${visibleFeed.length} ${visibleFeed.length === 1 ? 'opdatering' : 'opdateringer'}` : 'Du er ajour'}
               </p>
             </div>
             <div className="max-h-96 overflow-y-auto">
-              {feed.length === 0 && (
+              {visibleFeed.length === 0 && (
                 <div className={`px-4 py-6 text-center text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>
                   Ingen notifikationer.
                 </div>
               )}
-              {feed.map((f) => {
+              {visibleFeed.map((f) => {
                 const isNew = f.kind === 'invite' || f.ts > lastSeen;
                 const icon = f.kind === 'invite'
                   ? <UserPlus className="w-4 h-4" />
