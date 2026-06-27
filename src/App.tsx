@@ -260,6 +260,30 @@ const App = () => {
     todayRef, mobileTodayRef, view, user, currentWeek, setCurrentWeek,
     multiWeekData, scrollDays, weeksBack, setWeeksBack, weeksAhead, setWeeksAhead, searchMode,
   });
+
+  // #1216: keep the user anchored on an activity after they close or add it.
+  // On mobile we only scroll when the activity's day is OFF-SCREEN, so glancing
+  // at an already-visible activity never jolts the list out from under you; on
+  // desktop we only navigate when the activity is in a different week than the
+  // one shown. Repositioning is instant — it happens underneath the closing
+  // sheet, so the activity is simply "there" when the sheet slides away, rather
+  // than a long disorienting scroll afterwards.
+  const anchorOnDay = useCallback((date: Date | null | undefined) => {
+    if (!date || Number.isNaN(date.getTime())) return;
+    if (window.innerWidth >= 768) {
+      if (getISOWeekForDate(date) !== currentWeek) scrollToDate(date);
+      return;
+    }
+    const key = date.toISOString().slice(0, 10);
+    const el = document.getElementById(`day-${key}`);
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      // Already visible (intersects the area below the sticky header) → leave
+      // the scroll position alone so the user keeps their place.
+      if (rect.bottom > 100 && rect.top < window.innerHeight - 80) return;
+    }
+    scrollToDate(date);
+  }, [currentWeek, scrollToDate]);
   // Prevent background scroll when search overlay is open (calendar only — events page handles its own filtering inline)
   useEffect(() => {
     if (searchMode && view !== 'events') {
@@ -679,7 +703,7 @@ const App = () => {
             handleAddRecurring(session, dayName, startDate, recurrence);
             setClassInfoSession(null);
           }}
-          onClose={() => setClassInfoSession(null)}
+          onClose={() => { const d = getDateForWeekDay(classInfoSession.weekNum, classInfoSession.day); setClassInfoSession(null); anchorOnDay(d); }}
           onArrangerActivityRemoved={arrangerActivityRemoved}
           getNote={getNote}
           saveNote={saveNote}
@@ -794,7 +818,7 @@ const App = () => {
               showToast('Kunne ikke fjerne invitationen', 'error');
             }
           }}
-          onClose={() => setActiveInvitation(null)}
+          onClose={() => { const iso = activeInvitation.activity?.date; setActiveInvitation(null); if (iso) anchorOnDay(new Date(iso + 'T00:00:00')); }}
         />
       )}
 
@@ -811,9 +835,9 @@ const App = () => {
             multiWeekData={multiWeekData}
             isDark={isDark}
             editingFravær={editingFravær}
-            onAddFromCatalogue={(session, day, weekNum) => { handleAddFromCatalogue(session, day, weekNum); setAddScreenOpen(false); }}
+            onAddFromCatalogue={(session, day, weekNum) => { handleAddFromCatalogue(session, day, weekNum); setAddScreenOpen(false); anchorOnDay(getDateForWeekDay(weekNum, day)); }}
             onAddRecurring={handleAddRecurring}
-            onManualAdd={(day, weekNum) => { handleManualFromPicker(day, weekNum); setAddScreenOpen(false); }}
+            onManualAdd={(day, weekNum) => { handleManualFromPicker(day, weekNum); setAddScreenOpen(false); anchorOnDay(getDateForWeekDay(weekNum, day)); }}
             inviteCandidates={inviteCandidates}
             onInviteToActivity={async (session, day, weekNum, inviteeEmails) => {
               const d = getDateForWeekDay(weekNum, day);
@@ -852,14 +876,17 @@ const App = () => {
         date={getDateForWeekDay(editingWeek || currentWeek, editingDay) || new Date()}
         initialData={editingSession}
         existingSessions={editingWeek ? ((multiWeekData[editingWeek] || {})[editingDay] || []) : (scheduleData[editingDay] || [])}
-        onClose={() => { setModalOpen(false); setEditingWeek(null); }}
+        onClose={() => { const d = getDateForWeekDay(editingWeek || currentWeek, editingDay); setModalOpen(false); setEditingWeek(null); anchorOnDay(d); }}
         onSave={(form) => {
+          // #1216: anchor on the activity's day once the save closes the modal.
+          const d = getDateForWeekDay(editingWeek || currentWeek, editingDay);
           // Marking an activity "Aflyst" (cancelled) via the modal should also
           // call off any invitation I arranged, so invitees are notified (#1201).
           if (form?.status === 'cancelled') {
             arrangerActivityRemoved(form, editingDay, editingWeek || currentWeek, 'this');
           }
           handleSaveSession(form);
+          anchorOnDay(d);
         }}
         onDelete={async (id) => {
           // If I arranged an invitation for this activity, cancel it too so
