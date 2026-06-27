@@ -785,6 +785,31 @@ const App = () => {
             onAddFromCatalogue={(session, day, weekNum) => { handleAddFromCatalogue(session, day, weekNum); setAddScreenOpen(false); }}
             onAddRecurring={handleAddRecurring}
             onManualAdd={(day, weekNum) => { handleManualFromPicker(day, weekNum); setAddScreenOpen(false); }}
+            inviteCandidates={inviteCandidates}
+            onInviteToActivity={async (session, day, weekNum, inviteeEmails) => {
+              const d = getDateForWeekDay(weekNum, day);
+              const iso = d ? toLocalISODate(d) : '';
+              if (!iso) { showToast('Kunne ikke bestemme datoen for invitationen', 'error'); return; }
+              try {
+                await createInvitation(
+                  {
+                    title: session.name,
+                    category: session.category || '',
+                    date: iso,
+                    start: session.start || '',
+                    end: session.end || '',
+                    location: session.location || '',
+                  },
+                  activeFighterKey,
+                  activeFighter,
+                  inviteeEmails,
+                );
+                showToast(`${inviteeEmails.length} ${inviteeEmails.length === 1 ? 'person inviteret' : 'personer inviteret'}`, 'success');
+              } catch (err) {
+                console.error('[invitation] create-on-add failed:', err);
+                showToast('Kunne ikke sende invitationen — prøv igen', 'error');
+              }
+            }}
             onAddFravær={(fravær) => { handleFravær(fravær); setAddScreenOpen(false); setEditingFravær(null); }}
             onDeleteFravær={(groupId) => { handleDeleteFravær(groupId); setAddScreenOpen(false); setEditingFravær(null); }}
             onEditFravær={async (oldGroupId, fravær) => { await handleFravær(fravær, oldGroupId); setAddScreenOpen(false); setEditingFravær(null); }}

@@ -2,13 +2,14 @@ import { useState, useMemo, useEffect } from 'react';
 import {
   ArrowLeft, Search, MapPin, X, SlidersHorizontal,
   ChevronDown, ChevronUp, PenLine, Calendar, Clock, Repeat,
-  Link2, ExternalLink, Phone, Mail, ChevronLeft, ChevronRight, Trash2,
+  Link2, ExternalLink, Phone, Mail, ChevronLeft, ChevronRight, Trash2, UserPlus,
 } from 'lucide-react';
 
 import { CATEGORIES, DAYS, DAY_NAMES, RECURRENCE_OPTIONS, googleMapsUrl } from '../config/constants';
 import { useCatalogue } from '../hooks/useCatalogue';
 import { useGyms } from '../hooks/useGyms';
 import { disciplineToCategory } from './InlineCataloguePicker';
+import { InvitePicker, type InviteCandidate } from './shared/InvitePicker';
 import type { CatalogueClass, ClassSchedule } from '../types/catalogue';
 
 // ─── Types ───
@@ -32,23 +33,28 @@ export interface AddScreenProps {
   onDeleteFravær?: (groupId: string) => void;
   onEditFravær?: (oldGroupId: string, fravær: { titel: string; beskrivelse: string; startDate: string; startTime: string; endDate: string; endTime: string }) => void;
   onClose: () => void;
+  /** Invite teammates while adding a single (non-recurring) Hold (#1214). */
+  inviteCandidates?: InviteCandidate[];
+  onInviteToActivity?: (session: any, day: string, weekNum: number, inviteeEmails: string[]) => void | Promise<void>;
 }
 
 const INITIAL_SHOW = 5;
 
 // ─── Hold detail bottom sheet ───
-const HoldBottomSheet = ({ cls, schedule, activeDay, isDark, onSave, onClose }: {
+const HoldBottomSheet = ({ cls, schedule, activeDay, isDark, inviteCandidates, onSave, onClose }: {
   cls: CatalogueClass;
   schedule: ClassSchedule;
   activeDay: { dayName: string; weekNumber: number; date: Date };
   isDark: boolean;
-  onSave: (session: any, recurrence: RecurrenceRule) => void;
+  inviteCandidates?: InviteCandidate[];
+  onSave: (session: any, recurrence: RecurrenceRule, inviteeEmails: string[]) => void;
   onClose: () => void;
 }) => {
   const [interval, setInterval] = useState(0);
   const [endType, setEndType] = useState<'never' | 'date'>('never');
   const [endDate, setEndDate] = useState('');
   const [showMore, setShowMore] = useState(false);
+  const [selectedInvitees, setSelectedInvitees] = useState<string[]>([]);
   const cat = CATEGORIES.find(c => c.label === disciplineToCategory(cls.discipline)) || CATEGORIES[6];
   const { gyms } = useGyms();
   const gymEntity = gyms.find(g => g.name === cls.gym);
@@ -66,7 +72,7 @@ const HoldBottomSheet = ({ cls, schedule, activeDay, isDark, onSave, onClose }: 
     onSave(session, {
       interval,
       endDate: endType === 'date' && endDate ? endDate : null,
-    });
+    }, interval === 0 ? selectedInvitees : []);
   };
 
   return (
@@ -196,6 +202,32 @@ const HoldBottomSheet = ({ cls, schedule, activeDay, isDark, onSave, onClose }: 
           )}
         </div>
 
+        {/* Invite people — single occurrence only (#1214). Series invite = #1213 (deferred). */}
+        {inviteCandidates && (
+          <div className={`px-5 py-3 border-t ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
+            {interval === 0 ? (
+              <>
+                <InvitePicker
+                  candidates={inviteCandidates}
+                  selected={selectedInvitees}
+                  onToggle={(email) => setSelectedInvitees(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email])}
+                  isDark={isDark}
+                />
+                {selectedInvitees.length > 0 && (
+                  <p className={`mt-2 inline-flex items-center gap-1.5 text-xs ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
+                    <UserPlus className="w-3.5 h-3.5" />
+                    {selectedInvitees.length} {selectedInvitees.length === 1 ? 'person' : 'personer'} inviteres når du gemmer.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>
+                Invitationer til en hel serie kommer senere — tilføj en enkelt træning for at invitere holdkammerater.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Actions */}
         <div className={`px-5 py-4 border-t flex justify-end gap-3 ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
           <button onClick={onClose} className={`px-4 py-2 rounded-lg text-sm font-medium ${isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-ds-text-subtle hover:bg-surface-hover'}`}>Annuller</button>
@@ -264,7 +296,7 @@ const MonthCalendarPicker = ({ value, isDark, onSelect, onClose, minDate }: {
 };
 
 // ─── Main AddScreen ───
-const AddScreen = ({ defaultType, activeDay, multiWeekData, isDark, editingFravær, onAddFromCatalogue, onAddRecurring, onManualAdd, onAddFravær, onDeleteFravær, onEditFravær, onClose }: AddScreenProps) => {
+const AddScreen = ({ defaultType, activeDay, multiWeekData, isDark, editingFravær, onAddFromCatalogue, onAddRecurring, onManualAdd, onAddFravær, onDeleteFravær, onEditFravær, onClose, inviteCandidates, onInviteToActivity }: AddScreenProps) => {
   const [type, setType] = useState<AddType>(defaultType);
   const [selectedDay, setSelectedDay] = useState(activeDay);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -337,9 +369,12 @@ const AddScreen = ({ defaultType, activeDay, multiWeekData, isDark, editingFrav�
 
   const visibleSessions = existingSessions.filter((s: any) => !s.isRestDay && s.status !== 'cancelled');
 
-  const handleHoldSave = (session: any, recurrence: RecurrenceRule) => {
+  const handleHoldSave = (session: any, recurrence: RecurrenceRule, inviteeEmails: string[]) => {
     if (recurrence.interval === 0) {
       onAddFromCatalogue(session, selectedDay.dayName, selectedDay.weekNumber);
+      if (inviteeEmails.length > 0) {
+        onInviteToActivity?.(session, selectedDay.dayName, selectedDay.weekNumber, inviteeEmails);
+      }
     } else {
       onAddRecurring(session, selectedDay.dayName, selectedDay.date, recurrence);
     }
@@ -641,6 +676,7 @@ const AddScreen = ({ defaultType, activeDay, multiWeekData, isDark, editingFrav�
           schedule={holdSheet.schedule}
           activeDay={selectedDay}
           isDark={isDark}
+          inviteCandidates={inviteCandidates}
           onSave={handleHoldSave}
           onClose={() => setHoldSheet(null)}
         />
