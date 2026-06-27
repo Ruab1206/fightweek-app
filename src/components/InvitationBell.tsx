@@ -7,17 +7,15 @@
  *   • an invite I received was cancelled    (whole activity called off, or I was removed)
  *   • someone responded to an invite I sent (accepted / declined / tentative)
  *
- * A localStorage "last seen" timestamp (per device) drives the unread count: the
- * red badge counts pending invites plus feed items newer than the last time I
- * opened the bell. Pending invites always stay actionable (tapping opens the RSVP
- * sheet); the rest are informational.
+ * A "last seen" marker (stored per-user in Firestore so it syncs across the
+ * user's devices) drives the unread count: the red badge counts pending invites
+ * plus feed items newer than the last time I opened the bell. Pending invites
+ * always stay actionable (tapping opens the RSVP sheet); the rest are informational.
  */
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Bell, UserPlus, CalendarDays, CalendarX, Check, X, HelpCircle } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import type { Invitation, InvitationResponse } from '../types/invitation';
-
-const LAST_SEEN_KEY = 'fw_notifications_last_seen';
 
 /** Danish relative day phrasing for an ISO date ("i dag", "i morgen", "om 3 dage"…). */
 function relativeWhen(iso: string): string {
@@ -74,20 +72,19 @@ export function InvitationBell({
   invitations,
   myEmail,
   nameForEmail,
+  lastSeen,
+  onMarkSeen,
   onOpenInvitation,
 }: {
   invitations: Invitation[];
   myEmail: string;
   nameForEmail: (email: string) => string;
+  lastSeen: number;
+  onMarkSeen: () => void;
   onOpenInvitation: (invitation: Invitation) => void;
 }) {
   const { isDark } = useTheme();
   const [open, setOpen] = useState(false);
-  const [lastSeen, setLastSeen] = useState<number>(() => {
-    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(LAST_SEEN_KEY) : null;
-    const n = raw ? Number(raw) : 0;
-    return Number.isFinite(n) ? n : 0;
-  });
   const lowerMe = myEmail.toLowerCase();
 
   // Derive the notification feed from the live invitation docs. Newest first.
@@ -168,17 +165,13 @@ export function InvitationBell({
     [feed, lastSeen],
   );
 
-  const markSeen = useCallback(() => {
-    const now = Date.now();
-    setLastSeen(now);
-    try { localStorage.setItem(LAST_SEEN_KEY, String(now)); } catch { /* ignore */ }
-  }, []);
-
   // Mark everything seen when the panel opens (clears the "new" dot on
-  // informational items; pending invites keep counting until answered).
+  // informational items; pending invites keep counting until answered). The
+  // marker is persisted per-user in Firestore (via onMarkSeen) so it syncs
+  // across the user's devices.
   useEffect(() => {
-    if (open) markSeen();
-  }, [open, markSeen]);
+    if (open) onMarkSeen();
+  }, [open, onMarkSeen]);
 
   const badge = unreadCount;
 

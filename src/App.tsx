@@ -43,6 +43,7 @@ import { InvitationDetailSheet } from './components/InvitationDetailSheet';
 import { InvitationBell } from './components/InvitationBell';
 import type { Invitation } from './types/invitation';
 import { useActivityNotes } from './hooks/useActivityNotes';
+import { useNotificationsMeta } from './hooks/useNotificationsMeta';
 import MobileScrollView from './components/MobileScrollView';
 import PersonalSchedule from './components/PersonalSchedule';
 import BacklogPage from './pages/BacklogPage';
@@ -96,6 +97,7 @@ const App = () => {
   const { events: allEvents } = useEvents();
   const { invitations, createInvitation, respondToInvitation, cancelInvitation, cancelInvitationForActivity, cancelInvitationsForActivityFrom, dismissInvitation, removeInvitee } = useInvitations();
   const { getNote, saveNote } = useActivityNotes(activeFighterKey);
+  const { lastSeen: notificationsLastSeen, markSeen: markNotificationsSeen } = useNotificationsMeta(activeFighterKey);
 
   // When the arranger removes or cancels an activity they invited people to, the
   // matching invitation must be cancelled too so invitees are notified (#1201).
@@ -328,6 +330,8 @@ const App = () => {
               invitations={invitations}
               myEmail={activeFighterKey}
               nameForEmail={nameForEmail}
+              lastSeen={notificationsLastSeen}
+              onMarkSeen={markNotificationsSeen}
               onOpenInvitation={(inv) => setActiveInvitation(inv)}
             />
             <div className="relative">
