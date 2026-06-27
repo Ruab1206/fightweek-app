@@ -49,13 +49,12 @@ export function useAuth(externalMapping?: Record<string, { name: string; role: s
           setAccessDenied(false);
           if (!initialAuthDone.current) {
             initialAuthDone.current = true;
-            if (userProfile.role === 'coach' || userProfile.role === 'admin') {
-              setIsLocked(false);
-              setActiveFighter('Karl');
-            } else {
-              setActiveFighter(userProfile.name);
-              setIsLocked(true);
-            }
+            // #1165: everyone lands on their OWN calendar (coach/admin too — no
+            // longer hardcoded to fighter "Karl"). Only the admin stays unlocked so
+            // they keep the fighter-switcher to inspect any fighter's calendar; the
+            // coach is locked to their own calendar like a fighter.
+            setActiveFighter(userProfile.name);
+            setIsLocked(userProfile.role !== 'admin');
           }
         } else { setAccessDenied(true); setUser(u); }
       } else { setUser(null); initialAuthDone.current = false; }
