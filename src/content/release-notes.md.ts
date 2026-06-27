@@ -5,6 +5,57 @@ export const RELEASE_NOTES = `# Release Notes
 > Releases follow the \`1.x — Outcome Name\` convention. See the Team Charter for how we plan releases using the story map.
 
 ---
+## 1.15 — Effortless on Mobile
+*June 2026*
+
+**Outcome:** Everything you can do with invitations now works on your phone, and getting to the right place in the calendar takes no effort — a notification drops you straight onto the activity, and the calendar keeps you where you expect after you view, edit, or add something.
+
+### What changed
+
+**Invite teammates from your phone (#1214)**
+- You can now invite people to a **Hold** class on mobile — previously this only worked in the desktop view
+- Two ways to invite: pick people **while adding** a class (single-occurrence classes), or open a class already in your calendar and invite from there — same picker, showing each person's current response
+
+**Notifications take you to the activity (#1215)**
+- Tapping any notification now opens the activity it's about — no more hunting for it in the calendar
+- A response you received opens the activity's full detail view (who's coming); an invite opens the RSVP sheet; a cancellation opens the activity in its "Aflyst" state
+- Notifications now **persist until you handle them** — they no longer all vanish when you tap the first one. Clear them one at a time with the **X**, or all at once with **Slet alle**; pending invites stay until you actually answer them. Cleared notifications stay cleared across your phone and laptop
+
+**The calendar keeps your place (#1216)**
+- After you close an activity, you stay anchored on it — if its day was off-screen the calendar instantly brings it to the top; if it was already visible, nothing jumps so you keep your place
+- After you add an activity, you land on the day you added it to
+- Opening the app still starts you on today
+
+### Retro learnings
+- **Keep:** Letting the PO reshape scope mid-item paid off — #1214 grew from "mobile parity" to "invite while adding" once we found desktop had no add-time invite either, making the feature genuinely better rather than just matching.
+- **Keep:** Asking for a UI judgement call instead of guessing — the "anchor only when off-screen, instant scroll" decision for #1216 avoided a jarring always-jump.
+- **Lesson:** Backlog item detail lives in the \`desc\` field, not \`description\` — reading the wrong field made populated items look empty and nearly led to rebuilding work that was already specified. The release-planning prompt now calls this out.
+
+---
+## 1.14 — Invitations
+*June 2026*
+
+**Outcome:** Coaches and fighters can coordinate who trains together entirely inside the app — invite each other to an activity, see who's coming, RSVP, and get notified — instead of chasing it over text messages.
+
+### What changed
+
+**Invite people to an activity (#1201)**
+- Invite other FightWeek users to an activity in your calendar — a training session, an added Hold/class, or an event
+- Invitees see the invitation on their own calendar and can respond **Deltager**, **Måske**, or **Afslå**
+- The inviter can cancel the activity (or remove a single person); invitees are notified it was called off and can clear it from their calendar — so nothing silently lingers
+
+**See who's coming (#1100)**
+- Every invited person sees the full guest list with each response, colour-coded — so you know who's actually showing up before you go
+
+**Notification bell**
+- A bell in the header surfaces invitation activity: invites awaiting your answer, responses to invites you sent, and cancellations
+- The "seen" state syncs across your devices, so an invite you've read on your phone isn't still flagged on your laptop
+
+### Retro learnings
+- **Keep:** Deriving the notification feed from the live invitation data (rather than storing separate notification records) kept the feature simple and always-consistent.
+- **Lesson:** Recurring/series invitations need a deliberate data-model decision (one doc per series vs per occurrence) — deferred to a later release rather than rushed.
+
+---
 ## 1.13 — Cleanup
 *June 2026*
 
