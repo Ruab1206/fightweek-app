@@ -93,7 +93,13 @@ export function InvitationBell({
   // Derive the notification feed from the live invitation docs. Newest first.
   const feed = useMemo<FeedItem[]>(() => {
     const items: FeedItem[] = [];
+    // Local y-m-d for "today" — the feed only surfaces current/upcoming activities.
+    // Responses and cancellations for activities already in the past are history
+    // noise (they pile up and reappear once newer items are handled), so drop them.
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     for (const inv of invitations) {
+      if (!inv.activity?.date || inv.activity.date < todayIso) continue;
       const myStatus = inv.invitees?.[lowerMe];
       const iAmInvited = myStatus !== undefined;
       const iAmInviter = inv.invitedBy.toLowerCase() === lowerMe;
