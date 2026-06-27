@@ -141,7 +141,9 @@ export function InvitationBell({
             : `${who} aflyste aktiviteten`,
           activityDate: inv.activity.date,
           ts: Number.isNaN(cancelTs) ? when : cancelTs,
-          actionable: false,
+          // #1215: tapping opens the invitation detail sheet (Outlook-style),
+          // showing the activity + its cancelled (Aflyst) state — no calendar nav.
+          actionable: true,
         });
       }
 
@@ -163,7 +165,9 @@ export function InvitationBell({
             subtitle: `${who} ${verb}`,
             activityDate: inv.activity.date,
             ts: Number.isNaN(respTs) ? when : respTs,
-            actionable: false,
+            // #1215: tapping opens the invitation detail sheet showing the
+            // activity + who's coming (the responses) — no calendar navigation.
+            actionable: true,
             response: resp,
           });
         }
