@@ -7,12 +7,17 @@
  *   • an invite I received was cancelled    (whole activity called off, or I was removed)
  *   • someone responded to an invite I sent (accepted / declined / tentative)
  *
- * A "last seen" marker (stored per-user in Firestore so it syncs across the
- * user's devices) drives what shows: pending invites always appear (they're
- * actionable until answered), while informational items (responses, cancellations)
- * only appear while they're NEW since the last time the bell was opened, then drop
- * off once seen — like a normal notification tray. The marker advances when the
- * panel is closed (not on open) so items don't vanish while they're being read.
+ * Pending invites always appear (they're actionable until answered). Informational
+ * items (responses, cancellations) PERSIST in the tray until the user explicitly
+ * clears them — by tapping the item, pressing its delete (X), or "Slet alle" —
+ * rather than vanishing the moment the panel closes (#1215). A per-user "last
+ * seen" marker (synced across devices) only drives the blue "new" highlight, and
+ * the set of dismissed item keys is persisted per-user so a cleared notification
+ * stays cleared across devices and reloads.
+ *
+ * Tapping a "someone responded" item opens the activity's full detail view
+ * (onOpenActivity) — the same sheet you get tapping the class in your calendar —
+ * while invite/cancelled items open the invitation/RSVP sheet (onOpenInvitation).
  */
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Bell, UserPlus, CalendarDays, CalendarX, Check, X, HelpCircle } from 'lucide-react';
@@ -82,6 +87,10 @@ export function InvitationBell({
   lastSeen,
   onMarkSeen,
   onOpenInvitation,
+  onOpenActivity,
+  dismissed,
+  onDismiss,
+  onDismissAll,
 }: {
   invitations: Invitation[];
   myEmail: string;
@@ -89,6 +98,10 @@ export function InvitationBell({
   lastSeen: number;
   onMarkSeen: () => void;
   onOpenInvitation: (invitation: Invitation) => void;
+  onOpenActivity: (invitation: Invitation) => void;
+  dismissed: string[];
+  onDismiss: (key: string) => void;
+  onDismissAll: (keys: string[]) => void;
 }) {
   const { isDark } = useTheme();
   const [open, setOpen] = useState(false);
@@ -178,16 +191,25 @@ export function InvitationBell({
   }, [invitations, lowerMe, nameForEmail]);
 
   // What the bell shows: pending invites (always, until answered) plus
-  // informational items (responses / cancellations) that are NEW since the last
-  // time the bell was opened. Informational items older than `lastSeen` drop off
-  // so the tray stays clean instead of accumulating every past state change.
+  // informational items (responses / cancellations) that the user hasn't yet
+  // cleared. Cleared keys are persisted per-user so a dismissed item stays gone
+  // across devices and reloads — the tray no longer empties just because the
+  // panel closed.
+  const dismissedSet = useMemo(() => new Set(dismissed), [dismissed]);
   const visibleFeed = useMemo(
-    () => feed.filter((f) => f.kind === 'invite' || f.ts > lastSeen),
-    [feed, lastSeen],
+    () => feed.filter((f) => f.kind === 'invite' || !dismissedSet.has(f.key)),
+    [feed, dismissedSet],
   );
 
-  // Advance the "seen" marker when the panel CLOSES (not on open), so the items
-  // stay visible while they're being read and only drop off on the next open.
+  // Keys of the items "Slet alle" would clear (everything except pending invites,
+  // which stay until they're actually answered).
+  const dismissibleKeys = useMemo(
+    () => visibleFeed.filter((f) => f.kind !== 'invite').map((f) => f.key),
+    [visibleFeed],
+  );
+
+  // Advance the "seen" marker when the panel CLOSES (not on open), so the blue
+  // "new" highlight clears on the next open. Items themselves stay until cleared.
   // The marker is persisted per-user in Firestore (via onMarkSeen) so it syncs
   // across the user's devices.
   const wasOpen = useRef(false);
@@ -217,11 +239,21 @@ export function InvitationBell({
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
           <div className={`absolute right-0 top-12 w-80 max-w-[88vw] rounded-xl border shadow-xl z-40 overflow-hidden ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-surface-border'}`}>
-            <div className={`px-4 py-3 border-b ${isDark ? 'border-slate-700' : 'border-surface-border'}`}>
-              <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-ds-text'}`}>Notifikationer</p>
-              <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
-                {visibleFeed.length > 0 ? `${visibleFeed.length} ${visibleFeed.length === 1 ? 'opdatering' : 'opdateringer'}` : 'Du er ajour'}
-              </p>
+            <div className={`px-4 py-3 border-b flex items-start justify-between gap-2 ${isDark ? 'border-slate-700' : 'border-surface-border'}`}>
+              <div className="min-w-0">
+                <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-ds-text'}`}>Notifikationer</p>
+                <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
+                  {visibleFeed.length > 0 ? `${visibleFeed.length} ${visibleFeed.length === 1 ? 'opdatering' : 'opdateringer'}` : 'Du er ajour'}
+                </p>
+              </div>
+              {dismissibleKeys.length > 0 && (
+                <button
+                  onClick={() => onDismissAll(dismissibleKeys)}
+                  className={`shrink-0 text-[11px] font-bold px-2 py-1 rounded-lg transition-colors ${isDark ? 'text-slate-400 hover:text-white hover:bg-slate-700' : 'text-ds-text-subtle hover:text-ds-text hover:bg-surface-hover'}`}
+                >
+                  Slet alle
+                </button>
+              )}
             </div>
             <div className="max-h-96 overflow-y-auto">
               {visibleFeed.length === 0 && (
@@ -248,9 +280,9 @@ export function InvitationBell({
                 const whenTone = f.kind === 'cancelled'
                   ? (isDark ? 'text-red-400' : 'text-red-600')
                   : (isDark ? 'text-slate-400' : 'text-ds-text-subtle');
-                const rowInteractive = f.actionable
-                  ? (isDark ? 'hover:bg-slate-700 transition-colors cursor-pointer' : 'hover:bg-surface-hover transition-colors cursor-pointer')
-                  : '';
+                // Informational items (responses, cancellations) can be cleared;
+                // pending invites stay until they're actually answered.
+                const dismissible = f.kind !== 'invite';
                 const newBg = isNew ? (isDark ? 'bg-slate-700/30' : 'bg-blue-50/60') : '';
                 const content = (
                   <>
@@ -272,14 +304,35 @@ export function InvitationBell({
                     )}
                   </>
                 );
-                const rowClass = `w-full text-left px-4 py-3 flex items-start gap-3 border-b last:border-b-0 ${isDark ? 'border-slate-700/60' : 'border-surface-border'} ${rowInteractive} ${newBg}`;
-                return f.actionable ? (
-                  <button key={f.key} onClick={() => { setOpen(false); onOpenInvitation(f.invitation); }} className={rowClass}>
-                    {content}
-                  </button>
-                ) : (
+                const rowClass = `flex items-stretch border-b last:border-b-0 ${isDark ? 'border-slate-700/60' : 'border-surface-border'} ${newBg}`;
+                const tapClass = `flex-1 min-w-0 text-left px-4 py-3 flex items-start gap-3 transition-colors cursor-pointer ${isDark ? 'hover:bg-slate-700' : 'hover:bg-surface-hover'}`;
+                return (
                   <div key={f.key} className={rowClass}>
-                    {content}
+                    <button
+                      onClick={() => {
+                        // Tapping an informational item also clears it; pending
+                        // invites are left in place (they resolve on answer).
+                        if (dismissible) onDismiss(f.key);
+                        setOpen(false);
+                        // A response I received opens the activity's full detail
+                        // sheet; invites/cancellations open the invitation sheet.
+                        if (f.kind === 'response') onOpenActivity(f.invitation);
+                        else onOpenInvitation(f.invitation);
+                      }}
+                      className={tapClass}
+                    >
+                      {content}
+                    </button>
+                    {dismissible && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDismiss(f.key); }}
+                        className={`shrink-0 px-3 flex items-center transition-colors ${isDark ? 'text-slate-500 hover:text-red-300 hover:bg-slate-700' : 'text-ds-text-subtlest hover:text-red-600 hover:bg-surface-hover'}`}
+                        title="Fjern notifikation"
+                        aria-label="Fjern notifikation"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 );
               })}

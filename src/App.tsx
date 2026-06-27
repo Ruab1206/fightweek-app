@@ -97,7 +97,7 @@ const App = () => {
   const { events: allEvents } = useEvents();
   const { invitations, createInvitation, respondToInvitation, cancelInvitation, cancelInvitationForActivity, cancelInvitationsForActivityFrom, dismissInvitation, removeInvitee } = useInvitations();
   const { getNote, saveNote } = useActivityNotes(activeFighterKey);
-  const { lastSeen: notificationsLastSeen, markSeen: markNotificationsSeen } = useNotificationsMeta(activeFighterKey);
+  const { lastSeen: notificationsLastSeen, markSeen: markNotificationsSeen, dismissed: notificationsDismissed, dismiss: dismissNotification, dismissAll: dismissAllNotifications } = useNotificationsMeta(activeFighterKey);
 
   // When the arranger removes or cancels an activity they invited people to, the
   // matching invitation must be cancelled too so invitees are notified (#1201).
@@ -176,6 +176,31 @@ const App = () => {
   const [editingFravær, setEditingFravær] = useState<{ groupId: string; titel: string; beskrivelse: string; startDate: string; startTime: string; endDate: string; endTime: string } | null>(null);
   const [fabSheetOpen, setFabSheetOpen] = useState(false);
   const [classInfoSession, setClassInfoSession] = useState<{ cls: CatalogueClass; session: any; day: string; weekNum: number } | null>(null);
+  // #1215: open an invitation's activity in its FULL detail sheet (the same
+  // SessionDetailSheet you get tapping the class in your own calendar), so the
+  // inviter sees complete activity info + the invitee picker with everyone's
+  // answers — not the reduced invitation popup. Falls back to the invitation
+  // sheet when the activity can't be matched to a catalogue session (e.g. it was
+  // removed, or isn't a catalogue class).
+  const openInvitationActivity = useCallback((inv: Invitation) => {
+    const a = inv.activity;
+    const date = a?.date ? new Date(a.date + 'T00:00:00') : null;
+    if (date && !Number.isNaN(date.getTime())) {
+      const weekNum = getISOWeekForDate(date);
+      const dow = date.getDay();
+      const dayName = dow === 0 ? 'Søndag' : DAYS[dow - 1];
+      const daySessions = (multiWeekData?.[weekNum]?.[dayName] || []) as any[];
+      const title = (a.title || '').trim();
+      const start = a.start || '';
+      const session = daySessions.find((s: any) => s.catalogueClassId && (s.name || '').trim() === title && (s.start || '') === start)
+        || daySessions.find((s: any) => s.catalogueClassId && (s.name || '').trim() === title);
+      if (session) {
+        const cls = catalogueClasses.find((c) => c.id === session.catalogueClassId);
+        if (cls) { setClassInfoSession({ cls, session, day: dayName, weekNum }); return; }
+      }
+    }
+    setActiveInvitation(inv);
+  }, [multiWeekData, catalogueClasses]);
   // #1206: the friends overlay (Holdkammerater) indexes friendWeekData by the
   // viewed currentWeek, but neededWeeks is a fixed window centered on TODAY and
   // does not move with the desktop week navigation. Past ~systemWeek+weeksAhead
@@ -333,6 +358,10 @@ const App = () => {
               lastSeen={notificationsLastSeen}
               onMarkSeen={markNotificationsSeen}
               onOpenInvitation={(inv) => setActiveInvitation(inv)}
+              onOpenActivity={openInvitationActivity}
+              dismissed={notificationsDismissed}
+              onDismiss={dismissNotification}
+              onDismissAll={dismissAllNotifications}
             />
             <div className="relative">
               <button onClick={() => setMenuOpen(!menuOpen)} className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-colors active:scale-95 ${menuOpen ? 'bg-blue-600 text-white' : (isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-surface-hover text-ds-text hover:bg-surface-raised')}`}>
