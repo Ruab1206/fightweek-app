@@ -306,6 +306,7 @@ const App = () => {
             <InvitationBell
               invitations={invitations}
               myEmail={activeFighterKey}
+              nameForEmail={nameForEmail}
               onOpenInvitation={(inv) => setActiveInvitation(inv)}
             />
             <div className="relative">

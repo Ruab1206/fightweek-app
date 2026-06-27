@@ -1,13 +1,23 @@
 /**
- * InvitationBell — header bell that surfaces invitations awaiting your answer
- * (#1201, 1.14). So an invite weeks away isn't missed, the bell shows a count of
- * your unanswered invitations; tapping it lists them (soonest first) and each row
- * opens the RSVP sheet. The badge clears as you respond.
+ * InvitationBell — header bell that surfaces invitation activity (#1201, 1.14).
+ *
+ * Tier 1 notification feed (no stored notifications — everything is DERIVED from
+ * the live invitation docs):
+ *   • invites awaiting my answer            (I'm invited, status pending)
+ *   • an invite I received was cancelled    (whole activity called off, or I was removed)
+ *   • someone responded to an invite I sent (accepted / declined / tentative)
+ *
+ * A localStorage "last seen" timestamp (per device) drives the unread count: the
+ * red badge counts pending invites plus feed items newer than the last time I
+ * opened the bell. Pending invites always stay actionable (tapping opens the RSVP
+ * sheet); the rest are informational.
  */
-import { useState, useMemo } from 'react';
-import { Bell, UserPlus, CalendarDays } from 'lucide-react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Bell, UserPlus, CalendarDays, CalendarX, Check, X, HelpCircle } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
-import type { Invitation } from '../types/invitation';
+import type { Invitation, InvitationResponse } from '../types/invitation';
+
+const LAST_SEEN_KEY = 'fw_notifications_last_seen';
 
 /** Danish relative day phrasing for an ISO date ("i dag", "i morgen", "om 3 dage"…). */
 function relativeWhen(iso: string): string {
@@ -35,44 +45,148 @@ function formatDateDa(iso: string): string {
   return d.toLocaleDateString('da-DK', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+type FeedKind = 'invite' | 'cancelled' | 'response';
+
+interface FeedItem {
+  key: string;
+  kind: FeedKind;
+  invitation: Invitation;
+  /** Primary line (activity title). */
+  title: string;
+  /** Secondary line (who / what). */
+  subtitle: string;
+  /** Activity date (ISO) for the "when" line. */
+  activityDate: string;
+  /** Recency timestamp (ms) — when this thing last changed. */
+  ts: number;
+  /** Only invites are actionable (open the RSVP sheet). */
+  actionable: boolean;
+  /** Response value, for colouring the response icon. */
+  response?: InvitationResponse;
+}
+
+function tsOf(inv: Invitation): number {
+  const t = Date.parse(inv.updatedAt || inv.createdAt || '');
+  return Number.isNaN(t) ? 0 : t;
+}
+
 export function InvitationBell({
   invitations,
   myEmail,
+  nameForEmail,
   onOpenInvitation,
 }: {
   invitations: Invitation[];
   myEmail: string;
+  nameForEmail: (email: string) => string;
   onOpenInvitation: (invitation: Invitation) => void;
 }) {
   const { isDark } = useTheme();
   const [open, setOpen] = useState(false);
+  const [lastSeen, setLastSeen] = useState<number>(() => {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(LAST_SEEN_KEY) : null;
+    const n = raw ? Number(raw) : 0;
+    return Number.isFinite(n) ? n : 0;
+  });
   const lowerMe = myEmail.toLowerCase();
 
-  // Invitations awaiting my answer: I'm invited, haven't replied yet, and neither
-  // the whole activity nor my own place has been cancelled. Soonest first.
-  const pending = useMemo(() => {
-    return invitations
-      .filter((inv) => {
-        if (inv.status === 'cancelled') return false;
-        const mine = inv.invitees?.[lowerMe];
-        return mine === 'pending';
-      })
-      .sort((a, b) => a.activity.date.localeCompare(b.activity.date));
-  }, [invitations, lowerMe]);
+  // Derive the notification feed from the live invitation docs. Newest first.
+  const feed = useMemo<FeedItem[]>(() => {
+    const items: FeedItem[] = [];
+    for (const inv of invitations) {
+      const myStatus = inv.invitees?.[lowerMe];
+      const iAmInvited = myStatus !== undefined;
+      const iAmInviter = inv.invitedBy.toLowerCase() === lowerMe;
+      const when = tsOf(inv);
 
-  const count = pending.length;
+      // 1) Invites awaiting my answer.
+      if (iAmInvited && inv.status !== 'cancelled' && myStatus === 'pending') {
+        items.push({
+          key: `invite_${inv.id}`,
+          kind: 'invite',
+          invitation: inv,
+          title: inv.activity.title,
+          subtitle: `Fra ${inv.invitedByName || nameForEmail(inv.invitedBy)}`,
+          activityDate: inv.activity.date,
+          ts: when,
+          actionable: true,
+        });
+      }
+
+      // 2) An invite I received was called off (whole activity, or I was removed).
+      if (iAmInvited && !iAmInviter && (inv.status === 'cancelled' || myStatus === 'cancelled')) {
+        const who = inv.invitedByName || nameForEmail(inv.invitedBy);
+        items.push({
+          key: `cancelled_${inv.id}`,
+          kind: 'cancelled',
+          invitation: inv,
+          title: inv.activity.title,
+          subtitle: myStatus === 'cancelled' && inv.status !== 'cancelled'
+            ? `${who} fjernede dig`
+            : `${who} aflyste aktiviteten`,
+          activityDate: inv.activity.date,
+          ts: when,
+          actionable: false,
+        });
+      }
+
+      // 3) Responses to an invite I sent (accept / decline / tentative).
+      if (iAmInviter && inv.invitees) {
+        for (const [email, resp] of Object.entries(inv.invitees)) {
+          if (email === lowerMe) continue;
+          if (resp !== 'accepted' && resp !== 'declined' && resp !== 'tentative') continue;
+          const who = nameForEmail(email);
+          const verb = resp === 'accepted' ? 'deltager' : resp === 'declined' ? 'afslog' : 'svarede måske';
+          items.push({
+            key: `resp_${inv.id}_${email}`,
+            kind: 'response',
+            invitation: inv,
+            title: inv.activity.title,
+            subtitle: `${who} ${verb}`,
+            activityDate: inv.activity.date,
+            ts: when,
+            actionable: false,
+            response: resp,
+          });
+        }
+      }
+    }
+    items.sort((a, b) => b.ts - a.ts || b.activityDate.localeCompare(a.activityDate));
+    return items;
+  }, [invitations, lowerMe, nameForEmail]);
+
+  // Unread = pending invites (always need attention) plus informational items
+  // that changed since I last opened the bell.
+  const unreadCount = useMemo(
+    () => feed.filter((f) => f.kind === 'invite' || f.ts > lastSeen).length,
+    [feed, lastSeen],
+  );
+
+  const markSeen = useCallback(() => {
+    const now = Date.now();
+    setLastSeen(now);
+    try { localStorage.setItem(LAST_SEEN_KEY, String(now)); } catch { /* ignore */ }
+  }, []);
+
+  // Mark everything seen when the panel opens (clears the "new" dot on
+  // informational items; pending invites keep counting until answered).
+  useEffect(() => {
+    if (open) markSeen();
+  }, [open, markSeen]);
+
+  const badge = unreadCount;
 
   return (
     <div className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
         className={`relative p-2 rounded-lg transition-colors ${isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-ds-text-subtle hover:text-ds-text hover:bg-surface-hover'}`}
-        title={count > 0 ? `${count} ${count === 1 ? 'invitation venter på svar' : 'invitationer venter på svar'}` : 'Invitationer'}
+        title={badge > 0 ? `${badge} ${badge === 1 ? 'ny notifikation' : 'nye notifikationer'}` : 'Notifikationer'}
       >
         <Bell className="w-5 h-5" />
-        {count > 0 && (
+        {badge > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">
-            {count > 9 ? '9+' : count}
+            {badge > 9 ? '9+' : badge}
           </span>
         )}
       </button>
@@ -80,40 +194,73 @@ export function InvitationBell({
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className={`absolute right-0 top-12 w-72 max-w-[85vw] rounded-xl border shadow-xl z-40 overflow-hidden ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-surface-border'}`}>
+          <div className={`absolute right-0 top-12 w-80 max-w-[88vw] rounded-xl border shadow-xl z-40 overflow-hidden ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-surface-border'}`}>
             <div className={`px-4 py-3 border-b ${isDark ? 'border-slate-700' : 'border-surface-border'}`}>
-              <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-ds-text'}`}>Invitationer</p>
+              <p className={`text-sm font-bold ${isDark ? 'text-white' : 'text-ds-text'}`}>Notifikationer</p>
               <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
-                {count > 0 ? `${count} venter på dit svar` : 'Du er ajour'}
+                {feed.length > 0 ? `${feed.length} ${feed.length === 1 ? 'opdatering' : 'opdateringer'}` : 'Du er ajour'}
               </p>
             </div>
-            <div className="max-h-80 overflow-y-auto">
-              {count === 0 && (
+            <div className="max-h-96 overflow-y-auto">
+              {feed.length === 0 && (
                 <div className={`px-4 py-6 text-center text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>
-                  Ingen invitationer venter på svar.
+                  Ingen notifikationer.
                 </div>
               )}
-              {pending.map((inv) => (
-                <button
-                  key={inv.id}
-                  onClick={() => { setOpen(false); onOpenInvitation(inv); }}
-                  className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-colors border-b last:border-b-0 ${isDark ? 'border-slate-700/60 hover:bg-slate-700' : 'border-surface-border hover:bg-surface-hover'}`}
-                >
-                  <span className={`mt-0.5 shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${isDark ? 'bg-emerald-900/40 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>
-                    <UserPlus className="w-4 h-4" />
-                  </span>
-                  <span className="flex-1 min-w-0">
-                    <span className={`block text-sm font-bold truncate ${isDark ? 'text-white' : 'text-ds-text'}`}>{inv.activity.title}</span>
-                    <span className={`block text-[11px] truncate ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
-                      Fra {inv.invitedByName || inv.invitedBy}
+              {feed.map((f) => {
+                const isNew = f.kind === 'invite' || f.ts > lastSeen;
+                const icon = f.kind === 'invite'
+                  ? <UserPlus className="w-4 h-4" />
+                  : f.kind === 'cancelled'
+                    ? <CalendarX className="w-4 h-4" />
+                    : f.response === 'accepted'
+                      ? <Check className="w-4 h-4" />
+                      : f.response === 'declined'
+                        ? <X className="w-4 h-4" />
+                        : <HelpCircle className="w-4 h-4" />;
+                const iconTone = f.kind === 'cancelled' || f.response === 'declined'
+                  ? (isDark ? 'bg-red-900/40 text-red-300' : 'bg-red-100 text-red-700')
+                  : f.response === 'tentative'
+                    ? (isDark ? 'bg-amber-900/40 text-amber-300' : 'bg-amber-100 text-amber-700')
+                    : (isDark ? 'bg-emerald-900/40 text-emerald-300' : 'bg-emerald-100 text-emerald-700');
+                const whenTone = f.kind === 'cancelled'
+                  ? (isDark ? 'text-red-400' : 'text-red-600')
+                  : (isDark ? 'text-slate-400' : 'text-ds-text-subtle');
+                const rowInteractive = f.actionable
+                  ? (isDark ? 'hover:bg-slate-700 transition-colors cursor-pointer' : 'hover:bg-surface-hover transition-colors cursor-pointer')
+                  : '';
+                const newBg = isNew ? (isDark ? 'bg-slate-700/30' : 'bg-blue-50/60') : '';
+                const content = (
+                  <>
+                    <span className={`mt-0.5 shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${iconTone}`}>
+                      {icon}
                     </span>
-                    <span className={`mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                      <CalendarDays className="w-3 h-3" />
-                      {formatDateDa(inv.activity.date)} · {relativeWhen(inv.activity.date)}
+                    <span className="flex-1 min-w-0">
+                      <span className={`block text-sm font-bold truncate ${isDark ? 'text-white' : 'text-ds-text'}`}>{f.title}</span>
+                      <span className={`block text-[11px] truncate ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
+                        {f.subtitle}
+                      </span>
+                      <span className={`mt-0.5 inline-flex items-center gap-1 text-[11px] font-medium ${whenTone}`}>
+                        <CalendarDays className="w-3 h-3" />
+                        {formatDateDa(f.activityDate)} · {relativeWhen(f.activityDate)}
+                      </span>
                     </span>
-                  </span>
-                </button>
-              ))}
+                    {isNew && (
+                      <span className="mt-1 shrink-0 w-2 h-2 rounded-full bg-blue-500" aria-label="ny" />
+                    )}
+                  </>
+                );
+                const rowClass = `w-full text-left px-4 py-3 flex items-start gap-3 border-b last:border-b-0 ${isDark ? 'border-slate-700/60' : 'border-surface-border'} ${rowInteractive} ${newBg}`;
+                return f.actionable ? (
+                  <button key={f.key} onClick={() => { setOpen(false); onOpenInvitation(f.invitation); }} className={rowClass}>
+                    {content}
+                  </button>
+                ) : (
+                  <div key={f.key} className={rowClass}>
+                    {content}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </>
