@@ -38,6 +38,11 @@ export interface Invitation {
   status?: InvitationStatus;                      // undefined = active (legacy docs)
   createdAt: string;                              // ISO 8601
   updatedAt: string;                              // ISO 8601
+  // Per-event timestamps so a notification's "when" stays STABLE even after the
+  // doc is touched again for an unrelated reason (otherwise every later edit
+  // bumps `updatedAt` and resurfaces already-seen notifications as new).
+  eventTimes?: Record<string, string>;            // email → ISO time that invitee last responded / was removed
+  cancelledAt?: string;                           // ISO time the whole activity was called off
 }
 
 /** Response options offered to an invitee (excludes the implicit `pending`/`cancelled`). */

@@ -122,10 +122,14 @@ export function useInvitations() {
     // Use FieldPath so the email (which contains dots) is treated as a single
     // literal map key. A dotted string key like `invitees.a.b@x.com` would be
     // parsed by Firestore as a nested field path and corrupt the map.
+    const nowIso = new Date().toISOString();
     await updateDoc(
       ref,
       new FieldPath('invitees', inviteeEmail.toLowerCase()), response,
-      'updatedAt', new Date().toISOString(),
+      // Stamp WHEN this person responded so the arranger's notification keeps a
+      // stable time even if the doc is edited again later for another reason.
+      new FieldPath('eventTimes', inviteeEmail.toLowerCase()), nowIso,
+      'updatedAt', nowIso,
     );
   }, []);
 
@@ -142,7 +146,8 @@ export function useInvitations() {
    */
   const cancelInvitation = useCallback(async (invitationId: string): Promise<void> => {
     const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', invitationId);
-    await updateDoc(ref, { status: 'cancelled', updatedAt: new Date().toISOString() });
+    const nowIso = new Date().toISOString();
+    await updateDoc(ref, { status: 'cancelled', cancelledAt: nowIso, updatedAt: nowIso });
   }, []);
 
   /**
@@ -168,7 +173,7 @@ export function useInvitations() {
     const nowIso = new Date().toISOString();
     for (const inv of matches) {
       const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', inv.id);
-      await updateDoc(ref, { status: 'cancelled', updatedAt: nowIso });
+      await updateDoc(ref, { status: 'cancelled', cancelledAt: nowIso, updatedAt: nowIso });
     }
   }, []);
 
@@ -196,7 +201,7 @@ export function useInvitations() {
     const nowIso = new Date().toISOString();
     for (const inv of matches) {
       const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', inv.id);
-      await updateDoc(ref, { status: 'cancelled', updatedAt: nowIso });
+      await updateDoc(ref, { status: 'cancelled', cancelledAt: nowIso, updatedAt: nowIso });
     }
   }, []);
 
@@ -229,10 +234,14 @@ export function useInvitations() {
     inviteeEmail: string,
   ): Promise<void> => {
     const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', invitationId);
+    const nowIso = new Date().toISOString();
     await updateDoc(
       ref,
       new FieldPath('invitees', inviteeEmail.toLowerCase()), 'cancelled',
-      'updatedAt', new Date().toISOString(),
+      // Stamp WHEN this person was removed so their "removed" notification keeps
+      // a stable time even if the doc is edited again later for another reason.
+      new FieldPath('eventTimes', inviteeEmail.toLowerCase()), nowIso,
+      'updatedAt', nowIso,
     );
   }, []);
 

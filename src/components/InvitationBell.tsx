@@ -70,6 +70,11 @@ function tsOf(inv: Invitation): number {
   return Number.isNaN(t) ? 0 : t;
 }
 
+/** Parse an optional ISO time to ms; NaN when absent/invalid (caller falls back). */
+function tsParse(iso?: string): number {
+  return iso ? Date.parse(iso) : NaN;
+}
+
 export function InvitationBell({
   invitations,
   myEmail,
@@ -121,16 +126,21 @@ export function InvitationBell({
       // 2) An invite I received was called off (whole activity, or I was removed).
       if (iAmInvited && !iAmInviter && (inv.status === 'cancelled' || myStatus === 'cancelled')) {
         const who = inv.invitedByName || nameForEmail(inv.invitedBy);
+        const removedMe = myStatus === 'cancelled' && inv.status !== 'cancelled';
+        // Stable time of the specific event (I was removed → my eventTime; whole
+        // activity cancelled → cancelledAt), so it doesn't resurface when the doc
+        // is touched again later.
+        const cancelTs = removedMe ? tsParse(inv.eventTimes?.[lowerMe]) : tsParse(inv.cancelledAt);
         items.push({
           key: `cancelled_${inv.id}`,
           kind: 'cancelled',
           invitation: inv,
           title: inv.activity.title,
-          subtitle: myStatus === 'cancelled' && inv.status !== 'cancelled'
+          subtitle: removedMe
             ? `${who} fjernede dig`
             : `${who} aflyste aktiviteten`,
           activityDate: inv.activity.date,
-          ts: when,
+          ts: Number.isNaN(cancelTs) ? when : cancelTs,
           actionable: false,
         });
       }
@@ -142,6 +152,9 @@ export function InvitationBell({
           if (resp !== 'accepted' && resp !== 'declined' && resp !== 'tentative') continue;
           const who = nameForEmail(email);
           const verb = resp === 'accepted' ? 'deltager' : resp === 'declined' ? 'afslog' : 'svarede måske';
+          // Stable time of THIS person's response, so unrelated later edits to
+          // the doc don't resurface an already-seen response as new.
+          const respTs = tsParse(inv.eventTimes?.[email]);
           items.push({
             key: `resp_${inv.id}_${email}`,
             kind: 'response',
@@ -149,7 +162,7 @@ export function InvitationBell({
             title: inv.activity.title,
             subtitle: `${who} ${verb}`,
             activityDate: inv.activity.date,
-            ts: when,
+            ts: Number.isNaN(respTs) ? when : respTs,
             actionable: false,
             response: resp,
           });
