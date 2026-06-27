@@ -94,8 +94,29 @@ const App = () => {
   const { isDark, toggleTheme } = useTheme();
   const { classes: catalogueClasses, loading: catalogueLoading } = useCatalogue();
   const { events: allEvents } = useEvents();
-  const { invitations, createInvitation, respondToInvitation, cancelInvitation, cancelInvitationForActivity, dismissInvitation, removeInvitee } = useInvitations();
+  const { invitations, createInvitation, respondToInvitation, cancelInvitation, cancelInvitationForActivity, cancelInvitationsForActivityFrom, dismissInvitation, removeInvitee } = useInvitations();
   const { getNote, saveNote } = useActivityNotes(activeFighterKey);
+
+  // When the arranger removes or cancels an activity they invited people to, the
+  // matching invitation must be cancelled too so invitees are notified (#1201).
+  // Centralised here because removal happens from several places (the edit modal,
+  // the detail sheet, single + recurring deletes, and the "Aflyst" toggle).
+  const arrangerActivityRemoved = useCallback((
+    session: { name?: string; start?: string } | null | undefined,
+    dayName: string,
+    weekNum: number,
+    scope: 'this' | 'future',
+  ) => {
+    const d = getDateForWeekDay(weekNum, dayName);
+    const iso = d ? toLocalISODate(d) : '';
+    const title = (session?.name || '').trim();
+    if (!iso || !title) return;
+    const start = session?.start || '';
+    const p = scope === 'future'
+      ? cancelInvitationsForActivityFrom(activeFighterKey, title, start, iso)
+      : cancelInvitationForActivity(activeFighterKey, title, iso, start);
+    p.catch((err) => console.error('[invitation] cancel-on-remove failed:', err));
+  }, [activeFighterKey, cancelInvitationForActivity, cancelInvitationsForActivityFrom]);
 
   // --- Refs & scroll-to-today (must be before early returns) ---
   const todayRef = useRef<HTMLDivElement | null>(null);
@@ -626,6 +647,7 @@ const App = () => {
             setClassInfoSession(null);
           }}
           onClose={() => setClassInfoSession(null)}
+          onArrangerActivityRemoved={arrangerActivityRemoved}
           getNote={getNote}
           saveNote={saveNote}
         />
@@ -704,28 +726,27 @@ const App = () => {
         initialData={editingSession}
         existingSessions={editingWeek ? ((multiWeekData[editingWeek] || {})[editingDay] || []) : (scheduleData[editingDay] || [])}
         onClose={() => { setModalOpen(false); setEditingWeek(null); }}
-        onSave={handleSaveSession}
+        onSave={(form) => {
+          // Marking an activity "Aflyst" (cancelled) via the modal should also
+          // call off any invitation I arranged, so invitees are notified (#1201).
+          if (form?.status === 'cancelled') {
+            arrangerActivityRemoved(form, editingDay, editingWeek || currentWeek, 'this');
+          }
+          handleSaveSession(form);
+        }}
         onDelete={async (id) => {
           // If I arranged an invitation for this activity, cancel it too so
-          // invitees see it was called off (Outlook-style) instead of it
-          // silently lingering on their calendars (#1201 step A).
-          try {
-            const wk = editingWeek || currentWeek;
-            const d = getDateForWeekDay(wk, editingDay);
-            const iso = d ? toLocalISODate(d) : '';
-            const title = (editingSession?.name || '').trim();
-            if (iso && title) {
-              await cancelInvitationForActivity(activeFighterKey, title, iso, editingSession?.start || '');
-            }
-          } catch (err) {
-            console.error('[invitation] cancel-on-delete failed:', err);
-          }
+          // invitees are notified it was called off (Outlook-style) instead of
+          // it silently lingering on their calendars (#1201).
+          arrangerActivityRemoved(editingSession, editingDay, editingWeek || currentWeek, 'this');
           handleDeleteSession(id);
         }}
         onDeleteThisAndFuture={(dayName, name, start, fromWeek) => {
           setModalOpen(false);
           setEditingWeek(null);
           showToast(`${name} fjernet`, 'success');
+          // Cancel invitations for this and every future occurrence too (#1201).
+          arrangerActivityRemoved({ name, start }, dayName, fromWeek, 'future');
           handleDeleteThisAndFuture(dayName, name, start, fromWeek);
         }}
         onRecurrenceSave={(session, dayName, startDate, recurrence) => {

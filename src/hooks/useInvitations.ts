@@ -173,6 +173,34 @@ export function useInvitations() {
   }, []);
 
   /**
+   * Cancel every invitation I arranged for an activity on `fromDate` or later
+   * (same inviter + title + start). Used when the arranger deletes a recurring
+   * activity "this and future occurrences", so invitees of any future occurrence
+   * are notified too. No-op if none match.
+   */
+  const cancelInvitationsForActivityFrom = useCallback(async (
+    invitedBy: string,
+    title: string,
+    start: string,
+    fromDate: string,
+  ): Promise<void> => {
+    const inviter = invitedBy.toLowerCase();
+    const t = (title || '').trim();
+    const matches = invitationsRef.current.filter((inv) =>
+      inv.status !== 'cancelled'
+      && inv.invitedBy.toLowerCase() === inviter
+      && (inv.activity.title || '').trim() === t
+      && (inv.activity.start || '') === (start || '')
+      && inv.activity.date >= fromDate,
+    );
+    const nowIso = new Date().toISOString();
+    for (const inv of matches) {
+      const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', inv.id);
+      await updateDoc(ref, { status: 'cancelled', updatedAt: nowIso });
+    }
+  }, []);
+
+  /**
    * An invitee removes a (usually cancelled) invitation from their own calendar
    * by deleting their own key from the invitees map. Allowed by rules because it
    * only affects the caller's own key.
@@ -210,6 +238,6 @@ export function useInvitations() {
 
   return {
     invitations, loading, createInvitation, respondToInvitation,
-    removeInvitation, cancelInvitation, cancelInvitationForActivity, dismissInvitation, removeInvitee,
+    removeInvitation, cancelInvitation, cancelInvitationForActivity, cancelInvitationsForActivityFrom, dismissInvitation, removeInvitee,
   };
 }

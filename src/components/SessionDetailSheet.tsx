@@ -27,11 +27,14 @@ export interface SessionDetailSheetProps {
   showToast: (msg: string, type: 'success' | 'error' | 'info') => void;
   onRecurrenceChange: (session: any, dayName: string, startDate: Date, recurrence: { interval: number; endDate: string | null }) => void;
   onClose: () => void;
+  /** Called when the arranger removes/cancels this activity, so any invitation
+   * they sent for it is cancelled too and invitees are notified (#1201). */
+  onArrangerActivityRemoved?: (session: any, dayName: string, weekNum: number, scope: 'this' | 'future') => void;
   getNote: (key: string) => string;
   saveNote: (key: string, text: string) => Promise<void>;
 }
 
-const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData, systemWeek: _systemWeek, saveWeekToDb, showToast, onRecurrenceChange, onClose, getNote, saveNote }: SessionDetailSheetProps) => {
+const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData, systemWeek: _systemWeek, saveWeekToDb, showToast, onRecurrenceChange, onClose, onArrangerActivityRemoved, getNote, saveNote }: SessionDetailSheetProps) => {
   const [showMore, setShowMore] = useState(false);
   const [showDeleteOptions, setShowDeleteOptions] = useState(false);
   const [interval, setRecurrenceInterval] = useState(session.isRecurring ? 1 : 0);
@@ -68,6 +71,8 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
       cancellationTime: nowCancelled ? new Date().toISOString() : null,
     };
     saveWeekToDb(weekNum, newData);
+    // Cancelling the activity should notify anyone I invited (#1201).
+    if (nowCancelled) onArrangerActivityRemoved?.(session, day, weekNum, 'this');
     showToast(nowCancelled ? `${session.name} aflyst` : `${session.name} genaktiveret`, 'success');
     onClose();
   };
@@ -90,6 +95,8 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
   const handleDeleteThis = () => {
     onClose();
     showToast(`${session.name} fjernet`, 'success');
+    // Cancel any invitation I sent for this activity so invitees are notified (#1201).
+    onArrangerActivityRemoved?.(session, day, weekNum, 'this');
     const weekData = multiWeekData[weekNum];
     if (!weekData) return;
     const newData = structuredClone(weekData);
@@ -102,6 +109,8 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
   const handleDeleteThisAndFuture = () => {
     onClose();
     showToast(`${session.name} fjernet`, 'success');
+    // Cancel invitations for this and every future occurrence too (#1201).
+    onArrangerActivityRemoved?.(session, day, weekNum, 'future');
     (async () => {
       for (const wk of Object.keys(multiWeekData).map(Number).sort((a, b) => a - b)) {
         if (wk < weekNum) continue;
