@@ -35,14 +35,21 @@ Follow the charter's Release Planning ceremony:
    date, or status — only the `order` field carries the ranking. Use the
    firestore-admin script to read it:
    `node -e "const db=require('./scripts/firestore-admin.cjs'); (async()=>{ await db.init(); const items=await db.listCollection('artifacts/production/public/data/backlog'); const open=items.filter(i=>['backlog','ready'].includes(i.status)); open.sort((a,b)=>(a.order||0)-(b.order||0)); for(const i of open) console.log(i.order, '|', i.number, '|', i.status, '|', i.tag, '|', i.title); })().catch(e=>{console.error(e);process.exit(1);});"`
-3. **Identify the theme (Label) cluster** the top items belong to — a release is
+3. **Read the full detail of the candidate items before judging them** — the
+   one-line backlog listing only shows the title. Always read each candidate's
+   detail fields before deciding scope or calling an item "empty". ⚠️ The detail
+   fields are named **`desc`** (NOT `description`), **`acceptance`**, and **`notes`** —
+   reading `i.description` returns blank and will make a populated item look empty.
+   `node -e "const db=require('./scripts/firestore-admin.cjs'); (async()=>{ await db.init(); const items=await db.listCollection('artifacts/production/public/data/backlog'); for(const n of [/* item numbers */]){ const i=items.find(x=>x.number===n); console.log('==== #'+n+' | order',i.order,'| tag',i.tag,'===='); console.log('DESC:',i.desc||'(none)'); console.log('ACCEPTANCE:',i.acceptance||'(none)'); console.log('NOTES:',i.notes||'(none)'); console.log(''); } })().catch(e=>{console.error(e);process.exit(1);});"`
+   When in doubt, dump the whole doc with `JSON.stringify(i,null,2)`.
+4. **Identify the theme (Label) cluster** the top items belong to — a release is
    usually one theme's thinnest end-to-end slice, not scattered items.
-4. **Propose the release slice** to the PO, starting from the top items, and explain
+5. **Propose the release slice** to the PO, starting from the top items, and explain
    any reason to deviate from the PO's ordering. For a feature slice, optionally walk
    the story map backbone; for cleanup/hardening, drive from the backlog.
-5. **Name the release** `1.x — Name` (outcome-based, not feature list) and define its
+6. **Name the release** `1.x — Name` (outcome-based, not feature list) and define its
    **success metric** ("what would we measure to call this a success?").
-6. **Refine the first item to the Definition of Ready** — restate goal + acceptance,
+7. **Refine the first item to the Definition of Ready** — restate goal + acceptance,
    open questions, affected files, risks, explicit CRUD scope, and the "How to verify"
    checklist. Only **after the PO's explicit written "go"** does implementation start
    (in a later step / session). Refinement can be item-by-item, just-in-time.
