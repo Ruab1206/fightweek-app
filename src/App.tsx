@@ -56,7 +56,7 @@ import type { AddType } from './components/AddScreen';
 const App = () => {
   // --- Hooks ---
   const navigate = useNavigate();
-  const { userMapping: USER_MAPPING, fighters: FIGHTERS, emailForName } = useRolesConfig();
+  const { userMapping: USER_MAPPING, fighters: FIGHTERS, allMembers, emailForName } = useRolesConfig();
   const {
     user, authLoading, accessDenied, loginError,
     isBrowserBlocked, isMobile,
@@ -405,12 +405,13 @@ const App = () => {
                         </div>
                       </div>
                     </div>
-                    {/* Admin-only fighter switch */}
+                    {/* Admin-only user switch (#1165: now lists ALL members — fighters,
+                        coaches, and the admin themselves — not just fighters). */}
                     {isAdmin && !isLocked && (
                       <div className={`px-4 py-2 border-b ${isDark ? 'border-slate-700' : 'border-surface-border'}`}>
-                        <p className={`text-[10px] font-medium uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Vis som fighter</p>
+                        <p className={`text-[10px] font-medium uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Vis som bruger</p>
                         <select value={activeFighter} onChange={(e) => { setActiveFighter(e.target.value); setMenuOpen(false); }} className={`w-full px-2 py-1.5 rounded-lg border text-sm font-bold ${isDark ? 'bg-slate-900 text-white border-slate-600' : 'bg-surface-subtle text-ds-text border-surface-border'}`}>
-                          {FIGHTERS.map(f => <option key={f} value={f} className="bg-white text-black dark:bg-slate-800 dark:text-white">{f}</option>)}
+                          {allMembers.map(m => <option key={m} value={m} className="bg-white text-black dark:bg-slate-800 dark:text-white">{m}</option>)}
                         </select>
                       </div>
                     )}
