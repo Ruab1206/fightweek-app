@@ -117,6 +117,7 @@ We use **semantic versioning lite** with an outcome name:
 | 1.13 — Cleanup | The email-keyed data foundation is fully realized (legacy data removed, rules locked to it) and everyday rough edges — mobile sign-in, missing absences, teammate calendar — are fixed | Jun 2026 |
 | 1.14 — Invitations | Coaches and fighters coordinate who trains together inside the app — invite to an activity, see who's coming, RSVP, and get notified | Jun 2026 |
 | 1.15 — Effortless on Mobile | Invitations work fully on mobile, notifications jump you straight to the activity, and the calendar keeps you anchored after viewing, editing, or adding | Jun 2026 |
+| 1.16 — Coach on the Calendar | The coach and admin run their own training week — plan it, invite people, and see who's coming or declines — instead of borrowing a fighter's calendar | Jun 2026 |
 
 ---
 

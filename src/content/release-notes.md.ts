@@ -5,6 +5,20 @@ export const RELEASE_NOTES = `# Release Notes
 > Releases follow the \`1.x — Outcome Name\` convention. See the Team Charter for how we plan releases using the story map.
 
 ---
+## 1.16 — Coach on the Calendar
+*June 2026*
+
+**Outcome:** The coach and admin now run their own training week inside the app — plan it, invite people to it, and get told who's coming and who drops out — instead of borrowing a fighter's calendar.
+
+### What changed
+
+**Coaches and admins get their own calendar (#1165)**
+- When a coach or admin logs in, they now land on **their own** training calendar — previously they were silently put on a fighter's ("Karl's") calendar, so anything they added landed on the wrong person
+- A coach can now plan their own training, **invite people to it, see who's coming, and get notified when someone declines** — the same invitation tools fighters already had (this previously failed silently, because invitations were attributed to the wrong person)
+- The coach's calendar is locked to themselves, just like a fighter's
+- The admin keeps the **"Vis som bruger"** switcher to view anyone's calendar — and it now lists **everyone** (fighters, coaches, and the admin themselves), not just fighters
+
+---
 ## 1.15 — Effortless on Mobile
 *June 2026*
 
