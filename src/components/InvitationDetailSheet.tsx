@@ -35,6 +35,7 @@ export function InvitationDetailSheet({
   myEmail,
   nameForEmail,
   onRespond,
+  onOptOutOccurrence,
   onCancel,
   onDismiss,
   onClose,
@@ -43,6 +44,9 @@ export function InvitationDetailSheet({
   myEmail: string;
   nameForEmail: (email: string) => string;
   onRespond: (response: InvitationResponse) => void;
+  /** Opt out of just THIS occurrence of a series (decline one date), keeping the
+   * rest of the series response unchanged (#1213). Only used when seriesId set. */
+  onOptOutOccurrence?: () => void;
   onCancel: () => void;
   onDismiss: () => void;
   onClose: () => void;
@@ -51,6 +55,7 @@ export function InvitationDetailSheet({
   const lowerMe = myEmail.toLowerCase();
   const isInviter = invitation.invitedBy.toLowerCase() === lowerMe;
   const myStatus = invitation.invitees?.[lowerMe];
+  const isSeries = !!invitation.seriesId;
   // The whole activity was called off, or just this person was removed — either
   // way the viewer sees an "Aflyst" notice and can remove it from their calendar.
   const activityCancelled = invitation.status === 'cancelled';
@@ -136,8 +141,19 @@ export function InvitationDetailSheet({
                   );
                 })}
               </div>
+              {isSeries && (
+                <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>
+                  Dit svar gælder hele serien. Du kan stadig melde fra til en enkelt dag nedenfor.
+                </p>
+              )}
               {myStatus === 'declined' && (
                 <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Du har afslået — invitationen fjernes fra din kalender.</p>
+              )}
+              {isSeries && onOptOutOccurrence && myStatus !== 'declined' && (
+                <button onClick={onOptOutOccurrence}
+                  className={`mt-1 w-full flex items-center justify-center gap-2 text-xs font-bold py-2.5 rounded-xl border transition-colors ${isDark ? 'bg-slate-800 text-amber-300 border-slate-700 hover:bg-slate-700' : 'bg-white text-amber-700 border-surface-border hover:bg-surface-hover'}`}>
+                  <CalendarX className="w-4 h-4" /> Jeg kan ikke {formatDateDa(a.date)}
+                </button>
               )}
             </div>
           )}

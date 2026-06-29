@@ -96,7 +96,7 @@ const App = () => {
   const { isDark, toggleTheme } = useTheme();
   const { classes: catalogueClasses, loading: catalogueLoading } = useCatalogue();
   const { events: allEvents } = useEvents();
-  const { invitations, createInvitation, createSeriesInvitation, respondToInvitation, cancelInvitation, cancelInvitationForActivity, cancelInvitationsForActivityFrom, cancelSeries, dismissInvitation, removeInvitee } = useInvitations();
+  const { invitations, createInvitation, createSeriesInvitation, respondToInvitation, respondToSeries, cancelInvitation, cancelInvitationForActivity, cancelInvitationsForActivityFrom, cancelSeries, dismissInvitation, removeInvitee } = useInvitations();
   const { getNote, saveNote } = useActivityNotes(activeFighterKey);
   const { lastSeen: notificationsLastSeen, markSeen: markNotificationsSeen, dismissed: notificationsDismissed, dismiss: dismissNotification, dismissAll: dismissAllNotifications } = useNotificationsMeta(activeFighterKey);
 
@@ -856,13 +856,34 @@ const App = () => {
           nameForEmail={nameForEmail}
           onRespond={async (response) => {
             const id = activeInvitation.id;
+            const seriesId = activeInvitation.seriesId;
             try {
-              await respondToInvitation(id, activeFighterKey, response);
+              // #1213: a series invitation is answered once for the WHOLE series;
+              // a standalone invite answers just its occurrence.
+              if (seriesId) await respondToSeries(seriesId, activeFighterKey, response);
+              else await respondToInvitation(id, activeFighterKey, response);
               setActiveInvitation(null);
-              showToast(response === 'declined' ? 'Du har afslået' : 'Dit svar er gemt', 'success');
+              showToast(
+                response === 'declined'
+                  ? (seriesId ? 'Du har afslået hele serien' : 'Du har afslået')
+                  : (seriesId ? 'Dit svar er gemt for hele serien' : 'Dit svar er gemt'),
+                'success',
+              );
             } catch (err) {
               console.error('[invitation] respond failed:', err);
               showToast('Kunne ikke gemme dit svar — prøv igen', 'error');
+            }
+          }}
+          onOptOutOccurrence={async () => {
+            // #1213: decline just THIS date of the series, leaving the rest intact.
+            const id = activeInvitation.id;
+            try {
+              await respondToInvitation(id, activeFighterKey, 'declined');
+              setActiveInvitation(null);
+              showToast('Du er meldt fra denne dag', 'success');
+            } catch (err) {
+              console.error('[invitation] opt-out occurrence failed:', err);
+              showToast('Kunne ikke melde fra — prøv igen', 'error');
             }
           }}
           onCancel={async () => {

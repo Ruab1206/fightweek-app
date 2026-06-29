@@ -68,6 +68,11 @@ interface FeedItem {
   actionable: boolean;
   /** Response value, for colouring the response icon. */
   response?: InvitationResponse;
+  /** Collapse key: occurrence-docs of one recurring series share this so the
+   * feed shows ONE item per series, not one per occurrence (#1213). */
+  groupKey: string;
+  /** How many occurrences this collapsed item represents (>1 = a series). */
+  seriesCount?: number;
 }
 
 function tsOf(inv: Invitation): number {
@@ -133,6 +138,7 @@ export function InvitationBell({
           activityDate: inv.activity.date,
           ts: when,
           actionable: true,
+          groupKey: inv.seriesId ? `invite_series_${inv.seriesId}` : `invite_${inv.id}`,
         });
       }
 
@@ -157,6 +163,7 @@ export function InvitationBell({
           // #1215: tapping opens the invitation detail sheet (Outlook-style),
           // showing the activity + its cancelled (Aflyst) state — no calendar nav.
           actionable: true,
+          groupKey: inv.seriesId ? `cancelled_series_${inv.seriesId}` : `cancelled_${inv.id}`,
         });
       }
 
@@ -182,12 +189,33 @@ export function InvitationBell({
             // activity + who's coming (the responses) — no calendar navigation.
             actionable: true,
             response: resp,
+            groupKey: inv.seriesId ? `resp_series_${inv.seriesId}_${email}_${resp}` : `resp_${inv.id}_${email}`,
           });
         }
       }
     }
-    items.sort((a, b) => b.ts - a.ts || b.activityDate.localeCompare(a.activityDate));
-    return items;
+    // #1213: collapse occurrence-docs of one recurring series into a SINGLE feed
+    // item, so the invitee answers once and the arranger sees one notification —
+    // not one per occurrence. Representative = the earliest upcoming occurrence
+    // (so "when" shows the next date + tapping opens that one); recency = the most
+    // recent change across the series.
+    const groups = new Map<string, FeedItem[]>();
+    for (const it of items) {
+      const arr = groups.get(it.groupKey);
+      if (arr) arr.push(it); else groups.set(it.groupKey, [it]);
+    }
+    const collapsed: FeedItem[] = [];
+    for (const arr of groups.values()) {
+      if (arr.length === 1) { collapsed.push(arr[0]); continue; }
+      arr.sort((a, b) => a.activityDate.localeCompare(b.activityDate));
+      const rep: FeedItem = { ...arr[0] };
+      rep.ts = Math.max(...arr.map((x) => x.ts));
+      rep.seriesCount = arr.length;
+      rep.subtitle = `${rep.subtitle} · hele serien`;
+      collapsed.push(rep);
+    }
+    collapsed.sort((a, b) => b.ts - a.ts || b.activityDate.localeCompare(a.activityDate));
+    return collapsed;
   }, [invitations, lowerMe, nameForEmail]);
 
   // What the bell shows: pending invites (always, until answered) plus

@@ -178,6 +178,40 @@ export function useInvitations() {
     );
   }, []);
 
+  /**
+   * Respond to a WHOLE series at once (#1213, Release 1.17): set the invitee's
+   * response on every not-cancelled occurrence-doc sharing `seriesId`, so the
+   * invitee answers once for the whole recurring activity (and the arranger gets
+   * one collapsed notification). Per-occurrence opt-out stays possible afterwards
+   * via respondToInvitation on a single occurrence. All occurrences get the SAME
+   * eventTime so the arranger's notification time is stable and the per-series
+   * response collapses to one feed item.
+   */
+  const respondToSeries = useCallback(async (
+    seriesId: string,
+    inviteeEmail: string,
+    response: InvitationResponse,
+  ): Promise<void> => {
+    if (!seriesId) return;
+    const email = inviteeEmail.toLowerCase();
+    const matches = invitationsRef.current.filter((inv) =>
+      inv.seriesId === seriesId
+      && inv.status !== 'cancelled'
+      && inv.invitees?.[email] !== undefined,
+    );
+    const nowIso = new Date().toISOString();
+    for (const inv of matches) {
+      const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', inv.id);
+      await updateDoc(
+        ref,
+        new FieldPath('invitees', email), response,
+        new FieldPath('eventTimes', email), nowIso,
+        'updatedAt', nowIso,
+      );
+    }
+  }, []);
+
+
   /** Cancel/delete an invitation (inviter only — enforced by rules). */
   const removeInvitation = useCallback(async (invitationId: string): Promise<void> => {
     const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', invitationId);
@@ -332,7 +366,7 @@ export function useInvitations() {
   }, []);
 
   return {
-    invitations, loading, createInvitation, createSeriesInvitation, respondToInvitation,
+    invitations, loading, createInvitation, createSeriesInvitation, respondToInvitation, respondToSeries,
     removeInvitation, cancelInvitation, cancelInvitationForActivity, cancelInvitationsForActivityFrom,
     cancelSeries, removeFromSeries, dismissInvitation, removeInvitee,
   };
