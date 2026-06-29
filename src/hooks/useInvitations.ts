@@ -58,23 +58,25 @@ export function useInvitations() {
   }, []);
 
   /**
-   * Invite people to an activity. One invitation doc per (inviter + activity),
-   * so everyone invited to the same activity shares a single doc and can see
-   * each other's responses. If an invitation for this activity already exists,
-   * the new invitees are merged in as `pending` (re-inviting a previously
-   * declined person resets them to pending). Otherwise a new doc is created.
+   * Upsert a single occurrence's invitation doc (the shared core of both the
+   * single-invite and the series fan-out). One invitation doc per
+   * (inviter + activity occurrence): everyone invited to the same occurrence
+   * shares a doc and can see each other's responses. If a doc for this
+   * occurrence already exists, the invitees are merged in as `pending`
+   * (re-inviting a previously declined person resets them to pending); otherwise
+   * a new doc is created. `seriesId` (when given) links this occurrence into a
+   * recurring-series invitation (#1213); it stays undefined for single invites.
    */
-  const createInvitation = useCallback(async (
+  const upsertOccurrence = async (
     activity: InvitationActivity,
-    invitedBy: string,
+    inviter: string,
     invitedByName: string,
-    inviteeEmails: string[],
+    emails: string[],
+    seriesId?: string,
   ): Promise<void> => {
     const nowIso = new Date().toISOString();
-    const inviter = invitedBy.toLowerCase();
-    const emails = inviteeEmails.map((e) => e.toLowerCase());
 
-    // Find an existing invitation for the same activity by the same inviter.
+    // Find an existing invitation for the same activity occurrence by the same inviter.
     const existing = invitationsRef.current.find((inv) =>
       inv.invitedBy.toLowerCase() === inviter
       && (inv.activity.title || '').trim() === (activity.title || '').trim()
@@ -92,6 +94,8 @@ export function useInvitations() {
       // cancelled, clear that so invitees don't see a stale "Aflyst" while the
       // arranger sees them as pending.
       args.push('status', 'active');
+      // Link an existing single-occurrence doc into the series if it isn't already.
+      if (seriesId && existing.seriesId !== seriesId) args.push('seriesId', seriesId);
       args.push('updatedAt', nowIso);
       const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', existing.id);
       // updateDoc(ref, field, value, ...moreFieldsAndValues)
@@ -107,9 +111,50 @@ export function useInvitations() {
       invitedByName,
       invitees,
       status: 'active',
+      ...(seriesId ? { seriesId } : {}),
       createdAt: nowIso,
       updatedAt: nowIso,
     });
+  };
+
+  /**
+   * Invite people to a single activity occurrence (1.14 behaviour, unchanged).
+   */
+  const createInvitation = useCallback(async (
+    activity: InvitationActivity,
+    invitedBy: string,
+    invitedByName: string,
+    inviteeEmails: string[],
+  ): Promise<void> => {
+    const inviter = invitedBy.toLowerCase();
+    const emails = inviteeEmails.map((e) => e.toLowerCase());
+    await upsertOccurrence(activity, inviter, invitedByName, emails);
+  }, []);
+
+  /**
+   * Invite people to a RECURRING activity in one action (#1213, Release 1.17).
+   * Fans out to one occurrence-doc per date in `occurrenceDates`, all sharing a
+   * freshly generated `seriesId`. Each occurrence doc is identical to a single
+   * invite, so per-occurrence opt-out / who's-coming / cancel-one-date keep
+   * working unchanged; `seriesId` only ties them together for series-level ops
+   * (cancelSeries / removeFromSeries). The caller computes `occurrenceDates`
+   * across the FULL recurrence horizon (computeSeriesOccurrenceDates) so the
+   * series can't run away — the #1183 horizon lesson.
+   */
+  const createSeriesInvitation = useCallback(async (
+    baseActivity: Omit<InvitationActivity, 'date'>,
+    occurrenceDates: string[],
+    invitedBy: string,
+    invitedByName: string,
+    inviteeEmails: string[],
+  ): Promise<string> => {
+    const inviter = invitedBy.toLowerCase();
+    const emails = inviteeEmails.map((e) => e.toLowerCase());
+    const seriesId = crypto.randomUUID();
+    for (const date of occurrenceDates) {
+      await upsertOccurrence({ ...baseActivity, date }, inviter, invitedByName, emails, seriesId);
+    }
+    return seriesId;
   }, []);
 
   /** Set an invitee's own response (accept/decline/tentative). */
@@ -206,10 +251,51 @@ export function useInvitations() {
   }, []);
 
   /**
-   * An invitee removes a (usually cancelled) invitation from their own calendar
-   * by deleting their own key from the invitees map. Allowed by rules because it
-   * only affects the caller's own key.
+   * Cancel the WHOLE series (#1213): mark every occurrence-doc sharing `seriesId`
+   * as cancelled, so every invitee on every future occurrence is notified. Only
+   * not-yet-cancelled occurrences are touched. A batch of single-doc writes, each
+   * already permitted by the inviter rule (invitedBy == own email).
    */
+  const cancelSeries = useCallback(async (seriesId: string): Promise<void> => {
+    if (!seriesId) return;
+    const matches = invitationsRef.current.filter((inv) =>
+      inv.seriesId === seriesId && inv.status !== 'cancelled',
+    );
+    const nowIso = new Date().toISOString();
+    for (const inv of matches) {
+      const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', inv.id);
+      await updateDoc(ref, { status: 'cancelled', cancelledAt: nowIso, updatedAt: nowIso });
+    }
+  }, []);
+
+  /**
+   * Remove one person from the WHOLE series (#1213): set their response to
+   * `cancelled` on every occurrence-doc sharing `seriesId`, so they see each
+   * future occurrence struck through as "Aflyst" and can dismiss it. Stamps a
+   * stable per-person eventTime per doc (the single-invite removeInvitee
+   * behaviour, fanned out).
+   */
+  const removeFromSeries = useCallback(async (
+    seriesId: string,
+    inviteeEmail: string,
+  ): Promise<void> => {
+    if (!seriesId) return;
+    const email = inviteeEmail.toLowerCase();
+    const matches = invitationsRef.current.filter((inv) =>
+      inv.seriesId === seriesId && inv.invitees?.[email] !== undefined && inv.invitees[email] !== 'cancelled',
+    );
+    const nowIso = new Date().toISOString();
+    for (const inv of matches) {
+      const ref = doc(db, PUBLIC_DATA_PATH, 'invitations', inv.id);
+      await updateDoc(
+        ref,
+        new FieldPath('invitees', email), 'cancelled',
+        new FieldPath('eventTimes', email), nowIso,
+        'updatedAt', nowIso,
+      );
+    }
+  }, []);
+
   const dismissInvitation = useCallback(async (
     invitationId: string,
     inviteeEmail: string,
@@ -246,7 +332,8 @@ export function useInvitations() {
   }, []);
 
   return {
-    invitations, loading, createInvitation, respondToInvitation,
-    removeInvitation, cancelInvitation, cancelInvitationForActivity, cancelInvitationsForActivityFrom, dismissInvitation, removeInvitee,
+    invitations, loading, createInvitation, createSeriesInvitation, respondToInvitation,
+    removeInvitation, cancelInvitation, cancelInvitationForActivity, cancelInvitationsForActivityFrom,
+    cancelSeries, removeFromSeries, dismissInvitation, removeInvitee,
   };
 }

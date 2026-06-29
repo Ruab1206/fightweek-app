@@ -36,6 +36,8 @@ export interface AddScreenProps {
   /** Invite teammates while adding a single (non-recurring) Hold (#1214). */
   inviteCandidates?: InviteCandidate[];
   onInviteToActivity?: (session: any, day: string, weekNum: number, inviteeEmails: string[]) => void | Promise<void>;
+  /** Invite teammates to a whole RECURRING Hold series in one action (#1213). */
+  onSeriesInvite?: (session: any, day: string, startDate: Date, recurrence: RecurrenceRule, inviteeEmails: string[]) => void | Promise<void>;
 }
 
 const INITIAL_SHOW = 5;
@@ -72,7 +74,7 @@ const HoldBottomSheet = ({ cls, schedule, activeDay, isDark, inviteCandidates, o
     onSave(session, {
       interval,
       endDate: endType === 'date' && endDate ? endDate : null,
-    }, interval === 0 ? selectedInvitees : []);
+    }, selectedInvitees);
   };
 
   return (
@@ -202,27 +204,21 @@ const HoldBottomSheet = ({ cls, schedule, activeDay, isDark, inviteCandidates, o
           )}
         </div>
 
-        {/* Invite people — single occurrence only (#1214). Series invite = #1213 (deferred). */}
+        {/* Invite people — single occurrence (#1214) or the whole series (#1213). */}
         {inviteCandidates && (
           <div className={`px-5 py-3 border-t ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
-            {interval === 0 ? (
-              <>
-                <InvitePicker
-                  candidates={inviteCandidates}
-                  selected={selectedInvitees}
-                  onToggle={(email) => setSelectedInvitees(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email])}
-                  isDark={isDark}
-                />
-                {selectedInvitees.length > 0 && (
-                  <p className={`mt-2 inline-flex items-center gap-1.5 text-xs ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
-                    <UserPlus className="w-3.5 h-3.5" />
-                    {selectedInvitees.length} {selectedInvitees.length === 1 ? 'person' : 'personer'} inviteres når du gemmer.
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>
-                Invitationer til en hel serie kommer senere — tilføj en enkelt træning for at invitere holdkammerater.
+            <InvitePicker
+              candidates={inviteCandidates}
+              selected={selectedInvitees}
+              onToggle={(email) => setSelectedInvitees(prev => prev.includes(email) ? prev.filter(e => e !== email) : [...prev, email])}
+              isDark={isDark}
+            />
+            {selectedInvitees.length > 0 && (
+              <p className={`mt-2 inline-flex items-center gap-1.5 text-xs ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
+                <UserPlus className="w-3.5 h-3.5" />
+                {interval === 0
+                  ? `${selectedInvitees.length} ${selectedInvitees.length === 1 ? 'person' : 'personer'} inviteres når du gemmer.`
+                  : `${selectedInvitees.length} ${selectedInvitees.length === 1 ? 'person' : 'personer'} inviteres til hele serien når du gemmer.`}
               </p>
             )}
           </div>
@@ -296,7 +292,7 @@ const MonthCalendarPicker = ({ value, isDark, onSelect, onClose, minDate }: {
 };
 
 // ─── Main AddScreen ───
-const AddScreen = ({ defaultType, activeDay, multiWeekData, isDark, editingFravær, onAddFromCatalogue, onAddRecurring, onManualAdd, onAddFravær, onDeleteFravær, onEditFravær, onClose, inviteCandidates, onInviteToActivity }: AddScreenProps) => {
+const AddScreen = ({ defaultType, activeDay, multiWeekData, isDark, editingFravær, onAddFromCatalogue, onAddRecurring, onManualAdd, onAddFravær, onDeleteFravær, onEditFravær, onClose, inviteCandidates, onInviteToActivity, onSeriesInvite }: AddScreenProps) => {
   const [type, setType] = useState<AddType>(defaultType);
   const [selectedDay, setSelectedDay] = useState(activeDay);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -377,6 +373,9 @@ const AddScreen = ({ defaultType, activeDay, multiWeekData, isDark, editingFrav�
       }
     } else {
       onAddRecurring(session, selectedDay.dayName, selectedDay.date, recurrence);
+      if (inviteeEmails.length > 0) {
+        onSeriesInvite?.(session, selectedDay.dayName, selectedDay.date, recurrence, inviteeEmails);
+      }
     }
     setHoldSheet(null);
     onClose();

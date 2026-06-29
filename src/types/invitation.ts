@@ -43,6 +43,11 @@ export interface Invitation {
   // bumps `updatedAt` and resurfaces already-seen notifications as new).
   eventTimes?: Record<string, string>;            // email → ISO time that invitee last responded / was removed
   cancelledAt?: string;                           // ISO time the whole activity was called off
+  // Links the occurrence-docs of a recurring-series invitation (#1213, Release 1.17).
+  // undefined = a standalone single-occurrence invite (exactly as 1.14) — fully
+  // backward compatible. Series operations (cancel-series / remove-from-series)
+  // batch across every doc sharing the same seriesId.
+  seriesId?: string;                              // shared id tying one series' occurrence docs together
 }
 
 /** Response options offered to an invitee (excludes the implicit `pending`/`cancelled`). */

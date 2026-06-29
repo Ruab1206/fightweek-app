@@ -18,6 +18,7 @@ import { getDateForWeekDay, getWeekDateMap, getTodayDayName, getFullWeekDateMap,
 import { useAuth } from './hooks/useAuth';
 import { useScheduleData, useMultiWeekData, useMultiWeekTeamData } from './hooks/useScheduleData';
 import { useSessionHandlers } from './hooks/useSessionHandlers';
+import { computeSeriesOccurrenceDates, recurrenceHorizonEndDate } from './hooks/computeSeriesOccurrences';
 import { useToast } from './hooks/useToast';
 import { useTheme } from './hooks/useTheme';
 import { useCatalogue } from './hooks/useCatalogue';
@@ -95,7 +96,7 @@ const App = () => {
   const { isDark, toggleTheme } = useTheme();
   const { classes: catalogueClasses, loading: catalogueLoading } = useCatalogue();
   const { events: allEvents } = useEvents();
-  const { invitations, createInvitation, respondToInvitation, cancelInvitation, cancelInvitationForActivity, cancelInvitationsForActivityFrom, dismissInvitation, removeInvitee } = useInvitations();
+  const { invitations, createInvitation, createSeriesInvitation, respondToInvitation, cancelInvitation, cancelInvitationForActivity, cancelInvitationsForActivityFrom, cancelSeries, dismissInvitation, removeInvitee } = useInvitations();
   const { getNote, saveNote } = useActivityNotes(activeFighterKey);
   const { lastSeen: notificationsLastSeen, markSeen: markNotificationsSeen, dismissed: notificationsDismissed, dismiss: dismissNotification, dismissAll: dismissAllNotifications } = useNotificationsMeta(activeFighterKey);
 
@@ -114,11 +115,26 @@ const App = () => {
     const title = (session?.name || '').trim();
     if (!iso || !title) return;
     const start = session?.start || '';
-    const p = scope === 'future'
-      ? cancelInvitationsForActivityFrom(activeFighterKey, title, start, iso)
-      : cancelInvitationForActivity(activeFighterKey, title, iso, start);
+    let p: Promise<void>;
+    if (scope === 'future') {
+      // "Denne og alle fremtidige" on a recurring activity = cancel the whole
+      // series (#1213). If this occurrence belongs to a series, batch-cancel by
+      // seriesId so every invitee on every occurrence is notified. Legacy/1.14
+      // single invites (no seriesId) fall back to the title+start match.
+      const me = activeFighterKey.toLowerCase();
+      const occ = invitations.find((i) =>
+        i.invitedBy.toLowerCase() === me
+        && (i.activity.title || '').trim() === title
+        && (i.activity.start || '') === start
+        && i.activity.date === iso);
+      p = occ?.seriesId
+        ? cancelSeries(occ.seriesId)
+        : cancelInvitationsForActivityFrom(activeFighterKey, title, start, iso);
+    } else {
+      p = cancelInvitationForActivity(activeFighterKey, title, iso, start);
+    }
     p.catch((err) => console.error('[invitation] cancel-on-remove failed:', err));
-  }, [activeFighterKey, cancelInvitationForActivity, cancelInvitationsForActivityFrom]);
+  }, [activeFighterKey, invitations, cancelInvitationForActivity, cancelInvitationsForActivityFrom, cancelSeries]);
 
   // --- Refs & scroll-to-today (must be before early returns) ---
   const todayRef = useRef<HTMLDivElement | null>(null);
@@ -862,6 +878,44 @@ const App = () => {
               } catch (err) {
                 console.error('[invitation] create-on-add failed:', err);
                 showToast('Kunne ikke sende invitationen — prøv igen', 'error');
+              }
+            }}
+            onSeriesInvite={async (session, day, startDate, recurrence, inviteeEmails) => {
+              // Invite teammates to a whole recurring Hold series (#1213). Fan out one
+              // occurrence-doc per date across the FULL recurrence horizon (the same
+              // horizon the arranger's own recurring session uses), so the invited
+              // series and the session stay paired and the series can't run away.
+              if (recurrence.interval === 0 || inviteeEmails.length === 0) return;
+              const startWeek = getISOWeekForDate(startDate);
+              const firstDate = getDateForWeekDay(startWeek, day);
+              const firstIso = firstDate ? toLocalISODate(firstDate) : '';
+              if (!firstIso) { showToast('Kunne ikke bestemme seriedatoerne', 'error'); return; }
+              const todayIso = toLocalISODate(new Date());
+              const occ = computeSeriesOccurrenceDates({
+                startDate: firstIso,
+                intervalWeeks: recurrence.interval,
+                endDate: recurrence.endDate,
+                horizonEndDate: recurrenceHorizonEndDate(),
+              }).filter((d) => d >= todayIso);
+              if (occ.length === 0) return;
+              try {
+                await createSeriesInvitation(
+                  {
+                    title: session.name,
+                    category: session.category || '',
+                    start: session.start || '',
+                    end: session.end || '',
+                    location: session.location || '',
+                  },
+                  occ,
+                  activeFighterKey,
+                  activeFighter,
+                  inviteeEmails,
+                );
+                showToast(`${inviteeEmails.length} ${inviteeEmails.length === 1 ? 'person' : 'personer'} inviteret til hele serien`, 'success');
+              } catch (err) {
+                console.error('[invitation] series create failed:', err);
+                showToast('Kunne ikke sende serie-invitationen — prøv igen', 'error');
               }
             }}
             onAddFravær={(fravær) => { handleFravær(fravær); setAddScreenOpen(false); setEditingFravær(null); }}
