@@ -300,7 +300,56 @@ const App = () => {
     }
     scrollToDate(date);
   }, [currentWeek, scrollToDate]);
-  // Prevent background scroll when search overlay is open (calendar only — events page handles its own filtering inline)
+
+  // #1213: invite teammates to a whole RECURRING activity in one action. Fans out
+  // one occurrence-doc per date across the FULL recurrence horizon (the same
+  // horizon the arranger's own recurring session uses), so the invited series and
+  // the session stay paired and the series can't run away. Shared by every invite
+  // surface (Add→Hold, the edit modal, the detail sheet). `anchorTo` optionally
+  // scrolls the arranger to the first occurrence after inviting.
+  const inviteSeries = useCallback(async (
+    session: { name?: string; category?: string; start?: string; end?: string; location?: string },
+    day: string,
+    startDate: Date,
+    recurrence: { interval: number; endDate: string | null },
+    inviteeEmails: string[],
+    anchor: boolean = false,
+  ): Promise<void> => {
+    if (recurrence.interval === 0 || inviteeEmails.length === 0) return;
+    const startWeek = getISOWeekForDate(startDate);
+    const firstDate = getDateForWeekDay(startWeek, day);
+    const firstIso = firstDate ? toLocalISODate(firstDate) : '';
+    if (!firstIso) { showToast('Kunne ikke bestemme seriedatoerne', 'error'); return; }
+    const todayIso = toLocalISODate(new Date());
+    const occ = computeSeriesOccurrenceDates({
+      startDate: firstIso,
+      intervalWeeks: recurrence.interval,
+      endDate: recurrence.endDate,
+      horizonEndDate: recurrenceHorizonEndDate(),
+    }).filter((d) => d >= todayIso);
+    if (occ.length === 0) return;
+    try {
+      await createSeriesInvitation(
+        {
+          title: session.name || '',
+          category: session.category || '',
+          start: session.start || '',
+          end: session.end || '',
+          location: session.location || '',
+        },
+        occ,
+        activeFighterKey,
+        activeFighter,
+        inviteeEmails,
+      );
+      showToast(`${inviteeEmails.length} ${inviteeEmails.length === 1 ? 'person' : 'personer'} inviteret til hele serien`, 'success');
+      if (anchor && firstDate) anchorOnDay(firstDate);
+    } catch (err) {
+      console.error('[invitation] series create failed:', err);
+      showToast('Kunne ikke sende serie-invitationen — prøv igen', 'error');
+    }
+  }, [activeFighterKey, activeFighter, createSeriesInvitation, showToast, anchorOnDay]);
+
   useEffect(() => {
     if (searchMode && view !== 'events') {
       document.body.style.overflow = 'hidden';
@@ -771,6 +820,9 @@ const App = () => {
               showToast('Kunne ikke sende invitationen — prøv igen', 'error');
             }
           }}
+          onSeriesInvite={async (session, dayName, startDate, recurrence, inviteeEmails) => {
+            await inviteSeries(session, dayName, startDate, recurrence, inviteeEmails, true);
+          }}
           onUninvite={async (email) => {
             const { session, day, weekNum } = classInfoSession;
             const d = getDateForWeekDay(weekNum, day);
@@ -881,42 +933,7 @@ const App = () => {
               }
             }}
             onSeriesInvite={async (session, day, startDate, recurrence, inviteeEmails) => {
-              // Invite teammates to a whole recurring Hold series (#1213). Fan out one
-              // occurrence-doc per date across the FULL recurrence horizon (the same
-              // horizon the arranger's own recurring session uses), so the invited
-              // series and the session stay paired and the series can't run away.
-              if (recurrence.interval === 0 || inviteeEmails.length === 0) return;
-              const startWeek = getISOWeekForDate(startDate);
-              const firstDate = getDateForWeekDay(startWeek, day);
-              const firstIso = firstDate ? toLocalISODate(firstDate) : '';
-              if (!firstIso) { showToast('Kunne ikke bestemme seriedatoerne', 'error'); return; }
-              const todayIso = toLocalISODate(new Date());
-              const occ = computeSeriesOccurrenceDates({
-                startDate: firstIso,
-                intervalWeeks: recurrence.interval,
-                endDate: recurrence.endDate,
-                horizonEndDate: recurrenceHorizonEndDate(),
-              }).filter((d) => d >= todayIso);
-              if (occ.length === 0) return;
-              try {
-                await createSeriesInvitation(
-                  {
-                    title: session.name,
-                    category: session.category || '',
-                    start: session.start || '',
-                    end: session.end || '',
-                    location: session.location || '',
-                  },
-                  occ,
-                  activeFighterKey,
-                  activeFighter,
-                  inviteeEmails,
-                );
-                showToast(`${inviteeEmails.length} ${inviteeEmails.length === 1 ? 'person' : 'personer'} inviteret til hele serien`, 'success');
-              } catch (err) {
-                console.error('[invitation] series create failed:', err);
-                showToast('Kunne ikke sende serie-invitationen — prøv igen', 'error');
-              }
+              await inviteSeries(session, day, startDate, recurrence, inviteeEmails, true);
             }}
             onAddFravær={(fravær) => { handleFravær(fravær); setAddScreenOpen(false); setEditingFravær(null); }}
             onDeleteFravær={(groupId) => { handleDeleteFravær(groupId); setAddScreenOpen(false); setEditingFravær(null); }}
@@ -962,6 +979,8 @@ const App = () => {
           handleAddRecurring(session, dayName, startDate, recurrence);
           setModalOpen(false);
           setEditingWeek(null);
+          // #1213: land the arranger on the first occurrence, like a single add does.
+          anchorOnDay(startDate);
         }}
         onFeedback={(ctx) => setFeedbackContext(ctx)}
         getNote={getNote}
@@ -1010,6 +1029,9 @@ const App = () => {
             console.error('[invitation] create failed:', err);
             showToast('Kunne ikke sende invitationen — prøv igen', 'error');
           }
+        }}
+        onSeriesInvite={async (savedForm, dayName, startDate, recurrence, inviteeEmails) => {
+          await inviteSeries(savedForm, dayName, startDate, recurrence, inviteeEmails, true);
         }}
         onUninvite={async (email) => {
           // Arranger removes one person from the invitation for this activity.

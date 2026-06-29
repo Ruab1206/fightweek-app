@@ -38,10 +38,13 @@ export interface SessionDetailSheetProps {
   inviteCandidates?: InviteCandidate[];
   existingInvitees?: Record<string, InvitationResponse>;
   onInvite?: (inviteeEmails: string[]) => void | Promise<void>;
+  /** Invite teammates to the WHOLE recurring series in one action (#1213).
+   * Used instead of onInvite when this activity is recurring. */
+  onSeriesInvite?: (session: any, day: string, startDate: Date, recurrence: { interval: number; endDate: string | null }, inviteeEmails: string[]) => void | Promise<void>;
   onUninvite?: (email: string) => void;
 }
 
-const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData, systemWeek: _systemWeek, saveWeekToDb, showToast, onRecurrenceChange, onClose, onArrangerActivityRemoved, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onUninvite }: SessionDetailSheetProps) => {
+const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData, systemWeek: _systemWeek, saveWeekToDb, showToast, onRecurrenceChange, onClose, onArrangerActivityRemoved, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onSeriesInvite, onUninvite }: SessionDetailSheetProps) => {
   const [showMore, setShowMore] = useState(false);
   const [showDeleteOptions, setShowDeleteOptions] = useState(false);
   const [interval, setRecurrenceInterval] = useState(session.isRecurring ? 1 : 0);
@@ -256,13 +259,36 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
               <button
                 onClick={async () => {
                   setInviting(true);
-                  try { await onInvite(selectedInvitees); setSelectedInvitees([]); }
+                  try {
+                    // #1213: inviting from a recurring activity invites the whole
+                    // series; a one-off activity invites just this occurrence.
+                    if (session?.isRecurring && onSeriesInvite) {
+                      const payload = {
+                        name: cls.title,
+                        category: disciplineToCategory(cls.discipline),
+                        start: session.start || '',
+                        end: session.end || '',
+                        location: cls.gym,
+                      };
+                      await onSeriesInvite(payload, day, sessionDate, {
+                        interval: interval > 0 ? interval : 1,
+                        endDate: endType === 'date' && endDate ? endDate : null,
+                      }, selectedInvitees);
+                    } else if (onInvite) {
+                      await onInvite(selectedInvitees);
+                    }
+                    setSelectedInvitees([]);
+                  }
                   finally { setInviting(false); }
                 }}
                 disabled={inviting}
                 className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-50">
                 <UserPlus className="w-4 h-4" />
-                {inviting ? 'Inviterer…' : `Inviter ${selectedInvitees.length} ${selectedInvitees.length === 1 ? 'person' : 'personer'}`}
+                {inviting
+                  ? 'Inviterer…'
+                  : session?.isRecurring
+                    ? `Inviter ${selectedInvitees.length} til hele serien`
+                    : `Inviter ${selectedInvitees.length} ${selectedInvitees.length === 1 ? 'person' : 'personer'}`}
               </button>
             )}
           </div>

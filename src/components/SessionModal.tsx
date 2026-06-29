@@ -57,10 +57,13 @@ interface SessionModalProps {
     inviteCandidates?: InviteCandidate[];
     existingInvitees?: Record<string, InvitationResponse>;
     onInvite?: (form: SessionForm, inviteeEmails: string[]) => void;
+    /** Invite teammates to the WHOLE recurring series when this save (re)applies
+     * recurrence (#1213). Falls back to single-occurrence onInvite otherwise. */
+    onSeriesInvite?: (form: SessionForm, day: string, startDate: Date, recurrence: { interval: number; endDate: string | null }, inviteeEmails: string[]) => void;
     onUninvite?: (email: string) => void;
 }
 
-const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onUninvite }: SessionModalProps) => {
+const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onSeriesInvite, onUninvite }: SessionModalProps) => {
     const { isDark } = useTheme();
     const isNew = !initialData;
     const [form, setForm] = useState<SessionForm>({
@@ -112,16 +115,24 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
     const inputCls = `w-full px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-surface-border text-ds-text'}`;
 
     const handleSave = () => {
-        // #1201: fire any pending invitations alongside the save. The invitation
-        // snapshots the current form (title/time/location) for the activity's day.
-        if (onInvite && selectedInvitees.length > 0) {
-            onInvite(form, selectedInvitees);
+        const applyRecurrence = shouldApplyRecurrence({ interval: recurrenceInterval, isNew, recurrenceTouched });
+        const recurrence = {
+            interval: recurrenceInterval,
+            endDate: endType === 'date' && endDate ? endDate : null,
+        };
+        // #1201/#1213: fire any pending invitations alongside the save. The
+        // invitation snapshots the current form (title/time/location). When this
+        // save (re)applies recurrence, invite the WHOLE series so everyone is
+        // invited to every occurrence — not just the edited one.
+        if (selectedInvitees.length > 0) {
+            if (applyRecurrence && onSeriesInvite) {
+                onSeriesInvite(form, day, date, recurrence, selectedInvitees);
+            } else if (onInvite) {
+                onInvite(form, selectedInvitees);
+            }
         }
-        if (shouldApplyRecurrence({ interval: recurrenceInterval, isNew, recurrenceTouched })) {
-            onRecurrenceSave(form, day, date, {
-                interval: recurrenceInterval,
-                endDate: endType === 'date' && endDate ? endDate : null,
-            });
+        if (applyRecurrence) {
+            onRecurrenceSave(form, day, date, recurrence);
         } else {
             onSave(form);
         }
