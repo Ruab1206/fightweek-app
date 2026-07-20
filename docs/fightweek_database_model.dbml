@@ -1,0 +1,277 @@
+Project Fightweek {
+  database_type: "PostgreSQL"
+}
+
+Enum organization_type {
+  gym
+  team
+  training_group
+  event_organizer
+  system
+  other
+}
+
+Enum calendar_owner_type {
+  user
+  organization
+  system
+}
+
+Enum event_type {
+  class
+  self_posted_training
+  tournament
+  seminar
+  absence
+  other
+}
+
+Enum event_status {
+  draft
+  scheduled
+  cancelled
+  completed
+  archived
+}
+
+Enum visibility {
+  private
+  shared
+  organization
+  public
+}
+
+Enum participation_mode {
+  none
+  open_signup
+  invite_only
+  invite_with_response
+}
+
+Enum participation_status {
+  needs_action
+  accepted
+  tentative
+  declined
+  enrolled
+  waitlisted
+  attended
+  no_show
+  cancelled
+}
+
+Enum calendar_entry_status {
+  planned
+  tentative
+  skipped
+  completed
+  cancelled
+}
+
+Enum favorite_target_type {
+  event_series
+  organization
+  location
+  saved_filter
+  discipline
+}
+
+Table users {
+  id uuid [pk]
+  display_name varchar
+  email varchar [unique]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table organizations {
+  id uuid [pk]
+  name varchar [not null]
+  type organization_type [not null]
+  description text
+  address text
+  website_url text
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table organization_memberships {
+  id uuid [pk]
+  organization_id uuid [not null, ref: > organizations.id]
+  user_id uuid [not null, ref: > users.id]
+  role varchar [not null]
+  created_at timestamp
+
+  indexes {
+    (organization_id, user_id) [unique]
+  }
+}
+
+Table calendars {
+  id uuid [pk]
+  name varchar [not null]
+  owner_type calendar_owner_type [not null]
+  owner_user_id uuid [ref: > users.id]
+  owner_organization_id uuid [ref: > organizations.id]
+  visibility visibility [not null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table locations {
+  id uuid [pk]
+  name varchar
+  address text
+  city varchar
+  country varchar
+  latitude decimal
+  longitude decimal
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table event_series {
+  id uuid [pk]
+  calendar_id uuid [not null, ref: > calendars.id]
+  type event_type [not null]
+  title varchar [not null]
+  description text
+  location_id uuid [ref: > locations.id]
+  address text
+  visibility visibility [not null]
+  participation_mode participation_mode [not null]
+  recurrence_rule text
+  recurrence_timezone varchar
+  recurrence_start_date date
+  recurrence_end_date date
+  start_time time
+  end_time time
+  source varchar
+  source_url text
+  details_json jsonb
+  created_by_user_id uuid [ref: > users.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table event_occurrences {
+  id uuid [pk]
+  series_id uuid [ref: > event_series.id]
+  calendar_id uuid [not null, ref: > calendars.id]
+  type event_type [not null]
+  title varchar [not null]
+  description text
+  start_datetime timestamp [not null]
+  end_datetime timestamp [not null]
+  timezone varchar
+  location_id uuid [ref: > locations.id]
+  address text
+  visibility visibility [not null]
+  participation_mode participation_mode [not null]
+  status event_status [not null]
+  is_series_exception boolean [default: false]
+  original_start_datetime timestamp
+  exception_note text
+  details_json jsonb
+  has_logs boolean [default: false]
+  created_by_user_id uuid [ref: > users.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table calendar_entries {
+  id uuid [pk]
+  calendar_id uuid [not null, ref: > calendars.id]
+  occurrence_id uuid [not null, ref: > event_occurrences.id]
+  user_id uuid [ref: > users.id]
+  status calendar_entry_status [not null]
+  personal_title varchar
+  personal_note text
+  personal_focus text
+  reminder_minutes_before int
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (calendar_id, occurrence_id) [unique]
+  }
+}
+
+Table event_series_participations {
+  id uuid [pk]
+  series_id uuid [not null, ref: > event_series.id]
+  user_id uuid [not null, ref: > users.id]
+  invited_by_user_id uuid [ref: > users.id]
+  status participation_status [not null]
+  role varchar
+  response_note text
+  notify_on_changes boolean [default: true]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (series_id, user_id) [unique]
+  }
+}
+
+Table event_occurrence_participations {
+  id uuid [pk]
+  occurrence_id uuid [not null, ref: > event_occurrences.id]
+  user_id uuid [not null, ref: > users.id]
+  invited_by_user_id uuid [ref: > users.id]
+  status participation_status [not null]
+  role varchar
+  response_note text
+  source varchar
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (occurrence_id, user_id) [unique]
+  }
+}
+
+Table event_logs {
+  id uuid [pk]
+  occurrence_id uuid [not null, ref: > event_occurrences.id]
+  calendar_entry_id uuid [ref: > calendar_entries.id]
+  user_id uuid [not null, ref: > users.id]
+  attended boolean
+  actual_start_datetime timestamp
+  actual_end_datetime timestamp
+  intensity int
+  energy int
+  discipline varchar
+  focus text
+  notes text
+  injuries text
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (occurrence_id, user_id) [unique]
+  }
+}
+
+Table event_attachments {
+  id uuid [pk]
+  occurrence_id uuid [ref: > event_occurrences.id]
+  series_id uuid [ref: > event_series.id]
+  title varchar
+  url text [not null]
+  created_at timestamp
+}
+
+Table favorites {
+  id uuid [pk]
+  user_id uuid [not null, ref: > users.id]
+  target_type favorite_target_type [not null]
+  target_id uuid [not null]
+  label varchar
+  filter_json jsonb
+  created_at timestamp
+
+  indexes {
+    (user_id, target_type, target_id) [unique]
+  }
+}
