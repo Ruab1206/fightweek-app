@@ -48,4 +48,9 @@ export interface FightweekEvent {
   createdBy: string;                   // Email of creator
   createdAt: string;                   // ISO 8601
   updatedAt: string;                   // ISO 8601
+
+  // Soft-cancel (Phase 2b log protection) — undefined status = active (legacy docs)
+  status?: 'active' | 'cancelled';
+  cancelledAt?: string;                // ISO 8601 — when the event was called off
+  cancellationReason?: string;         // optional free-text reason
 }

@@ -44,7 +44,9 @@ export interface FraværSession {
   day: string;
   start: string;
   end: string;
-  status: 'active';
+  status: 'active' | 'cancelled';
+  cancellationReason?: string;
+  cancellationTime?: string | null;
   fraværTitel: string;
   fraværBeskrivelse: string;
   fraværGroupId: string;
