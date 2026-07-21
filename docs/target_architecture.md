@@ -1,9 +1,6 @@
-// Target Architecture — the north star for incremental decisions
-// Read at release planning. Updated at release review.
-// Version history at the bottom.
-export const TARGET_ARCHITECTURE = `# FightWeek — Target Architecture
+# FightWeek — Target Architecture
 
-_The architectural direction for FightWeek. This document is the bridge between the conceptual domain model, what we want, and the current Firestore implementation, what is built today. It guides incremental decisions so that today's work does not create tomorrow's structural debt._
+_The architectural direction for FightWeek. This document is the bridge between the conceptual domain model, what we want, and the current Firestore implementation, what is built today. It guides incremental decisions so that today’s work does not create tomorrow’s structural debt._
 
 _Read at planning. Update at review._
 
@@ -24,7 +21,7 @@ The target architecture should help us:
 - Keep Firestore as the active datastore for now without over-coupling app logic to Firestore document shape.
 - Preserve the option to move to Postgres/Supabase later if analytics needs make that worthwhile.
 - Protect historical training data and logs.
-- Use external calendars only as integrations at the edge, not as FightWeek's source of truth.
+- Use external calendars only as integrations at the edge, not as FightWeek’s source of truth.
 
 ---
 
@@ -32,12 +29,12 @@ The target architecture should help us:
 
 The current source-of-truth order is:
 
-1. \`/docs/fightweek_decisions.md\`
-2. \`/docs/fightweek_domain_model.md\`
-3. \`/docs/fightweek_core_flows.md\`
-4. \`/docs/fightweek_test_scenarios.md\`
-5. \`/docs/fightweek_database_model.dbml\`
-6. Older documents, including \`DOMAIN_MODEL.md\`, historical release notes and older architecture documents
+1. `/docs/fightweek_decisions.md`
+2. `/docs/fightweek_domain_model.md`
+3. `/docs/fightweek_core_flows.md`
+4. `/docs/fightweek_test_scenarios.md`
+5. `/docs/fightweek_database_model.dbml`
+6. Older documents, including `DOMAIN_MODEL.md`, historical release notes and older architecture documents
 
 If older architecture language conflicts with the newer FightWeek decisions, the newer FightWeek decisions win.
 
@@ -47,11 +44,11 @@ If older architecture language conflicts with the newer FightWeek decisions, the
 
 ### 1. EventOccurrence is the scheduled atom; CalendarEntry controls where an occurrence appears
 
-Every concrete scheduled item exists as an \`EventOccurrence\`, whether it originates from a recurring \`EventSeries\` or is created as a standalone occurrence.
+Every concrete scheduled item exists as an `EventOccurrence`, whether it originates from a recurring `EventSeries` or is created as a standalone occurrence.
 
-\`CalendarEntry\` controls where an occurrence appears and may contain user-specific planning information without changing the occurrence itself.
+`CalendarEntry` controls where an occurrence appears and may contain user-specific planning information without changing the occurrence itself.
 
-This replaces the older idea that "Activity" is the universal calendar atom.
+This replaces the older idea that “Activity” is the universal calendar atom.
 
 ### 2. Person = Firebase Auth user
 
@@ -69,7 +66,7 @@ The team is the cross-cutting unit. Gyms are sources of training offerings, venu
 
 ### 4. Roles are contextual
 
-A person's role depends on context.
+A person’s role depends on context.
 
 A user may be:
 
@@ -84,7 +81,7 @@ Roles belong on membership relationships, not only on the person.
 
 Firestore remains the active datastore.
 
-We design for Firestore's strengths:
+We design for Firestore’s strengths:
 
 - Documents
 - Subcollections
@@ -97,9 +94,9 @@ The conceptual model may look relational because that helps clarify business con
 
 ### 6. Fravær is not the same as HealthCondition
 
-\`Fravær\` blocks calendar time, for example travel, exams, vacation or work.
+`Fravær` blocks calendar time, for example travel, exams, vacation or work.
 
-\`HealthCondition\` tracks medical or physical state, for example injury, illness or chronic limitation.
+`HealthCondition` tracks medical or physical state, for example injury, illness or chronic limitation.
 
 They may overlap, but they are separate concepts.
 
@@ -107,11 +104,11 @@ They may overlap, but they are separate concepts.
 
 Scheduling describes what was planned.
 
-\`EventLog\` describes what actually happened.
+`EventLog` describes what actually happened.
 
 Firestore may physically embed or denormalize EventLog data where appropriate, but logged history must be protected and remain understandable over time.
 
-This replaces the older idea that "log is annotation, not entity."
+This replaces the older idea that “log is annotation, not entity.”
 
 ### 8. Make self-posted training frictionless
 
@@ -125,15 +122,15 @@ Examples:
 - Sparring session
 - Recovery session
 
-The architecture should support creating a self-posted \`EventOccurrence\` with minimal friction.
+The architecture should support creating a self-posted `EventOccurrence` with minimal friction.
 
 ### 9. Competition results belong with the logged occurrence
 
-Tournament or competition results are part of the user's history for that occurrence.
+Tournament or competition results are part of the user’s history for that occurrence.
 
 For now, FightWeek does not need a separate Fight entity unless bout-level details become necessary later.
 
-Competition-related data can initially live on \`EventLog\` or event-specific details connected to the occurrence.
+Competition-related data can initially live on `EventLog` or event-specific details connected to the occurrence.
 
 ---
 
@@ -141,7 +138,7 @@ Competition-related data can initially live on \`EventLog\` or event-specific de
 
 ### EventSeries defines recurring intent
 
-\`EventSeries\` is the source definition for recurring training, classes and other repeating events.
+`EventSeries` is the source definition for recurring training, classes and other repeating events.
 
 Examples:
 
@@ -152,7 +149,7 @@ Examples:
 
 ### EventOccurrence is the scheduled atom
 
-Every concrete scheduled event exists as an \`EventOccurrence\`, whether it belongs to a series or was created as a standalone event.
+Every concrete scheduled event exists as an `EventOccurrence`, whether it belongs to a series or was created as a standalone event.
 
 Examples:
 
@@ -222,11 +219,11 @@ External calendar integrations may exist in the future, but FightWeek remains th
 
 Google Calendar is not the backing engine.
 
-A future integration should be at the edge, for example a one-way iCal feed, not a replacement for FightWeek's internal model.
+A future integration should be at the edge, for example a one-way iCal feed, not a replacement for FightWeek’s internal model.
 
 ### Rolling occurrence generation
 
-Recurring \`EventSeries\` generate \`EventOccurrences\` for a rolling 6-month horizon, approximately 26 weeks.
+Recurring `EventSeries` generate `EventOccurrences` for a rolling 6-month horizon, approximately 26 weeks.
 
 Older/current implementation may still materialize recurring sessions for 52 weeks. Treat that as current implementation behavior to be refactored later, not the target model.
 
@@ -242,7 +239,7 @@ Firestore implementations may embed, denormalize or otherwise adapt those concep
 
 ### Organization and Identity
 
-\`\`\`text
+```text
 ┌───────────────────────────────────────────────────────────────┐
 │                         ORGANIZATION                          │
 │                                                               │
@@ -256,7 +253,7 @@ Firestore implementations may embed, denormalize or otherwise adapt those concep
 │                   │  (role)    │     └───────┘                │
 │                   └────────────┘                              │
 └───────────────────────────────────────────────────────────────┘
-\`\`\`
+```
 
 A person is a Firebase Auth user. A person joins teams and gyms through memberships that carry a contextual role. Teams and gyms are separate organizational contexts; a fighter may belong to several of each.
 
@@ -264,9 +261,9 @@ A person is a Firebase Auth user. A person joins teams and gyms through membersh
 
 ## Scheduling Domain
 
-The scheduling domain is the core of FightWeek. An \`EventSeries\` generates \`EventOccurrences\`. Each occurrence is the scheduled atom, and three separate concerns hang off it: where it appears (\`CalendarEntry\`), who is responding to it (\`Participation\`), and what actually happened (\`EventLog\`). \`Favorite\` is a private bookmark that lives outside scheduling entirely.
+The scheduling domain is the core of FightWeek. An `EventSeries` generates `EventOccurrences`. Each occurrence is the scheduled atom, and three separate concerns hang off it: where it appears (`CalendarEntry`), who is responding to it (`Participation`), and what actually happened (`EventLog`). `Favorite` is a private bookmark that lives outside scheduling entirely.
 
-\`\`\`text
+```text
                          ┌─────────────────┐
                          │   EventSeries   │
                          └────────┬────────┘
@@ -295,18 +292,18 @@ The scheduling domain is the core of FightWeek. An \`EventSeries\` generates \`E
      ├─ Organization / Gym
      ├─ EventOccurrence
      └─ Future saved filters
-\`\`\`
+```
 
 ---
 
 ## Relationship Notes
 
-- An \`EventSeries\` generates many \`EventOccurrences\`. A one-off occurrence has no series, so \`EventOccurrence.series_id\` may be null.
-- An \`EventOccurrence\` may appear on many calendars through \`CalendarEntry\`. Each \`CalendarEntry\` links one occurrence to one calendar and may carry user-specific planning data.
-- Participation is tracked at two levels: \`EventSeriesParticipation\` for a whole recurring series, and \`EventOccurrenceParticipation\` for a single occurrence. A general series response can coexist with a different response for one occurrence.
-- An \`EventLog\` belongs to one user and one occurrence and records what actually happened. An occurrence may have several logs, one per participating user.
-- \`Favorite\` references a target such as an \`EventSeries\`, an organization/gym, an \`EventOccurrence\` or, later, a saved filter. A favorite is not a calendar entry and not participation.
-- \`CalendarEntry\`, \`Participation\` and \`EventLog\` are independent of each other. An occurrence can appear on a calendar without participation, carry participation without a log, and be logged without a personal planning note.
+- An `EventSeries` generates many `EventOccurrences`. A one-off occurrence has no series, so `EventOccurrence.series_id` may be null.
+- An `EventOccurrence` may appear on many calendars through `CalendarEntry`. Each `CalendarEntry` links one occurrence to one calendar and may carry user-specific planning data.
+- Participation is tracked at two levels: `EventSeriesParticipation` for a whole recurring series, and `EventOccurrenceParticipation` for a single occurrence. A general series response can coexist with a different response for one occurrence.
+- An `EventLog` belongs to one user and one occurrence and records what actually happened. An occurrence may have several logs, one per participating user.
+- `Favorite` references a target such as an `EventSeries`, an organization/gym, an `EventOccurrence` or, later, a saved filter. A favorite is not a calendar entry and not participation.
+- `CalendarEntry`, `Participation` and `EventLog` are independent of each other. An occurrence can appear on a calendar without participation, carry participation without a log, and be logged without a personal planning note.
 
 ---
 
@@ -314,15 +311,15 @@ The scheduling domain is the core of FightWeek. An \`EventSeries\` generates \`E
 
 ### EventSeries
 
-The recurring source definition for repeated events, for example a weekly gym class, a recurring team training, a recurring self-posted training or a recurring absence. An \`EventSeries\` describes recurring intent. It is not what the fighter logs; the fighter logs a concrete \`EventOccurrence\`.
+The recurring source definition for repeated events, for example a weekly gym class, a recurring team training, a recurring self-posted training or a recurring absence. An `EventSeries` describes recurring intent. It is not what the fighter logs; the fighter logs a concrete `EventOccurrence`.
 
 ### EventOccurrence
 
-One concrete scheduled event in time, and the scheduled atom of the model. Examples: a specific BJJ class on Monday evening, a tournament on Saturday, a seminar next weekend, a planned absence, or a self-posted training session. \`EventOccurrence.series_id\` may be null so that one-off events do not need an artificial series parent. Event type is one of \`class\`, \`self_posted_training\`, \`tournament\`, \`seminar\`, \`absence\` or \`other\`.
+One concrete scheduled event in time, and the scheduled atom of the model. Examples: a specific BJJ class on Monday evening, a tournament on Saturday, a seminar next weekend, a planned absence, or a self-posted training session. `EventOccurrence.series_id` may be null so that one-off events do not need an artificial series parent. Event type is one of `class`, `self_posted_training`, `tournament`, `seminar`, `absence` or `other`.
 
 ### CalendarEntry
 
-The appearance of an \`EventOccurrence\` on a specific calendar. This is where user-specific planning information belongs: personal note, personal focus, reminder preference, a planned/tentative/skipped/completed status, or a private title override. A calendar entry means "this occurrence appears on this calendar"; it is not the event itself.
+The appearance of an `EventOccurrence` on a specific calendar. This is where user-specific planning information belongs: personal note, personal focus, reminder preference, a planned/tentative/skipped/completed status, or a private title override. A calendar entry means "this occurrence appears on this calendar"; it is not the event itself.
 
 ### EventSeriesParticipation
 
@@ -330,11 +327,11 @@ A user's response or intention for a whole recurring series, for example general
 
 ### EventOccurrenceParticipation
 
-A user's response or status for one concrete occurrence. This covers invites, RSVP, enrollment and attendance. Statuses: \`needs_action\`, \`accepted\`, \`tentative\`, \`declined\`, \`enrolled\`, \`waitlisted\`, \`attended\`, \`no_show\`, \`cancelled\`.
+A user's response or status for one concrete occurrence. This covers invites, RSVP, enrollment and attendance. Statuses: `needs_action`, `accepted`, `tentative`, `declined`, `enrolled`, `waitlisted`, `attended`, `no_show`, `cancelled`.
 
 ### EventLog
 
-The fighter's journal for what actually happened after a training or event. Log data includes attended, actual duration, intensity, energy, discipline/category, focus, notes and injuries/limitations. \`EventLog\` is a first-class domain concept and must be protected: if a log exists, the linked occurrence must not be hard-deleted.
+The fighter's journal for what actually happened after a training or event. Log data includes attended, actual duration, intensity, energy, discipline/category, focus, notes and injuries/limitations. `EventLog` is a first-class domain concept and must be protected: if a log exists, the linked occurrence must not be hard-deleted.
 
 ### Favorite
 
@@ -349,7 +346,7 @@ The conceptual model above defines business concepts and boundaries. It looks re
 Firestore is the active datastore. The Firestore implementation may embed, denormalize or adapt these concepts where that fits Firestore's strengths:
 
 - A recurring series may materialize its occurrences as stored documents rather than joined rows.
-- \`CalendarEntry\` planning fields and early \`EventLog\` fields may be embedded on session/occurrence documents instead of living in separate collections.
+- `CalendarEntry` planning fields and early `EventLog` fields may be embedded on session/occurrence documents instead of living in separate collections.
 - Participation may be embedded on the event document today rather than in a dedicated participation collection.
 
 The rule is: keep the conceptual boundaries clear in app code even when the physical Firestore shape combines them. Introduce repository/service boundaries so app logic depends on the domain concepts, not directly on Firestore document shape.
@@ -360,7 +357,7 @@ The rule is: keep the conceptual boundaries clear in app code even when the phys
 
 Past training history must never disappear because a source event or series is changed or deleted.
 
-If an \`EventOccurrence\` has an \`EventLog\`:
+If an `EventOccurrence` has an `EventLog`:
 
 - Do not hard-delete the occurrence.
 - Preserve enough core event data to understand the log later: title, type, discipline/category where relevant, start/end time, location/address and calendar/source context.
@@ -374,7 +371,7 @@ This is why deletion is a decision, not a direct operation: a logged occurrence 
 
 ## Recurring Series Behavior
 
-Recurring events use \`EventSeries\` as the recurring source and \`EventOccurrence\` as generated concrete instances. FightWeek stores generated occurrences for a rolling 6-month window, approximately 26 weeks.
+Recurring events use `EventSeries` as the recurring source and `EventOccurrence` as generated concrete instances. FightWeek stores generated occurrences for a rolling 6-month window, approximately 26 weeks.
 
 > **Current implementation note:** the current implementation may still materialize recurring sessions for 52 weeks. Treat that as current implementation behavior to be refactored later, not the target model.
 
@@ -394,19 +391,19 @@ The table maps current Firestore paths to target domain concepts. It documents d
 
 | Current Firestore path | Target concept | State |
 |------------------------|----------------|-------|
-| \`public/data/catalogue/{id}\` | \`EventSeries\` of type \`class\` | ✅ Live |
-| \`public/data/events/{id}\` | \`EventOccurrence\` (one-off, series_id null) | ✅ Live |
-| \`users/{userId}/weeks/week_{n}\` (session objects) | \`EventOccurrence\` + \`CalendarEntry\` | ✅ Live |
-| \`users/{userId}/templates/standard\` | Personal planning defaults (planning layer) | ✅ Live |
-| \`users/{userId}/meta/notes\` (activity notes) | Early/simple \`EventLog\` | ✅ Live |
-| Absence sessions in weekly plan | \`EventOccurrence\` of type \`absence\` + \`CalendarEntry\` | ✅ Live |
-| Event signups | \`EventOccurrenceParticipation\` | ✅ Live |
-| Invitation invitees | \`EventOccurrenceParticipation\` or \`EventSeriesParticipation\` | ✅ Live |
-| \`public/data/gyms/{id}\` | Organization of type \`gym\` | ✅ Live |
-| Favorites | \`Favorite\` | 📐 Target |
-| Dedicated calendars | \`Calendar\` (owner: user / organization / system) | 📐 Target |
+| `public/data/catalogue/{id}` | `EventSeries` of type `class` | ✅ Live |
+| `public/data/events/{id}` | `EventOccurrence` (one-off, series_id null) | ✅ Live |
+| `users/{userId}/weeks/week_{n}` (session objects) | `EventOccurrence` + `CalendarEntry` | ✅ Live |
+| `users/{userId}/templates/standard` | Personal planning defaults (planning layer) | ✅ Live |
+| `users/{userId}/meta/notes` (activity notes) | Early/simple `EventLog` | ✅ Live |
+| Absence sessions in weekly plan | `EventOccurrence` of type `absence` + `CalendarEntry` | ✅ Live |
+| Event signups | `EventOccurrenceParticipation` | ✅ Live |
+| Invitation invitees | `EventOccurrenceParticipation` or `EventSeriesParticipation` | ✅ Live |
+| `public/data/gyms/{id}` | Organization of type `gym` | ✅ Live |
+| Favorites | `Favorite` | 📐 Target |
+| Dedicated calendars | `Calendar` (owner: user / organization / system) | 📐 Target |
 
-> **Note:** Today, \`CalendarEntry\` planning fields and early \`EventLog\` fields are embedded on session documents rather than stored in separate collections. That is an accepted Firestore-native implementation detail, not a change to the conceptual boundaries.
+> **Note:** Today, `CalendarEntry` planning fields and early `EventLog` fields are embedded on session documents rather than stored in separate collections. That is an accepted Firestore-native implementation detail, not a change to the conceptual boundaries.
 
 ---
 
@@ -428,10 +425,10 @@ Each step is small and reversible, favors domain types and adapters before persi
 
 These are valid future concepts but must not be implemented now unless explicitly requested:
 
-- \`EventTemplate\`
-- \`TrainingProgram\` and \`TrainingProgramItem\`
-- \`PrivateLesson\` as its own event type
-- \`Fight\` as a separate bout-level entity
+- `EventTemplate`
+- `TrainingProgram` and `TrainingProgramItem`
+- `PrivateLesson` as its own event type
+- `Fight` as a separate bout-level entity
 - Saved-filter favorites
 - A separate identity system beyond Firebase Auth users
 - A migration to Postgres/Supabase
@@ -479,4 +476,3 @@ Whether a calendar UI component such as FullCalendar should replace or strengthe
 | 1.2 | 2026-06-05 | Added Platform and Integration Decisions: own the domain model rather than rebuild on Google Calendar (integrate via a read-only per-fighter iCal feed); keep Firestore now with a tripwire to revisit the data store when analytics land. |
 | 1.3 | 2026-06-23 | Recorded the media/file storage decision: store media as URL references, not blobs; defer native upload until a data-store migration brings its own object storage. |
 | 1.4 | 2026-07-20 | Rewrote around the calendar-first scheduling model: EventSeries, EventOccurrence, CalendarEntry, EventSeriesParticipation, EventOccurrenceParticipation, EventLog and Favorite. EventOccurrence is now the scheduled atom and CalendarEntry controls where an occurrence appears; EventLog is a first-class, protected domain concept. This replaces the older idea that "Activity" is the universal calendar atom and that "log is annotation, not entity." Added the Scheduling Domain diagram, entity definitions, historical data protection, rolling 6-month recurrence behavior, the target-direction Firestore path map and the migration sequence. |
-`;
