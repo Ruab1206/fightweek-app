@@ -1,5 +1,7 @@
 import { DAYS, RECURRENCE_HORIZON_WEEKS } from '../config/constants';
 import { getDateForWeekDay, getISOWeekForDate } from '../utils/dateUtils';
+import { sessionNoteKey } from './noteKeys';
+import { decideDeletion, hasLog, type DeletionMode } from '../domain/calendar/logProtection';
 import type { CatalogueAddPayload } from '../components/InlineCataloguePicker';
 
 /**
@@ -77,6 +79,106 @@ export async function resolveWeekSourceData(params: {
   return fromDb || {};
 }
 
+/**
+ * Build the activity-note key for a session/fravær occurrence using the EXISTING
+ * convention (see useActivityNotes + SessionDetailSheet):
+ *   s_{getDateForWeekDay(weekNum, dayName).toISOString().slice(0,10)}_{id}
+ *
+ * Returns `canResolveKey: false` when the date or id cannot be resolved, so the
+ * caller fails safe (soft-cancel) per the log-protection rules. Do NOT switch to
+ * `toLocalISODate` here — that would change the key and orphan existing notes.
+ */
+export function buildSessionNoteKey(params: {
+  weekNum: number;
+  dayName: string;
+  sessionId: string | number | null | undefined;
+}): { key: string | null; canResolveKey: boolean } {
+  const { weekNum, dayName, sessionId } = params;
+  const date = getDateForWeekDay(weekNum, dayName);
+  const dateISO = date ? date.toISOString().slice(0, 10) : null;
+  const idOk = sessionId !== null && sessionId !== undefined && String(sessionId).length > 0;
+  if (!dateISO || !idOk) return { key: null, canResolveKey: false };
+  return { key: sessionNoteKey(dateISO, String(sessionId)), canResolveKey: true };
+}
+
+/**
+ * Log-protection decision for one occurrence: soft-cancel if it has a note/log
+ * or if its note key cannot be resolved (fail-safe); hard-delete otherwise.
+ */
+export function decideOccurrenceDeletion(params: {
+  weekNum: number;
+  dayName: string;
+  entry: any;
+  getNote: (key: string) => string;
+}): DeletionMode {
+  const { weekNum, dayName, entry, getNote } = params;
+  const { key, canResolveKey } = buildSessionNoteKey({ weekNum, dayName, sessionId: entry?.id });
+  const note = key ? getNote(key) : undefined;
+  return decideDeletion({ canResolveKey, note });
+}
+
+/**
+ * Soft-cancel an entry while preserving the FULL object. Only status/cancellation
+ * fields change (mirrors SessionDetailSheet); an existing cancellationReason is
+ * kept rather than overwritten.
+ */
+export function softCancelEntry<T extends Record<string, any>>(entry: T, cancellationTime: string): T {
+  return {
+    ...entry,
+    status: 'cancelled',
+    cancellationReason: entry.cancellationReason || 'Aflyst',
+    cancellationTime,
+  };
+}
+
+/**
+ * Apply a log-protected delete to one day's entries (pure). Non-target entries
+ * pass through untouched. Target entries are either soft-cancelled (kept, full
+ * object preserved) or hard-deleted (dropped) per `decide`. `changed` is true if
+ * any entry was dropped or newly soft-cancelled.
+ */
+export function applyProtectedDelete(params: {
+  entries: any[];
+  isTarget: (entry: any) => boolean;
+  decide: (entry: any) => DeletionMode;
+  cancellationTime: string;
+}): { entries: any[]; changed: boolean } {
+  const { entries, isTarget, decide, cancellationTime } = params;
+  let changed = false;
+  const out: any[] = [];
+  for (const entry of entries) {
+    if (!isTarget(entry)) { out.push(entry); continue; }
+    if (decide(entry) === 'soft-cancel') {
+      if (entry.status === 'cancelled') {
+        out.push(entry); // already cancelled — no change
+      } else {
+        out.push(softCancelEntry(entry, cancellationTime));
+        changed = true;
+      }
+    } else {
+      changed = true; // hard-delete: drop
+    }
+  }
+  return { entries: out, changed };
+}
+
+/**
+ * Whole-group protection decision for a fravær group (pure). The group is
+ * protected (soft-cancel the whole group) if ANY matched day has a note/log, or
+ * if ANY matched day's note key cannot be resolved (fail-safe).
+ */
+export function decideFraværGroupProtection(params: {
+  matches: Array<{ weekNum: number; dayName: string; entry: any }>;
+  getNote: (key: string) => string;
+}): boolean {
+  for (const m of params.matches) {
+    const { key, canResolveKey } = buildSessionNoteKey({ weekNum: m.weekNum, dayName: m.dayName, sessionId: m.entry?.id });
+    if (!canResolveKey) return true;
+    if (hasLog(key ? params.getNote(key) : undefined)) return true;
+  }
+  return false;
+}
+
 interface SessionHandlerDeps {
   scheduleData: any;
   setScheduleData: (data: any) => void;
@@ -92,6 +194,7 @@ interface SessionHandlerDeps {
   fetchWeekData: (week: number) => Promise<any | null>;
   seedWeekFromTemplate: (week: number) => Promise<any | null>;
   showToast: (msg: string, type: string) => void;
+  getNote: (key: string) => string;
   setModalOpen: (v: boolean) => void;
   setEditingWeek: (v: number | null) => void;
   setEditingDay: (v: any) => void;
@@ -103,7 +206,7 @@ export function useSessionHandlers({
   scheduleData, setScheduleData,
   multiWeekData, currentWeek, systemWeek,
   editingDay, editingWeek, expandedDay, setExpandedDay,
-  saveToDb, saveWeekToDb, fetchWeekData, showToast,
+  saveToDb, saveWeekToDb, fetchWeekData, showToast, getNote,
   setModalOpen, setEditingWeek, setEditingDay, setEditingSession, setAddScreenOpen,
   seedWeekFromTemplate,
 }: SessionHandlerDeps) {
@@ -148,7 +251,17 @@ export function useSessionHandlers({
     const sourceData = await resolveSourceData(weekNum);
     const newData = structuredClone(sourceData);
     if (newData[editingDay]) {
-      newData[editingDay] = newData[editingDay].filter((s: any) => s.id !== sessionId);
+      // Log protection: a session with a note/log (or whose note key cannot be
+      // resolved) is soft-cancelled in place, preserving the full object, rather
+      // than hard-deleted. Unnoted sessions are removed as before.
+      const cancellationTime = new Date().toISOString();
+      const { entries } = applyProtectedDelete({
+        entries: newData[editingDay],
+        isTarget: (s: any) => s.id === sessionId,
+        decide: (s: any) => decideOccurrenceDeletion({ weekNum, dayName: editingDay as string, entry: s, getNote }),
+        cancellationTime,
+      });
+      newData[editingDay] = entries;
       if (editingWeek) {
         await saveWeekToDb(weekNum, newData);
       } else {
@@ -379,28 +492,61 @@ export function useSessionHandlers({
     showToast(oldGroupId ? 'Fravær opdateret' : `Fravær tilføjet (${count} dag${count > 1 ? 'e' : ''})`, 'success');
   };
 
-  // Delete all days of a fravær group
+  // Delete all days of a fravær group. Log protection uses WHOLE-GROUP semantics:
+  // if ANY day in the group has a note/log (or a note key that cannot be
+  // resolved), the entire group is soft-cancelled in place — every matched day
+  // object is preserved with status 'cancelled'. Only a fully unnoted, fully
+  // resolvable group is hard-deleted as before.
   const handleDeleteFravær = async (groupId: string) => {
     const isLegacy = groupId.startsWith('legacy_');
     const legacyId = isLegacy ? Number(groupId.replace('legacy_', '')) : null;
+    const isMatch = (s: any) => (isLegacy ? s.id === legacyId : s.fraværGroupId === groupId);
+    const loadedWeeks = Object.keys(multiWeekData).map(Number);
+
+    // Pass 1: collect every matched day across loaded weeks to make ONE
+    // whole-group protection decision.
+    const matches: Array<{ weekNum: number; dayName: string; entry: any }> = [];
+    for (const wk of loadedWeeks) {
+      const wd = multiWeekData[wk];
+      if (!wd) continue;
+      for (const dayName of DAYS) {
+        for (const s of (wd[dayName] || [])) {
+          if (isMatch(s)) matches.push({ weekNum: wk, dayName, entry: s });
+        }
+      }
+    }
+    const protectGroup = decideFraværGroupProtection({ matches, getNote });
+    const cancellationTime = new Date().toISOString();
+
+    // Pass 2: apply. Protected → soft-cancel matched days; else → remove as before.
     let deleted = 0;
-    for (const wk of Object.keys(multiWeekData).map(Number)) {
+    let cancelled = 0;
+    for (const wk of loadedWeeks) {
       const wd = multiWeekData[wk];
       if (!wd) continue;
       const nd = structuredClone(wd);
       let changed = false;
       for (const dayName of DAYS) {
         if (!nd[dayName]) continue;
-        const before = nd[dayName].length;
-        nd[dayName] = nd[dayName].filter((s: any) => {
-          if (isLegacy) return s.id !== legacyId;
-          return s.fraværGroupId !== groupId;
-        });
-        if (nd[dayName].length < before) { changed = true; deleted += before - nd[dayName].length; }
+        if (protectGroup) {
+          nd[dayName] = nd[dayName].map((s: any) => {
+            if (!isMatch(s) || s.status === 'cancelled') return s;
+            cancelled++; changed = true;
+            return softCancelEntry(s, cancellationTime);
+          });
+        } else {
+          const before = nd[dayName].length;
+          nd[dayName] = nd[dayName].filter((s: any) => !isMatch(s));
+          if (nd[dayName].length < before) { changed = true; deleted += before - nd[dayName].length; }
+        }
       }
       if (changed) await saveWeekToDb(wk, nd);
     }
-    showToast(`Fravær slettet (${deleted} dag${deleted > 1 ? 'e' : ''})`, 'success');
+    if (protectGroup) {
+      showToast(`Fravær aflyst (${cancelled} dag${cancelled === 1 ? '' : 'e'} bevaret pga. note)`, 'success');
+    } else {
+      showToast(`Fravær slettet (${deleted} dag${deleted > 1 ? 'e' : ''})`, 'success');
+    }
   };
 
   // Delete a session in this and all future weeks by name+start match. Walks to
@@ -410,6 +556,7 @@ export function useSessionHandlers({
   // undeletable. Unloaded weeks are read from Firestore on demand.
   const handleDeleteThisAndFuture = async (dayName: string, name: string, start: string, fromWeek: number) => {
     const nameLC = name.toLowerCase();
+    const cancellationTime = new Date().toISOString();
     const targetWeeks = computeDeleteFutureWeeks({
       fromWeek,
       systemWeek,
@@ -420,9 +567,17 @@ export function useSessionHandlers({
       if (wd === undefined) wd = await fetchWeekData(wk);
       if (!wd?.[dayName]) continue;
       const nd = structuredClone(wd);
-      const before = nd[dayName].length;
-      nd[dayName] = nd[dayName].filter((s: any) => s.isRestDay || (s.name || '').toLowerCase() !== nameLC || s.start !== start);
-      if (nd[dayName].length < before) await saveWeekToDb(wk, nd);
+      // Per-occurrence log protection: a matched occurrence with a note/log (or an
+      // unresolvable note key) is soft-cancelled in place; unnoted matches are
+      // removed as before. The name+start matching algorithm is unchanged.
+      const { entries, changed } = applyProtectedDelete({
+        entries: nd[dayName],
+        isTarget: (s: any) => !s.isRestDay && (s.name || '').toLowerCase() === nameLC && s.start === start,
+        decide: (s: any) => decideOccurrenceDeletion({ weekNum: wk, dayName, entry: s, getNote }),
+        cancellationTime,
+      });
+      nd[dayName] = entries;
+      if (changed) await saveWeekToDb(wk, nd);
     }
   };
 

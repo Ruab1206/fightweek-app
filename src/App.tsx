@@ -266,7 +266,7 @@ const App = () => {
   } = useSessionHandlers({
     scheduleData, setScheduleData, multiWeekData, currentWeek, systemWeek,
     editingDay, editingWeek, expandedDay, setExpandedDay,
-    saveToDb, saveWeekToDb, fetchWeekData, showToast,
+    saveToDb, saveWeekToDb, fetchWeekData, showToast, getNote,
     setModalOpen, setEditingWeek, setEditingDay, setEditingSession, setAddScreenOpen,
     seedWeekFromTemplate,
   });

@@ -47,12 +47,6 @@ export function useActivityNotes(fighterName: string) {
   return { notes, getNote, saveNote };
 }
 
-/** Key for a training session note. */
-export function sessionNoteKey(dateISO: string, sessionId: string): string {
-  return `s_${dateISO}_${sessionId}`;
-}
-
-/** Key for an event note. */
-export function eventNoteKey(eventId: string): string {
-  return `e_${eventId}`;
-}
+// Note-key builders now live in a pure, firebase-free module. Re-exported here
+// so existing importers keep working unchanged.
+export { sessionNoteKey, eventNoteKey } from './noteKeys';
