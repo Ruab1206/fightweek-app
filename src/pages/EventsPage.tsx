@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { MapPin, CalendarDays, Plus, Search, X, SlidersHorizontal, ExternalLink, Trophy } from 'lucide-react';
 import { useEvents } from '../hooks/useEvents';
+import { decideEventDeletion, isEventCancelled } from '../hooks/eventDelete';
 import { FIGHTERS } from '../config/constants';
 import { googleMapsUrl } from '../config/constants';
 import type { FightweekEvent } from '../types/event';
@@ -26,6 +27,11 @@ function EventCard({ event, isDark, onClick, innerRef }: { event: FightweekEvent
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <TypeBadge type={event.type} isDark={isDark} />
+            {isEventCancelled(event) && (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isDark ? 'bg-red-950/40 text-red-400' : 'bg-red-100 text-red-600'}`}>
+                Aflyst
+              </span>
+            )}
             {event.discipline && (
               <span className={`text-[10px] font-bold ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>{event.discipline}</span>
             )}
@@ -267,7 +273,21 @@ const EventsPage = forwardRef<EventsPageHandle, EventsPageProps>(function Events
                   className={`px-4 py-2 rounded-lg text-sm font-bold ${isDark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-100 text-ds-text hover:bg-slate-200'}`}>
                   Annuller
                 </button>
-                <button onClick={async () => { await removeEvent(confirmDelete.id); setConfirmDelete(null); setSelectedEvent(null); }}
+                <button onClick={async () => {
+                  // Phase 2b Step 3: an event with a note/log (e_{eventId}) is
+                  // soft-cancelled via the existing update path rather than
+                  // hard-deleted, preserving the full document. A missing id
+                  // cannot be resolved to a note key, so soft-cancel fails safe
+                  // by aborting the delete (never hard-delete) and keeping the event.
+                  const mode = decideEventDeletion({ eventId: confirmDelete.id, getNote });
+                  if (mode === 'soft-cancel') {
+                    if (!confirmDelete.id) { setConfirmDelete(null); return; }
+                    await saveEvent(confirmDelete.id, { status: 'cancelled', cancelledAt: new Date().toISOString() });
+                  } else {
+                    await removeEvent(confirmDelete.id);
+                  }
+                  setConfirmDelete(null); setSelectedEvent(null);
+                }}
                   className="px-4 py-2 rounded-lg text-sm font-bold bg-red-600 text-white hover:bg-red-500">
                   Slet
                 </button>

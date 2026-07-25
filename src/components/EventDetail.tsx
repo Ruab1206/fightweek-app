@@ -8,6 +8,7 @@ import type { FightweekEvent, EventSignupStatus } from '../types/event';
 import { TypeBadge, formatDateRange, formatDateDa, isEventPast, daysUntil, SIGNUP_OPTIONS } from './eventHelpers';
 import { NotesEditor } from './NotesEditor';
 import { eventNoteKey } from '../hooks/useActivityNotes';
+import { isEventCancelled } from '../hooks/eventDelete';
 
 export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onClose, onEdit, onDelete, getNote, saveNote }: {
   event: FightweekEvent;
@@ -33,7 +34,14 @@ export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onC
         </button>
         <div className="flex-1 min-w-0">
           <h2 className={`font-bold text-sm truncate ${isDark ? 'text-white' : 'text-ds-text'}`}>{event.title}</h2>
-          <TypeBadge type={event.type} isDark={isDark} />
+          <div className="flex items-center gap-2">
+            <TypeBadge type={event.type} isDark={isDark} />
+            {isEventCancelled(event) && (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isDark ? 'bg-red-950/40 text-red-400' : 'bg-red-100 text-red-600'}`}>
+                Aflyst
+              </span>
+            )}
+          </div>
         </div>
         {isAdmin && (
           <div className="flex items-center gap-1 shrink-0">
