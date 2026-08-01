@@ -14,6 +14,7 @@ import { useGyms } from '../hooks/useGyms';
 import { NotesEditor } from './NotesEditor';
 import { sessionNoteKey } from '../hooks/useActivityNotes';
 import { computeSessionDetailDeleteThis, computeSessionDetailDeleteThisAndFuture } from '../hooks/sessionDetailDelete';
+import { formatSeriesDeleteSummary } from '../hooks/useSessionHandlers';
 import { InvitePicker, type InviteCandidate } from './shared/InvitePicker';
 import type { InvitationResponse } from '../types/invitation';
 import type { CatalogueClass } from '../types/catalogue';
@@ -125,12 +126,11 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
 
   const handleDeleteThisAndFuture = () => {
     onClose();
-    showToast(`${session.name} fjernet`, 'success');
     // Cancel invitations for this and every future occurrence too (#1201).
     onArrangerActivityRemoved?.(session, day, weekNum, 'future');
     // Phase 2b bug fix: per-occurrence log protection across the SAME loaded
     // weeks/matching algorithm as before — only the delete decision changes.
-    const changes = computeSessionDetailDeleteThisAndFuture({
+    const { changes, deletedCount, preservedCount } = computeSessionDetailDeleteThisAndFuture({
       multiWeekData, day, weekNum, nameLC, startTime, getNote,
     });
     (async () => {
@@ -142,6 +142,10 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
         await saveWeekToDb(change.weekNum, newData);
       }
     })();
+    // Same shared feedback as the desktop path: how many were deleted and how
+    // many were preserved because they contain notes.
+    const summary = formatSeriesDeleteSummary({ deletedCount, preservedCount });
+    showToast(summary || `${session.name} fjernet`, 'success');
   };
 
   return (

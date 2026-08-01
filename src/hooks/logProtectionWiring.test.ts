@@ -5,6 +5,7 @@ import {
   softCancelEntry,
   applyProtectedDelete,
   decideFraværGroupProtection,
+  formatSeriesDeleteSummary,
 } from './useSessionHandlers';
 import { sessionNoteKey } from './noteKeys';
 import { getDateForWeekDay } from '../utils/dateUtils';
@@ -125,7 +126,7 @@ describe('applyProtectedDelete', () => {
   it('#1 retains + soft-cancels a noted target, leaving non-targets untouched', () => {
     const other = { id: 'x', name: 'BJJ', status: 'active' };
     const target = { id: 's1', name: 'MMA', status: 'active', description: 'keep' };
-    const { entries, changed } = applyProtectedDelete({
+    const { entries, changed, deletedCount, preservedCount } = applyProtectedDelete({
       entries: [other, target],
       isTarget: (s) => s.id === 's1',
       decide: () => 'soft-cancel',
@@ -135,11 +136,13 @@ describe('applyProtectedDelete', () => {
     expect(entries).toHaveLength(2);
     expect(entries[0]).toBe(other); // untouched reference
     expect(entries[1]).toMatchObject({ id: 's1', status: 'cancelled', description: 'keep' });
+    expect(deletedCount).toBe(0);
+    expect(preservedCount).toBe(1);
   });
 
   it('#2 removes an unnoted target (hard-delete) as before', () => {
     const target = { id: 's1', name: 'MMA', status: 'active' };
-    const { entries, changed } = applyProtectedDelete({
+    const { entries, changed, deletedCount, preservedCount } = applyProtectedDelete({
       entries: [target],
       isTarget: (s) => s.id === 's1',
       decide: () => 'hard-delete',
@@ -147,6 +150,8 @@ describe('applyProtectedDelete', () => {
     });
     expect(changed).toBe(true);
     expect(entries).toHaveLength(0);
+    expect(deletedCount).toBe(1);
+    expect(preservedCount).toBe(0);
   });
 
   it('#4 this-and-future: soft-cancels noted occurrences and removes unnoted matched ones', () => {
@@ -154,7 +159,7 @@ describe('applyProtectedDelete', () => {
     const unnotedWeek = { id: 'b', name: 'MMA', start: '17:00', status: 'active' };
     const restDay = { id: 'r', isRestDay: true };
     const decide = (s: any) => (s.id === 'a' ? 'soft-cancel' : 'hard-delete');
-    const { entries } = applyProtectedDelete({
+    const { entries, deletedCount, preservedCount } = applyProtectedDelete({
       entries: [notedWeek, unnotedWeek, restDay],
       isTarget: (s) => !s.isRestDay && (s.name || '').toLowerCase() === 'mma' && s.start === '17:00',
       decide,
@@ -163,11 +168,13 @@ describe('applyProtectedDelete', () => {
     // noted occurrence kept + cancelled; unnoted removed; rest day preserved
     expect(entries.map((e: any) => e.id)).toEqual(['a', 'r']);
     expect(entries[0]).toMatchObject({ id: 'a', status: 'cancelled' });
+    expect(deletedCount).toBe(1);
+    expect(preservedCount).toBe(1);
   });
 
-  it('does not double-cancel an already-cancelled target (no change)', () => {
+  it('does not double-cancel an already-cancelled target (no change) but still counts it as preserved', () => {
     const target = { id: 's1', status: 'cancelled', cancellationTime: 'earlier' };
-    const { entries, changed } = applyProtectedDelete({
+    const { entries, changed, deletedCount, preservedCount } = applyProtectedDelete({
       entries: [target],
       isTarget: (s) => s.id === 's1',
       decide: () => 'soft-cancel',
@@ -175,6 +182,33 @@ describe('applyProtectedDelete', () => {
     });
     expect(changed).toBe(false);
     expect(entries[0]).toBe(target);
+    expect(deletedCount).toBe(0);
+    expect(preservedCount).toBe(1);
+  });
+});
+
+// ──────────────────────────────
+// formatSeriesDeleteSummary — Danish feedback for this-and-future / series delete
+// ──────────────────────────────
+
+describe('formatSeriesDeleteSummary', () => {
+  it('reports both deleted and preserved when both > 0', () => {
+    expect(formatSeriesDeleteSummary({ deletedCount: 3, preservedCount: 2 }))
+      .toBe('Slettet: 3. Bevaret pga. noter: 2.');
+  });
+
+  it('reports only deleted when nothing was preserved', () => {
+    expect(formatSeriesDeleteSummary({ deletedCount: 4, preservedCount: 0 }))
+      .toBe('Slettet: 4.');
+  });
+
+  it('reports only preserved (no misleading delete wording) when nothing was deleted', () => {
+    expect(formatSeriesDeleteSummary({ deletedCount: 0, preservedCount: 2 }))
+      .toBe('Bevaret pga. noter: 2.');
+  });
+
+  it('returns an empty string when nothing changed', () => {
+    expect(formatSeriesDeleteSummary({ deletedCount: 0, preservedCount: 0 })).toBe('');
   });
 });
 

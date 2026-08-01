@@ -72,40 +72,68 @@ describe('computeSessionDetailDeleteThisAndFuture (mobile "this and future" dele
     const notedKey = noteKeyFor(futureNotedWeek, day, 'noted1');
     const getNote = (k: string) => (k === notedKey ? 'Logged this training' : '');
 
-    const results = computeSessionDetailDeleteThisAndFuture({
+    const { changes, deletedCount, preservedCount } = computeSessionDetailDeleteThisAndFuture({
       multiWeekData, day, weekNum: fromWeek, nameLC: name.toLowerCase(), startTime: start, getNote,
     });
 
     // Past week must never appear in the results at all.
-    expect(results.find(r => r.weekNum === pastWeek)).toBeUndefined();
+    expect(changes.find(r => r.weekNum === pastWeek)).toBeUndefined();
 
     // The starting week's occurrence (unnoted) is hard-deleted (removed).
-    const fromResult = results.find(r => r.weekNum === fromWeek);
+    const fromResult = changes.find(r => r.weekNum === fromWeek);
     expect(fromResult).toBeDefined();
     expect(fromResult!.entries).toHaveLength(0);
 
     // The noted future occurrence is preserved and soft-cancelled, NOT removed.
-    const notedResult = results.find(r => r.weekNum === futureNotedWeek);
+    const notedResult = changes.find(r => r.weekNum === futureNotedWeek);
     expect(notedResult).toBeDefined();
     expect(notedResult!.entries).toHaveLength(1);
     expect(notedResult!.entries[0]).toMatchObject({ id: 'noted1', status: 'cancelled' });
 
     // The unnoted future occurrence is removed as before.
-    const unnotedResult = results.find(r => r.weekNum === futureUnnotedWeek);
+    const unnotedResult = changes.find(r => r.weekNum === futureUnnotedWeek);
     expect(unnotedResult).toBeDefined();
     expect(unnotedResult!.entries).toHaveLength(0);
+
+    // Counts: 2 unnoted removed (from1 + unnoted1), 1 noted preserved (noted1).
+    expect(deletedCount).toBe(2);
+    expect(preservedCount).toBe(1);
   });
 
-  it('is a no-op (no changed weeks) when there is nothing to delete', () => {
+  it('reports deletedCount with preservedCount 0 when no occurrence is noted', () => {
+    const fromWeek = 30;
+    const futureWeek = 31;
+    const day = 'Mandag';
+    const name = 'Muay Thai';
+    const start = '18:00';
+    const mkEntry = (id: string) => ({ id, name, start, status: 'active' });
+    const multiWeekData: Record<number, any> = {
+      [fromWeek]: { [day]: [mkEntry('a')] },
+      [futureWeek]: { [day]: [mkEntry('b')] },
+    };
+    const getNote = () => '';
+
+    const { changes, deletedCount, preservedCount } = computeSessionDetailDeleteThisAndFuture({
+      multiWeekData, day, weekNum: fromWeek, nameLC: name.toLowerCase(), startTime: start, getNote,
+    });
+
+    expect(changes.every(r => r.entries.length === 0)).toBe(true);
+    expect(deletedCount).toBe(2);
+    expect(preservedCount).toBe(0);
+  });
+
+  it('is a no-op (no changed weeks, zero counts) when there is nothing to delete', () => {
     const weekNum = 30;
     const day = 'Mandag';
     const multiWeekData = { [weekNum]: { [day]: [{ id: 'x', name: 'Other class', start: '17:00', status: 'active' }] } };
     const getNote = () => '';
 
-    const results = computeSessionDetailDeleteThisAndFuture({
+    const { changes, deletedCount, preservedCount } = computeSessionDetailDeleteThisAndFuture({
       multiWeekData, day, weekNum, nameLC: 'muay thai', startTime: '18:00', getNote,
     });
 
-    expect(results).toHaveLength(0);
+    expect(changes).toHaveLength(0);
+    expect(deletedCount).toBe(0);
+    expect(preservedCount).toBe(0);
   });
 });

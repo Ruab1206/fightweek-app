@@ -135,20 +135,26 @@ export function softCancelEntry<T extends Record<string, any>>(entry: T, cancell
  * Apply a log-protected delete to one day's entries (pure). Non-target entries
  * pass through untouched. Target entries are either soft-cancelled (kept, full
  * object preserved) or hard-deleted (dropped) per `decide`. `changed` is true if
- * any entry was dropped or newly soft-cancelled.
+ * any entry was dropped or newly soft-cancelled. `deletedCount` counts target
+ * entries that were hard-deleted; `preservedCount` counts target entries kept
+ * because they were soft-cancelled (i.e. they had a note/log or an unresolvable
+ * key), including any that were already cancelled.
  */
 export function applyProtectedDelete(params: {
   entries: any[];
   isTarget: (entry: any) => boolean;
   decide: (entry: any) => DeletionMode;
   cancellationTime: string;
-}): { entries: any[]; changed: boolean } {
+}): { entries: any[]; changed: boolean; deletedCount: number; preservedCount: number } {
   const { entries, isTarget, decide, cancellationTime } = params;
   let changed = false;
+  let deletedCount = 0;
+  let preservedCount = 0;
   const out: any[] = [];
   for (const entry of entries) {
     if (!isTarget(entry)) { out.push(entry); continue; }
     if (decide(entry) === 'soft-cancel') {
+      preservedCount++;
       if (entry.status === 'cancelled') {
         out.push(entry); // already cancelled — no change
       } else {
@@ -156,10 +162,28 @@ export function applyProtectedDelete(params: {
         changed = true;
       }
     } else {
+      deletedCount++;
       changed = true; // hard-delete: drop
     }
   }
-  return { entries: out, changed };
+  return { entries: out, changed, deletedCount, preservedCount };
+}
+
+/**
+ * Build the Danish user-feedback string for a this-and-future / series delete,
+ * reporting how many occurrences were deleted and how many were preserved
+ * because they contain notes. Intentionally simple (no singular/plural logic):
+ *   both > 0   → "Slettet: {d}. Bevaret pga. noter: {p}."
+ *   deleted    → "Slettet: {d}."
+ *   preserved  → "Bevaret pga. noter: {p}."   (no misleading delete wording)
+ *   nothing    → ""                            (caller shows no toast)
+ */
+export function formatSeriesDeleteSummary(params: { deletedCount: number; preservedCount: number }): string {
+  const { deletedCount, preservedCount } = params;
+  if (deletedCount > 0 && preservedCount > 0) return `Slettet: ${deletedCount}. Bevaret pga. noter: ${preservedCount}.`;
+  if (deletedCount > 0) return `Slettet: ${deletedCount}.`;
+  if (preservedCount > 0) return `Bevaret pga. noter: ${preservedCount}.`;
+  return '';
 }
 
 /**
@@ -562,6 +586,8 @@ export function useSessionHandlers({
       systemWeek,
       loadedWeeks: Object.keys(multiWeekData).map(Number),
     });
+    let deletedCount = 0;
+    let preservedCount = 0;
     for (const wk of targetWeeks) {
       let wd = multiWeekData[wk];
       if (wd === undefined) wd = await fetchWeekData(wk);
@@ -570,15 +596,21 @@ export function useSessionHandlers({
       // Per-occurrence log protection: a matched occurrence with a note/log (or an
       // unresolvable note key) is soft-cancelled in place; unnoted matches are
       // removed as before. The name+start matching algorithm is unchanged.
-      const { entries, changed } = applyProtectedDelete({
+      const { entries, changed, deletedCount: d, preservedCount: p } = applyProtectedDelete({
         entries: nd[dayName],
         isTarget: (s: any) => !s.isRestDay && (s.name || '').toLowerCase() === nameLC && s.start === start,
         decide: (s: any) => decideOccurrenceDeletion({ weekNum: wk, dayName, entry: s, getNote }),
         cancellationTime,
       });
+      deletedCount += d;
+      preservedCount += p;
       nd[dayName] = entries;
       if (changed) await saveWeekToDb(wk, nd);
     }
+    // Inform the user how many future occurrences were deleted and how many were
+    // preserved because they contain notes.
+    const summary = formatSeriesDeleteSummary({ deletedCount, preservedCount });
+    if (summary) showToast(summary, 'success');
   };
 
   return {

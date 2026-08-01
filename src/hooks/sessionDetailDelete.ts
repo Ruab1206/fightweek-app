@@ -43,8 +43,10 @@ export function computeSessionDetailDeleteThis(params: {
  * (SessionDetailSheet). Matches the SAME name+start algorithm as before,
  * across the SAME loaded weeks (>= weekNum) — only the delete decision
  * (soft-cancel vs hard-delete) changes. Past weeks are never touched. Only
- * weeks whose day entries actually changed are returned, so the caller can
- * persist exactly the weeks it used to persist.
+ * weeks whose day entries actually changed are returned as `changes`, so the
+ * caller can persist exactly the weeks it used to persist. `deletedCount` /
+ * `preservedCount` accumulate across weeks so the caller can show consistent
+ * user feedback (shared with the desktop path).
  */
 export function computeSessionDetailDeleteThisAndFuture(params: {
   multiWeekData: Record<number, any>;
@@ -53,21 +55,25 @@ export function computeSessionDetailDeleteThisAndFuture(params: {
   nameLC: string;
   startTime: string;
   getNote: (key: string) => string;
-}): Array<{ weekNum: number; day: string; entries: any[] }> {
+}): { changes: Array<{ weekNum: number; day: string; entries: any[] }>; deletedCount: number; preservedCount: number } {
   const { multiWeekData, day, weekNum, nameLC, startTime, getNote } = params;
   const cancellationTime = new Date().toISOString();
-  const results: Array<{ weekNum: number; day: string; entries: any[] }> = [];
+  const changes: Array<{ weekNum: number; day: string; entries: any[] }> = [];
+  let deletedCount = 0;
+  let preservedCount = 0;
   for (const wk of Object.keys(multiWeekData).map(Number).sort((a, b) => a - b)) {
     if (wk < weekNum) continue;
     const weekData = multiWeekData[wk];
     if (!weekData?.[day]) continue;
-    const { entries, changed } = applyProtectedDelete({
+    const { entries, changed, deletedCount: d, preservedCount: p } = applyProtectedDelete({
       entries: weekData[day],
       isTarget: (s: any) => (s.name || '').toLowerCase() === nameLC && s.start === startTime,
       decide: (s: any) => decideOccurrenceDeletion({ weekNum: wk, dayName: day, entry: s, getNote }),
       cancellationTime,
     });
-    if (changed) results.push({ weekNum: wk, day, entries });
+    deletedCount += d;
+    preservedCount += p;
+    if (changed) changes.push({ weekNum: wk, day, entries });
   }
-  return results;
+  return { changes, deletedCount, preservedCount };
 }
