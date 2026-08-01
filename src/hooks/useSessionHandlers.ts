@@ -120,13 +120,14 @@ export function decideOccurrenceDeletion(params: {
 /**
  * Soft-cancel an entry while preserving the FULL object. Only status/cancellation
  * fields change (mirrors SessionDetailSheet); an existing cancellationReason is
- * kept rather than overwritten.
+ * kept rather than overwritten. Pass `defaultReason` to override the default reason
+ * (used by log protection to distinguish preservation from general cancellation).
  */
-export function softCancelEntry<T extends Record<string, any>>(entry: T, cancellationTime: string): T {
+export function softCancelEntry<T extends Record<string, any>>(entry: T, cancellationTime: string, defaultReason: string = 'Aflyst'): T {
   return {
     ...entry,
     status: 'cancelled',
-    cancellationReason: entry.cancellationReason || 'Aflyst',
+    cancellationReason: entry.cancellationReason || defaultReason,
     cancellationTime,
   };
 }
@@ -158,7 +159,7 @@ export function applyProtectedDelete(params: {
       if (entry.status === 'cancelled') {
         out.push(entry); // already cancelled — no change
       } else {
-        out.push(softCancelEntry(entry, cancellationTime));
+        out.push(softCancelEntry(entry, cancellationTime, 'Bevaret pga. note'));
         changed = true;
       }
     } else {
