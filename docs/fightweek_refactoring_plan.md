@@ -78,6 +78,31 @@ The slice must demonstrate:
 
 ---
 
+## Future Spike: Calendar UI / FullCalendar Evaluation
+
+A calendar UI spike remains planned. **FullCalendar** is the first candidate to evaluate. This is a **future spike, not the active next task** — it comes after the first `CalendarEntry`/`EventLog` strangler slice (self-posted training) has proven the basic lifecycle.
+
+The UI library must not drive the domain model. The spike evaluates whether a calendar component can render and interact with the cleaned-up `CalendarEntry`/`EventOccurrence` model, and helps decide whether to replace or reduce the current custom calendar UI.
+
+**Questions the spike should answer:**
+
+- Can it render `CalendarEntries` from the new model?
+- Can it support day/week/month style calendar views?
+- Can it represent cancelled, removed, logged, source-missing or source-changed entries clearly?
+- Can it support mobile behavior better than the current custom UI?
+- Can it support future recurrence interactions without forcing bad domain design?
+- Does it reduce duplicated desktop/mobile calendar behavior?
+
+**Out of scope for the spike:**
+
+- Do not change the domain model to fit FullCalendar.
+- Do not replace the whole calendar UI in one step.
+- Do not implement recurrence behavior as part of the spike.
+- Do not implement #1221 as part of the spike.
+- Do not implement participation normalization as part of the spike.
+
+---
+
 ## Relationship to other docs
 
 - **Target vocabulary and entity definitions:** see [/docs/target_architecture.md](../docs/target_architecture.md) — this plan does not redefine `EventOccurrence`/`CalendarEntry`/`EventLog`, it tracks progress toward them.
