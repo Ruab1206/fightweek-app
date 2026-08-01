@@ -13,6 +13,7 @@ import { disciplineToCategory } from './InlineCataloguePicker';
 import { useGyms } from '../hooks/useGyms';
 import { NotesEditor } from './NotesEditor';
 import { sessionNoteKey } from '../hooks/useActivityNotes';
+import { computeSessionDetailDeleteThis, computeSessionDetailDeleteThisAndFuture } from '../hooks/sessionDetailDelete';
 import { InvitePicker, type InviteCandidate } from './shared/InvitePicker';
 import type { InvitationResponse } from '../types/invitation';
 import type { CatalogueClass } from '../types/catalogue';
@@ -110,13 +111,16 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
     showToast(`${session.name} fjernet`, 'success');
     // Cancel any invitation I sent for this activity so invitees are notified (#1201).
     onArrangerActivityRemoved?.(session, day, weekNum, 'this');
-    const weekData = multiWeekData[weekNum];
+    // Phase 2b bug fix: route through the same protected-delete decision used
+    // by useSessionHandlers, so a noted session is soft-cancelled (preserved)
+    // instead of being removed by a raw filter.
+    const result = computeSessionDetailDeleteThis({ multiWeekData, day, weekNum, sessionId: session.id, getNote });
+    if (!result) return;
+    const weekData = multiWeekData[result.weekNum];
     if (!weekData) return;
     const newData = structuredClone(weekData);
-    if (newData[day]) {
-      newData[day] = newData[day].filter((s: any) => s.id !== session.id);
-      saveWeekToDb(weekNum, newData);
-    }
+    newData[result.day] = result.entries;
+    saveWeekToDb(result.weekNum, newData);
   };
 
   const handleDeleteThisAndFuture = () => {
@@ -124,19 +128,18 @@ const SessionDetailSheet = ({ cls, session, day, weekNum, isDark, multiWeekData,
     showToast(`${session.name} fjernet`, 'success');
     // Cancel invitations for this and every future occurrence too (#1201).
     onArrangerActivityRemoved?.(session, day, weekNum, 'future');
+    // Phase 2b bug fix: per-occurrence log protection across the SAME loaded
+    // weeks/matching algorithm as before — only the delete decision changes.
+    const changes = computeSessionDetailDeleteThisAndFuture({
+      multiWeekData, day, weekNum, nameLC, startTime, getNote,
+    });
     (async () => {
-      for (const wk of Object.keys(multiWeekData).map(Number).sort((a, b) => a - b)) {
-        if (wk < weekNum) continue;
-        const weekData = multiWeekData[wk];
-        if (!weekData?.[day]) continue;
+      for (const change of changes) {
+        const weekData = multiWeekData[change.weekNum];
+        if (!weekData) continue;
         const newData = structuredClone(weekData);
-        const before = newData[day].length;
-        newData[day] = newData[day].filter((s: any) =>
-          (s.name || '').toLowerCase() !== nameLC || s.start !== startTime
-        );
-        if (newData[day].length < before) {
-          await saveWeekToDb(wk, newData);
-        }
+        newData[change.day] = change.entries;
+        await saveWeekToDb(change.weekNum, newData);
       }
     })();
   };
