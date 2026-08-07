@@ -37,7 +37,39 @@ The new lifecycle must prove:
 
 ---
 
-## Active Slice: Self-posted training
+## Domain clarification: notes/comments vs logs
+
+A **note or comment** attached to a calendar entry does **not**, by itself, mean that training or an event took place. A note may be any of:
+
+- a planning note
+- a reminder
+- a comment before an event
+- a reflection after an event
+- an actual training observation
+
+A **TrainingLog/EventLog is different**:
+
+- it is an **explicit historical record**
+- it represents something the user **intentionally registered as completed/happened**
+- it must preserve enough context to be understandable **independently of active calendar visibility**
+
+In short: a note is free-form annotation on a calendar entry; a log is an intentional, first-class assertion that "this happened." The presence of a note must never be treated as proof that training occurred.
+
+This distinction must apply consistently across:
+
+- self-posted training
+- catalogue class calendar entries
+- events
+- fravær
+- future participation flows
+
+> **Relation to Phase 2:** Phase 2's log-protection layer currently treats any note as a signal to soft-cancel rather than hard-delete. That remains the correct **fail-safe for the old model** (better to preserve too much than lose real history). It is a protection heuristic, not a redefinition of "log" — the new lifecycle draws the note-vs-log line explicitly. This clarification does not change Phase 2 behavior.
+
+---
+
+## Active Slice: Log completed self-posted training
+
+The first slice is specifically **"log completed self-posted training"** — a fighter records, after the fact, a self-posted training session they intentionally register as having happened. It is **log-after-the-fact** and produces an explicit `EventLog`, not merely a note on a calendar entry. This slice must **not** imply that all notes on all calendar entries are logs, or that a note is proof that training took place (see "Domain clarification: notes/comments vs logs" above).
 
 **Why this slice first:** single-owner, single-calendar, no participation, no series/recurrence, no source-calendar reconciliation — the cleanest testbed for the CalendarEntry/EventLog spine without touching any of the harder open problems.
 
