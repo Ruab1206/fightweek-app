@@ -188,3 +188,50 @@ export interface EventLog {
   notes?: string;
   injuries?: string;
 }
+
+// ──────────────────────────────────────────────
+// Self-contained logs (Phase 3 active slice: "Log completed self-posted
+// training" — see /docs/fightweek_refactoring_plan.md)
+// ──────────────────────────────────────────────
+
+/**
+ * A self-contained "completed self-posted training" record.
+ *
+ * Bundles an `EventOccurrence` **snapshot** (title/discipline/start/end/
+ * location at logging time, not a live reference), its `CalendarEntry`
+ * reference/lifecycle context, and the `EventLog` itself, so the record
+ * remains understandable without looking up a live occurrence or calendar
+ * entry elsewhere. This is what lets a chronological history view render
+ * correctly even if the originating calendar entry is later hidden/removed.
+ *
+ * IMPORTANT: the existence of this record means the user explicitly
+ * registered the training as completed. It is NOT the same as an ordinary
+ * note/comment on a calendar entry — a note is not proof that training
+ * happened (see "Domain clarification: notes/comments vs logs" in the
+ * refactoring plan). This type must not be reused to imply that.
+ */
+export interface CompletedSelfPostedTrainingLog {
+  id: string;
+  /** Snapshot of occurrence context at logging time (not a live reference). */
+  occurrence: EventOccurrence;
+  /** Calendar-entry-style reference/lifecycle context. */
+  calendarEntry: CalendarEntry;
+  /** What actually happened. */
+  log: EventLog;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A render-ready row for the chronological training history view. */
+export interface TrainingHistoryItem {
+  id: string;
+  title: string;
+  type: EventType;
+  discipline?: string;
+  startDateTime: string;
+  endDateTime: string;
+  durationMinutes: number;
+  location?: string;
+  notes: string;
+  intensity?: number;
+}
