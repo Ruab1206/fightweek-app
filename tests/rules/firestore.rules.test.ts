@@ -2,17 +2,15 @@
  * Firestore security-rules characterization harness — Phase 3 (eventLogs privacy).
  *
  * WHAT THIS IS
- *   A BASELINE characterization of the CURRENT `firestore.rules`. It pins what
- *   the rules do TODAY — including the known eventLogs read leak to team
- *   members — so the subsequent rules-change step can be verified as an
- *   intentional, reviewed behavior change rather than an accident.
- *   All tests here are expected to be GREEN against the current rules.
- *
- * WHAT HAPPENS NEXT (not in this commit)
- *   In the following step, the eventLogs expectations marked "CURRENT LEAK" /
- *   "characterizes current behavior" will be REPLACED with the target
- *   private-by-default expectations (owner read/write; admin read-only;
- *   coach/other/team/anon denied), and firestore.rules will be updated.
+ *   Verifies the TARGET `firestore.rules`. eventLogs are private-by-default:
+ *     - owner: read/write
+ *     - administrator: read-only, regardless of membership overlap
+ *     - coach: denied (read+write), even if also a member
+ *     - other member / non-team / unauthenticated: denied
+ *     - owner accessing ANOTHER fighter's logs: denied
+ *   The weeks/templates/meta blocks remain REGRESSION tests pinning the
+ *   pre-existing team-read / owner+admin/coach-write behavior, which this
+ *   change preserves exactly.
  *
  * SAFETY
  *   - Runs ONLY against a local Firestore emulator (never production).
@@ -67,9 +65,11 @@ const P = {
   notes: `artifacts/production/users/${OWNER}/meta/notes`,
   notifications: `artifacts/production/users/${OWNER}/meta/notifications`,
   eventLog: `artifacts/production/users/${OWNER}/eventLogs/log1`,
-  // Not a real app path. Stands in for ANY future user-scoped subcollection
-  // that is currently reachable ONLY via the recursive `{document=**}` rule.
-  // Included so the impact of later narrowing the wildcard is explicit.
+  // A DIFFERENT fighter's log — used to prove an owner cannot reach another
+  // fighter's eventLogs.
+  otherEventLog: `artifacts/production/users/other@x/eventLogs/log2`,
+  // Not a real app path. Stands in for ANY future user-scoped subcollection.
+  // After narrowing the recursive `{document=**}` rule it must be DENIED.
   unenumerated: `artifacts/production/users/${OWNER}/goals/g1`,
 };
 
@@ -125,6 +125,7 @@ beforeEach(async () => {
     await setDoc(doc(db, P.notes), { updatedAt: '2026-08-14' });
     await setDoc(doc(db, P.notifications), { lastSeen: '2026-08-14' });
     await setDoc(doc(db, P.eventLog), { id: 'log1' });
+    await setDoc(doc(db, P.otherEventLog), { id: 'log2' });
     await setDoc(doc(db, P.unenumerated), { placeholder: true });
   });
 });
@@ -189,79 +190,69 @@ describe('CURRENT rules — weeks / templates / meta (behavior preserved by this
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// eventLogs — CHARACTERIZES THE CURRENT LEAK. These expectations pin CURRENT
-// behavior and are expected to be GREEN. They will be REPLACED with the target
-// private-by-default expectations in the subsequent rules-change step.
-//
-// Under the CURRENT recursive `{document=**}` rule, eventLogs are treated
-// exactly like weeks/templates/meta (team read; owner/admin/coach write).
+// eventLogs — TARGET private-by-default policy. Owner read/write; administrator
+// read-only regardless of membership; coach and every other principal denied;
+// owner cannot reach another fighter's logs.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('CURRENT rules — eventLogs (CHARACTERIZES CURRENT LEAK; to be replaced)', () => {
-  it('owner can read [target: KEEP]', async () => {
+describe('TARGET rules — eventLogs private-by-default (owner R/W; admin read-only)', () => {
+  it('owner can read own log', async () => {
     await assertSucceeds(getDoc(doc(as(OWNER), P.eventLog)));
   });
-  it('owner can write [target: KEEP]', async () => {
+  it('owner can write own log', async () => {
     await assertSucceeds(setDoc(doc(as(OWNER), P.eventLog), { id: 'log1' }));
   });
 
-  // THE LEAK: a plain team member can currently read another fighter's private
-  // training log. Target after the rules change: DENY.
-  it('CURRENT LEAK: other team member can read a private log [target: DENY]', async () => {
-    await assertSucceeds(getDoc(doc(as('other@x'), P.eventLog)));
+  it('other team member cannot read a private log', async () => {
+    await assertFails(getDoc(doc(as('other@x'), P.eventLog)));
   });
-  it('other team member cannot write [target: keep denied]', async () => {
+  it('other team member cannot write a private log', async () => {
     await assertFails(setDoc(doc(as('other@x'), P.eventLog), { id: 'x' }));
   });
 
-  // admin@x is NOT in `members` in this fixture → currently CANNOT READ the log
-  // (isTeamMember() false). admin CAN currently WRITE via isAdminOrCoach().
-  // Target: admin READ-ONLY (read via explicit isAdmin(); no write).
-  it('admin today: cannot read (not a member) [target: ALLOW read]', async () => {
-    await assertFails(getDoc(doc(as('admin@x'), P.eventLog)));
+  // Administrator (default fixture: NOT a member) — read-only.
+  it('admin can read (read-only policy)', async () => {
+    await assertSucceeds(getDoc(doc(as('admin@x'), P.eventLog)));
   });
-  it('admin today: CAN write via isAdminOrCoach [target: DENY write]', async () => {
-    await assertSucceeds(setDoc(doc(as('admin@x'), P.eventLog), { id: 'x' }));
+  it('admin cannot write', async () => {
+    await assertFails(setDoc(doc(as('admin@x'), P.eventLog), { id: 'x' }));
   });
 
-  // coach@x is NOT in `members` → currently CANNOT READ. coach CAN currently
-  // WRITE via isAdminOrCoach(). Target: coach fully denied (no read, no write).
-  it('coach today: cannot read (not a member) [target: DENY]', async () => {
+  // Coach (default fixture: NOT a member) — fully denied.
+  it('coach cannot read', async () => {
     await assertFails(getDoc(doc(as('coach@x'), P.eventLog)));
   });
-  it('coach today: CAN write via isAdminOrCoach [target: DENY write]', async () => {
-    await assertSucceeds(setDoc(doc(as('coach@x'), P.eventLog), { id: 'x' }));
+  it('coach cannot write', async () => {
+    await assertFails(setDoc(doc(as('coach@x'), P.eventLog), { id: 'x' }));
   });
 
-  it('authenticated non-team user cannot read [target: keep denied]', async () => {
+  // Owner accessing ANOTHER fighter's log — denied both ways.
+  it("owner cannot read another fighter's log", async () => {
+    await assertFails(getDoc(doc(as(OWNER), P.otherEventLog)));
+  });
+  it("owner cannot write another fighter's log", async () => {
+    await assertFails(setDoc(doc(as(OWNER), P.otherEventLog), { id: 'x' }));
+  });
+
+  it('authenticated non-team user cannot read', async () => {
     await assertFails(getDoc(doc(as('rando@x'), P.eventLog)));
   });
-  it('authenticated non-team user cannot write [target: keep denied]', async () => {
+  it('authenticated non-team user cannot write', async () => {
     await assertFails(setDoc(doc(as('rando@x'), P.eventLog), { id: 'x' }));
   });
-  it('unauthenticated cannot read [target: keep denied]', async () => {
+  it('unauthenticated cannot read', async () => {
     await assertFails(getDoc(doc(as(null), P.eventLog)));
   });
-  it('unauthenticated cannot write [target: keep denied]', async () => {
+  it('unauthenticated cannot write', async () => {
     await assertFails(setDoc(doc(as(null), P.eventLog), { id: 'x' }));
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FUTURE TARGET EXPECTATIONS (documented only — NOT implemented in this commit;
-// firestore.rules and these tests are unchanged by this step). The next
-// rules-change step must make eventLogs behavior independent of role overlap:
-//
-//   - owner:                       read/write
-//   - administrator:               read-only, REGARDLESS of membership overlap
-//   - coach:                       denied (read AND write), EVEN IF also a member
-//   - other member/fighter:        denied
-//   - authenticated non-team user: denied
-//   - unauthenticated user:        denied
-//
-// The "Role overlap" blocks below prove that TODAY, admin/coach read access to
-// eventLogs depends entirely on incidental team membership (isTeamMember()),
-// not on their admin/coach role — which is exactly what the target step must
-// stop relying on.
+// ROLE OVERLAP — proves the TARGET eventLogs policy is independent of whether an
+// administrator or coach is also listed in `members`:
+//   - administrator: read allowed, write denied — whether or not a member
+//   - coach:         read denied,  write denied — whether or not a member
+// The weeks assertions in each block are REGRESSION checks (preserved behavior).
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Overwrite the roles doc (rules disabled) for one specific overlap scenario. */
@@ -286,11 +277,11 @@ describe('Role overlap — administrator who is NOT a member', () => {
   it('write user-scoped path (weeks) allowed — isAdminOrCoach()', async () => {
     await assertSucceeds(setDoc(doc(as('admin@x'), P.week), { touched: 1 }));
   });
-  it('read eventLogs denied — isTeamMember() false [target: ALLOW read]', async () => {
-    await assertFails(getDoc(doc(as('admin@x'), P.eventLog)));
+  it('read eventLogs allowed — admin read-only regardless of membership', async () => {
+    await assertSucceeds(getDoc(doc(as('admin@x'), P.eventLog)));
   });
-  it('write eventLogs allowed via isAdminOrCoach() [target: DENY write]', async () => {
-    await assertSucceeds(setDoc(doc(as('admin@x'), P.eventLog), { id: 'x' }));
+  it('write eventLogs denied — admin has no write', async () => {
+    await assertFails(setDoc(doc(as('admin@x'), P.eventLog), { id: 'x' }));
   });
 });
 
@@ -305,11 +296,11 @@ describe('Role overlap — administrator who IS ALSO a member', () => {
   it('write user-scoped path (weeks) allowed — isAdminOrCoach()', async () => {
     await assertSucceeds(setDoc(doc(as('admin@x'), P.week), { touched: 1 }));
   });
-  it('CURRENT LEAK: read eventLogs allowed via isTeamMember(), not admin role [target: KEEP read, but via isAdmin() not membership]', async () => {
+  it('read eventLogs allowed — via isAdmin(), independent of membership', async () => {
     await assertSucceeds(getDoc(doc(as('admin@x'), P.eventLog)));
   });
-  it('write eventLogs allowed via isAdminOrCoach() [target: DENY write]', async () => {
-    await assertSucceeds(setDoc(doc(as('admin@x'), P.eventLog), { id: 'x' }));
+  it('write eventLogs denied — admin has no write even as a member', async () => {
+    await assertFails(setDoc(doc(as('admin@x'), P.eventLog), { id: 'x' }));
   });
 });
 
@@ -324,11 +315,11 @@ describe('Role overlap — coach who is NOT a member', () => {
   it('write user-scoped path (weeks) allowed — isAdminOrCoach()', async () => {
     await assertSucceeds(setDoc(doc(as('coach@x'), P.week), { touched: 1 }));
   });
-  it('read eventLogs denied — isTeamMember() false [target: keep denied]', async () => {
+  it('read eventLogs denied — coach has no read', async () => {
     await assertFails(getDoc(doc(as('coach@x'), P.eventLog)));
   });
-  it('write eventLogs allowed via isAdminOrCoach() [target: DENY write]', async () => {
-    await assertSucceeds(setDoc(doc(as('coach@x'), P.eventLog), { id: 'x' }));
+  it('write eventLogs denied — coach has no write', async () => {
+    await assertFails(setDoc(doc(as('coach@x'), P.eventLog), { id: 'x' }));
   });
 });
 
@@ -343,11 +334,11 @@ describe('Role overlap — coach who IS ALSO a member', () => {
   it('write user-scoped path (weeks) allowed — isAdminOrCoach()', async () => {
     await assertSucceeds(setDoc(doc(as('coach@x'), P.week), { touched: 1 }));
   });
-  it('CURRENT LEAK: read eventLogs allowed via isTeamMember() [target: DENY, even though also a member]', async () => {
-    await assertSucceeds(getDoc(doc(as('coach@x'), P.eventLog)));
+  it('read eventLogs denied — coach denied even though also a member', async () => {
+    await assertFails(getDoc(doc(as('coach@x'), P.eventLog)));
   });
-  it('write eventLogs allowed via isAdminOrCoach() [target: DENY write]', async () => {
-    await assertSucceeds(setDoc(doc(as('coach@x'), P.eventLog), { id: 'x' }));
+  it('write eventLogs denied — coach denied even though also a member', async () => {
+    await assertFails(setDoc(doc(as('coach@x'), P.eventLog), { id: 'x' }));
   });
 });
 
@@ -357,14 +348,14 @@ describe('Role overlap — coach who IS ALSO a member', () => {
 // path inherits team-read / owner-write; after narrowing (enumerating
 // weeks/templates/meta/eventLogs) it will be DENIED unless explicitly added.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('CURRENT rules — unenumerated path via recursive wildcard (narrowing impact)', () => {
-  it('owner can currently read an unenumerated path [target after narrowing: DENY]', async () => {
-    await assertSucceeds(getDoc(doc(as(OWNER), P.unenumerated)));
+describe('TARGET rules — unenumerated user path is denied (wildcard narrowed)', () => {
+  it('owner cannot read an unenumerated path', async () => {
+    await assertFails(getDoc(doc(as(OWNER), P.unenumerated)));
   });
-  it('owner can currently write an unenumerated path [target after narrowing: DENY]', async () => {
-    await assertSucceeds(setDoc(doc(as(OWNER), P.unenumerated), { x: 1 }));
+  it('owner cannot write an unenumerated path', async () => {
+    await assertFails(setDoc(doc(as(OWNER), P.unenumerated), { x: 1 }));
   });
-  it('other team member can currently read an unenumerated path [target: DENY]', async () => {
-    await assertSucceeds(getDoc(doc(as('other@x'), P.unenumerated)));
+  it('other team member cannot read an unenumerated path', async () => {
+    await assertFails(getDoc(doc(as('other@x'), P.unenumerated)));
   });
 });

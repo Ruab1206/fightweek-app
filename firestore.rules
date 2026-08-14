@@ -36,8 +36,8 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // ─── Per-user schedule data ───
-    // Path: artifacts/production/users/{userKey}/...
+    // ─── Per-user schedule data (weeks / templates / meta) ───
+    // Path: artifacts/production/users/{userKey}/{weeks|templates|meta}/...
     //
     // #1191/#1193: data is keyed by EMAIL (the stable id). The transitional
     // name-keyed branch has been removed (#1193) now that the app and data are
@@ -45,10 +45,49 @@ service cloud.firestore {
     //
     // Team members can READ all fighters (needed for team view).
     // Only the fighter themselves or admin/coach can WRITE.
-    match /artifacts/production/users/{userKey}/{document=**} {
+    //
+    // These subcollections are enumerated EXPLICITLY (instead of a single
+    // recursive `{document=**}` rule) so that eventLogs below can be private.
+    // Firestore allow rules are ADDITIVE: a broad read grant cannot be narrowed
+    // by a more specific rule, so the team-read wildcard must not cover
+    // eventLogs. Nested `{document=**}` is kept WITHIN each named subcollection
+    // to preserve the previous behavior exactly.
+    match /artifacts/production/users/{userKey}/weeks/{document=**} {
       allow read: if isTeamMember();
-
       allow write: if isAdminOrCoach();
+      allow write: if isAuthenticated()
+        && request.auth.token.email == userKey;
+    }
+    match /artifacts/production/users/{userKey}/templates/{document=**} {
+      allow read: if isTeamMember();
+      allow write: if isAdminOrCoach();
+      allow write: if isAuthenticated()
+        && request.auth.token.email == userKey;
+    }
+    match /artifacts/production/users/{userKey}/meta/{document=**} {
+      allow read: if isTeamMember();
+      allow write: if isAdminOrCoach();
+      allow write: if isAuthenticated()
+        && request.auth.token.email == userKey;
+    }
+
+    // ─── Private per-user training logs (EventLog) ───
+    // Path: artifacts/production/users/{userKey}/eventLogs/{logId}
+    //
+    // Personal training logs are PRIVATE BY DEFAULT:
+    //  • owner — read + write (request.auth.token.email == userKey).
+    //  • admin — read ONLY (isAdmin()), and independent of whether the admin is
+    //            also listed in `members`. No admin write.
+    //  • coach, other team members, authenticated non-team, unauthenticated —
+    //            denied (no matching allow rule grants them access).
+    //
+    // No broader user-scoped rule matches this path, so additive rules cannot
+    // re-grant team-member or coach access. Any future EXPLICIT sharing would be
+    // added here (e.g. an allow read gated on a `sharedWith` field) — not now.
+    match /artifacts/production/users/{userKey}/eventLogs/{logId} {
+      allow read: if isAuthenticated()
+        && request.auth.token.email == userKey;
+      allow read: if isAdmin();
       allow write: if isAuthenticated()
         && request.auth.token.email == userKey;
     }
