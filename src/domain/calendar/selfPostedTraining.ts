@@ -47,8 +47,13 @@ export interface CompletedSelfPostedTrainingInput {
   /** Used to derive `endDateTime` when `end` is not given. */
   durationMinutes?: number;
   location?: string;
-  /** Required for v1 — the log is a deliberate record, not a bare marker. */
-  notes: string;
+  /**
+   * Optional free-text context. A completed training log does NOT require a
+   * note — completion is established by the user explicitly using the "log
+   * completed training" flow (structured title/date/discipline/time), not by
+   * the presence of a note. Notes are additional context only.
+   */
+  notes?: string;
   /** Optional 1–5 post-session load rating. */
   intensity?: number;
   /**
@@ -105,8 +110,10 @@ const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
  * Rules:
  * - title required (non-empty after trim).
  * - dateISO required (YYYY-MM-DD shape).
- * - notes required (non-empty after trim) — v1 treats the log as a
- *   deliberate record, not a bare completion marker.
+ * - notes are OPTIONAL — completion is established by the caller explicitly
+ *   using the "log completed training" flow with structured fields (title,
+ *   date, discipline, time/duration), not by the presence of a note. A
+ *   missing note must never fail validation.
  * - either a valid `end` time or a positive `durationMinutes` must be
  *   derivable; `start`/`end`, when given, must match HH:mm.
  * - `intensity`, when given, must be within 1–5.
@@ -124,9 +131,9 @@ export function validateCompletedSelfPostedTrainingInput(
     errors.push('dateISO is required and must be YYYY-MM-DD');
   }
 
-  if (!input.notes || !input.notes.trim()) {
-    errors.push('notes is required');
-  }
+  // Notes are optional — do NOT validate their presence. Completion is
+  // established by the explicit "log completed training" flow using the
+  // structured fields above, never by whether a note was typed.
 
   if (input.start !== undefined && !TIME_RE.test(input.start)) {
     errors.push('start must be a valid HH:mm time');

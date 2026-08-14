@@ -106,6 +106,16 @@ describe('buildCompletedSelfPostedTrainingLog', () => {
     expect(item.notes).toBe('Good rounds, worked clinch');
     expect(item.durationMinutes).toBe(90);
   });
+
+  it('marks the log completed/attended even when no free-text notes are supplied — completion comes from the explicit log-completed-training flow, not from a note', () => {
+    const record = buildCompletedSelfPostedTrainingLog(makeInput({ notes: undefined }), deterministicDeps());
+
+    expect(record.occurrence.status).toBe('completed');
+    expect(record.occurrence.hasLogs).toBe(true);
+    expect(record.calendarEntry.status).toBe('completed');
+    expect(record.log.attended).toBe(true);
+    expect(record.log.notes).toBeUndefined();
+  });
 });
 
 // ──────────────────────────────────────────────
@@ -156,6 +166,23 @@ describe('logToHistoryItem', () => {
 
     expect(logToHistoryItem(record).durationMinutes).toBe(75);
   });
+
+  it('renders an empty notes string (not an error state) when no note was supplied', () => {
+    const record = buildCompletedSelfPostedTrainingLog(makeInput({ notes: undefined }), deterministicDeps());
+    const item = logToHistoryItem(record);
+
+    expect(item.notes).toBe('');
+    expect(item.title).toBe('MMA Sparring');
+  });
+
+  it('preserves the supplied note as additional context when one is given', () => {
+    const record = buildCompletedSelfPostedTrainingLog(
+      makeInput({ notes: 'Felt strong today' }),
+      deterministicDeps(),
+    );
+
+    expect(logToHistoryItem(record).notes).toBe('Felt strong today');
+  });
 });
 
 // ──────────────────────────────────────────────
@@ -171,6 +198,11 @@ describe('validateCompletedSelfPostedTrainingInput', () => {
     const errors = validateCompletedSelfPostedTrainingInput(
       makeInput({ discipline: undefined, location: undefined, intensity: undefined }),
     );
+    expect(errors).toEqual([]);
+  });
+
+  it('accepts a completed training log with no free-text notes — completion comes from the explicit log-completed-training flow, not from a note', () => {
+    const errors = validateCompletedSelfPostedTrainingInput(makeInput({ notes: undefined }));
     expect(errors).toEqual([]);
   });
 
@@ -201,11 +233,6 @@ describe('validateCompletedSelfPostedTrainingInput', () => {
       makeInput({ end: undefined, durationMinutes: undefined }),
     );
     expect(errors).toContain('either a valid end time or a positive durationMinutes is required');
-  });
-
-  it('rejects missing notes — the log is a deliberate record, not a bare completion marker', () => {
-    const errors = validateCompletedSelfPostedTrainingInput(makeInput({ notes: '   ' }));
-    expect(errors).toContain('notes is required');
   });
 
   it('rejects intensity outside 1–5', () => {
