@@ -2,6 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
+  // Firestore rules tests (tests/rules/**) are Vitest + emulator tests, not
+  // Playwright E2E tests. Exclude them so `npm run test:e2e` never picks them up.
+  testIgnore: ['**/rules/**'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
