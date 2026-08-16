@@ -47,6 +47,18 @@ export function resolveFighterKey(name: string, emailForName: Record<string, str
   return emailForName[name] || name;
 }
 
+/**
+ * Whether the selected `fighterKey` is the authenticated user themselves —
+ * used only to gate the personal training-log create action in the UI.
+ * Firestore rules remain the authoritative security boundary; this is not a
+ * role/admin check, so an admin viewing another fighter correctly gets
+ * `false` here even though rules may still let them read that fighter's logs.
+ */
+export function isOwnFighterKey(fighterKey: string, userEmail: string | null | undefined): boolean {
+  if (!fighterKey?.trim() || !userEmail?.trim()) return false;
+  return fighterKey.trim().toLowerCase() === userEmail.trim().toLowerCase();
+}
+
 
 // Shared day-of-week mapping (ISO: 1=Monday … 7=Sunday)
 export const DAY_NAMES: Record<number, string> = { 1: 'Mandag', 2: 'Tirsdag', 3: 'Onsdag', 4: 'Torsdag', 5: 'Fredag', 6: 'Lørdag', 7: 'Søndag' };
