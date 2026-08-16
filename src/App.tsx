@@ -11,7 +11,7 @@ import {
   Search, Menu, ArrowLeft, UserCircle,
 } from 'lucide-react';
 
-import { DAYS, resolveFighterKey } from './config/constants';
+import { DAYS, resolveFighterKey, isOwnFighterKey } from './config/constants';
 import { useRolesConfig } from './hooks/useRolesConfig';
 import { getDateForWeekDay, getWeekDateMap, getTodayDayName, getFullWeekDateMap, getDaysInRange, getISOWeekForDate, toLocalISODate } from './utils/dateUtils';
 
@@ -53,6 +53,7 @@ import EventsPage from './pages/EventsPage';
 import type { EventsPageHandle } from './pages/EventsPage';
 import AddScreen from './components/AddScreen';
 import type { AddType } from './components/AddScreen';
+import TrainingLogPage from './pages/TrainingLogPage';
 
 const App = () => {
   // --- Hooks ---
@@ -70,6 +71,9 @@ const App = () => {
   // active fighter's display name to their email path key for all data hooks; the
   // UI/merge layer keeps using the display name.
   const activeFighterKey = useMemo(() => resolveFighterKey(activeFighter, emailForName), [activeFighter, emailForName]);
+
+  // Gates the training-log create action — identity match only, not a role check.
+  const canCreateLog = isOwnFighterKey(activeFighterKey, user?.email);
 
   // #1201: people who can be invited to an activity (every member except me),
   // and a helper to show a friendly name for an invitee email.
@@ -166,7 +170,7 @@ const App = () => {
   );
 
   // --- Local UI State ---
-  const [view, setView] = useState<'personal' | 'team' | 'events'>('personal');
+  const [view, setView] = useState<'personal' | 'team' | 'events' | 'trainingLog'>('personal');
   const [expandedDay, setExpandedDay] = useState<string | null>(null); // dayName for desktop, "weekNum_dayName" for mobile scroll
   const [showCatalogue, setShowCatalogue] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -545,6 +549,9 @@ const App = () => {
           <button onClick={() => { setView('events'); setDrawerOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${view === 'events' ? (isDark ? 'text-blue-400 bg-blue-950/30' : 'text-blue-600 bg-blue-50') : (isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-ds-text hover:bg-surface-hover')}`}>
             <CalendarDays className="w-4 h-4" /><span className="font-medium">Events</span>
           </button>
+          <button onClick={() => { setView('trainingLog'); setDrawerOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${view === 'trainingLog' ? (isDark ? 'text-blue-400 bg-blue-950/30' : 'text-blue-600 bg-blue-50') : (isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-ds-text hover:bg-surface-hover')}`}>
+            <History className="w-4 h-4" /><span className="font-medium">Træningslog</span>
+          </button>
         </div>
         {/* Friends calendars */}
         <div className="px-4 pt-3 pb-2">
@@ -592,6 +599,13 @@ const App = () => {
           <EventsPage ref={eventsRef} isDark={isDark} fighterName={activeFighter} isAdmin={isAdmin} userEmail={user?.email || ''} searchQuery={searchQuery} searchMode={searchMode} initialEventId={initialEventId} onClearInitialEvent={() => setInitialEventId(null)} getNote={getNote} saveNote={saveNote} />
         ) : view === 'team' ? (
           <TeamSchedule days={DAYS} teamData={mergedTeamData} currentWeek={currentWeek} isDark={isDark} />
+        ) : view === 'trainingLog' ? (
+          <TrainingLogPage
+            fighterKey={activeFighterKey}
+            canCreateLog={canCreateLog}
+            onSuccess={(message) => showToast(message, 'success')}
+            onError={(message) => showToast(message, 'error')}
+          />
         ) : (
           <>
             {/* Desktop action bar + catalogue filter */}
