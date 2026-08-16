@@ -230,4 +230,33 @@ describe('logCoordinator', () => {
     expect(persistedRecord.log.actualEndDateTime).toBeDefined();
     // End time should be 90 minutes after start
   });
+
+  // ──────────────────────────────────────────────
+  // Test 12: Coordinator threads the injected clock into validation
+  // ──────────────────────────────────────────────
+  it('passes the injected now dependency into validation', async () => {
+    const deps = createMockDeps({
+      // Far in the future relative to validInput's dateISO, so under this
+      // clock the training is safely in the past and should be accepted.
+      now: () => new Date(2027, 0, 1, 0, 0, 0),
+    });
+
+    const logId = await addCompletedTrainingLog(validInput, 'fighter@example.com', deps);
+
+    expect(logId).toBeDefined();
+    expect(deps.persist).toHaveBeenCalledOnce();
+  });
+
+  it('rejects future-dated input under the injected clock without calling persistence', async () => {
+    const deps = createMockDeps({
+      // Fixed "now" earlier than validInput's dateISO/start, so the input
+      // is future relative to this clock and must be rejected.
+      now: () => new Date(2026, 7, 1, 0, 0, 0),
+    });
+
+    await expect(
+      addCompletedTrainingLog(validInput, 'fighter@example.com', deps),
+    ).rejects.toThrow();
+    expect(deps.persist).not.toHaveBeenCalled();
+  });
 });

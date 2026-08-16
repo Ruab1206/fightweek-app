@@ -70,12 +70,26 @@ export interface CompletedSelfPostedTrainingDeps {
   nowISO?: () => string;
 }
 
+/**
+ * Injectable current-instant clock for the future-date/time validation rule
+ * (kept separate from `CompletedSelfPostedTrainingDeps.nowISO`, which stamps
+ * `createdAt`/`updatedAt` and is an unrelated concern).
+ */
+export interface CompletedSelfPostedTrainingValidationDeps {
+  /** Defaults to `new Date()`. Injected in tests for deterministic results. */
+  now?: () => Date;
+}
+
 function defaultId(): string {
   return crypto.randomUUID();
 }
 
 function defaultNowISO(): string {
   return new Date().toISOString();
+}
+
+function defaultNow(): Date {
+  return new Date();
 }
 
 /**
@@ -117,9 +131,16 @@ const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
  * - either a valid `end` time or a positive `durationMinutes` must be
  *   derivable; `start`/`end`, when given, must match HH:mm.
  * - `intensity`, when given, must be within 1–5.
+ * - the training's start (dateISO + start, defaulting to midnight when start
+ *   is absent) must not be later than the injected `now` — this flow logs
+ *   training that already happened, so a future date OR a future time later
+ *   today is rejected. `now`/the candidate start are both plain local `Date`
+ *   values (no explicit UTC offset), so this stays correct across local
+ *   midnight regardless of timezone (see `toDateTime` below).
  */
 export function validateCompletedSelfPostedTrainingInput(
   input: CompletedSelfPostedTrainingInput,
+  deps: CompletedSelfPostedTrainingValidationDeps = {},
 ): string[] {
   const errors: string[] = [];
 
@@ -129,6 +150,12 @@ export function validateCompletedSelfPostedTrainingInput(
 
   if (!input.dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(input.dateISO)) {
     errors.push('dateISO is required and must be YYYY-MM-DD');
+  } else {
+    const now = (deps.now ?? defaultNow)();
+    const candidateStart = new Date(toDateTime(input.dateISO, input.start));
+    if (candidateStart.getTime() > now.getTime()) {
+      errors.push('dateISO/start must not be in the future');
+    }
   }
 
   // Notes are optional — do NOT validate their presence. Completion is

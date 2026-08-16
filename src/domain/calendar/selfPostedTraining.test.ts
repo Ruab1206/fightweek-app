@@ -242,3 +242,110 @@ describe('validateCompletedSelfPostedTrainingInput', () => {
       .toContain('intensity must be between 1 and 5');
   });
 });
+
+// ──────────────────────────────────────────────
+// validateCompletedSelfPostedTrainingInput — completed training cannot be
+// logged in the future (date AND time-of-day). Uses a fixed injected clock
+// so results never depend on the real system clock.
+// ──────────────────────────────────────────────
+
+describe('validateCompletedSelfPostedTrainingInput — future rejection', () => {
+  // Fixed local "now": 2026-07-30 18:00 local time. Constructed via the
+  // local Date constructor (not an ISO/UTC string) so it lines up with how
+  // dateISO/start are parsed (local time, see toDateTime/diffMinutes above).
+  const NOW = new Date(2026, 6, 30, 18, 0, 0);
+  const clock = { now: () => NOW };
+
+  it('accepts a training on a past date', () => {
+    const errors = validateCompletedSelfPostedTrainingInput(
+      makeInput({ dateISO: '2026-07-29', start: '10:00', end: '11:00' }),
+      clock,
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it('accepts a training earlier today', () => {
+    const errors = validateCompletedSelfPostedTrainingInput(
+      makeInput({ dateISO: '2026-07-30', start: '10:00', end: '11:00' }),
+      clock,
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it('accepts a training starting exactly at the injected current time', () => {
+    const errors = validateCompletedSelfPostedTrainingInput(
+      makeInput({ dateISO: '2026-07-30', start: '18:00', end: '19:00' }),
+      clock,
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it('rejects a training starting later today', () => {
+    const errors = validateCompletedSelfPostedTrainingInput(
+      makeInput({ dateISO: '2026-07-30', start: '19:00', end: '20:00' }),
+      clock,
+    );
+    expect(errors).toContain('dateISO/start must not be in the future');
+  });
+
+  it('rejects a training on a future date', () => {
+    const errors = validateCompletedSelfPostedTrainingInput(
+      makeInput({ dateISO: '2026-07-31', start: '08:00', end: '09:00' }),
+      clock,
+    );
+    expect(errors).toContain('dateISO/start must not be in the future');
+  });
+
+  it('accepts start time plus a positive duration (no end given)', () => {
+    const errors = validateCompletedSelfPostedTrainingInput(
+      makeInput({ dateISO: '2026-07-30', start: '10:00', end: undefined, durationMinutes: 45 }),
+      clock,
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it('rejects when neither end nor durationMinutes is given', () => {
+    const errors = validateCompletedSelfPostedTrainingInput(
+      makeInput({ dateISO: '2026-07-30', start: '10:00', end: undefined, durationMinutes: undefined }),
+      clock,
+    );
+    expect(errors).toContain('either a valid end time or a positive durationMinutes is required');
+  });
+
+  it('rejects zero or negative durationMinutes', () => {
+    const zero = validateCompletedSelfPostedTrainingInput(
+      makeInput({ dateISO: '2026-07-30', start: '10:00', end: undefined, durationMinutes: 0 }),
+      clock,
+    );
+    expect(zero).toContain('either a valid end time or a positive durationMinutes is required');
+
+    const negative = validateCompletedSelfPostedTrainingInput(
+      makeInput({ dateISO: '2026-07-30', start: '10:00', end: undefined, durationMinutes: -10 }),
+      clock,
+    );
+    expect(negative).toContain('either a valid end time or a positive durationMinutes is required');
+  });
+
+  it('still accepts explicit start/end input (existing support unchanged)', () => {
+    const errors = validateCompletedSelfPostedTrainingInput(
+      makeInput({ dateISO: '2026-07-30', start: '10:00', end: '11:30' }),
+      clock,
+    );
+    expect(errors).toEqual([]);
+  });
+
+  it('remains independent of free-text notes when checking the future rule', () => {
+    const withoutNotes = validateCompletedSelfPostedTrainingInput(
+      makeInput({ dateISO: '2026-07-30', start: '10:00', end: '11:00', notes: undefined }),
+      clock,
+    );
+    expect(withoutNotes).toEqual([]);
+  });
+
+  it('defaults to the real clock when no now dependency is injected', () => {
+    // No clock override: relies on dateISO fixtures already being in the
+    // past relative to any real run of this suite.
+    const errors = validateCompletedSelfPostedTrainingInput(makeInput());
+    expect(errors).toEqual([]);
+  });
+});

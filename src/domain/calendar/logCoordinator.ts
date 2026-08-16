@@ -43,6 +43,8 @@ export interface AddCompletedTrainingLogDeps {
   generateId?: () => string;
   /** Optional deterministic clock for testing. */
   nowISO?: () => string;
+  /** Optional deterministic current-instant clock for the future-date/time validation rule. */
+  now?: () => Date;
 }
 
 /**
@@ -68,7 +70,9 @@ export async function addCompletedTrainingLog(
   }
 
   // Step 1: Validate input
-  const validationErrors = validateCompletedSelfPostedTrainingInput(input);
+  const validationErrors = validateCompletedSelfPostedTrainingInput(input, {
+    now: dependencies.now,
+  });
   if (validationErrors.length > 0) {
     throw new Error(
       `addCompletedTrainingLog: validation failed:\n${validationErrors.join('\n')}`,
