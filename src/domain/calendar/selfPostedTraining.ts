@@ -131,6 +131,11 @@ const TIME_RE = /^([01]?\d|2[0-3]):[0-5]\d$/;
  * - either a valid `end` time or a positive `durationMinutes` must be
  *   derivable; `start`/`end`, when given, must match HH:mm.
  * - `intensity`, when given, must be within 1–5.
+ * - `discipline` is REQUIRED for this flow (v1 product rule) — reuses the
+ *   existing category vocabulary (`CATEGORIES`). This is a rule of the
+ *   completed self-posted training flow only; it does not make discipline
+ *   required on `EventOccurrence`/`CalendarEntry` generally, nor on notes,
+ *   events or other flows.
  * - the training's start (dateISO + start, defaulting to midnight when start
  *   is absent) must not be later than the injected `now` — this flow logs
  *   training that already happened, so a future date OR a future time later
@@ -146,6 +151,10 @@ export function validateCompletedSelfPostedTrainingInput(
 
   if (!input.title || !input.title.trim()) {
     errors.push('title is required');
+  }
+
+  if (!input.discipline || !input.discipline.trim()) {
+    errors.push('discipline is required');
   }
 
   if (!input.dateISO || !/^\d{4}-\d{2}-\d{2}$/.test(input.dateISO)) {

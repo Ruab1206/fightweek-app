@@ -194,10 +194,25 @@ describe('validateCompletedSelfPostedTrainingInput', () => {
     expect(validateCompletedSelfPostedTrainingInput(makeInput())).toEqual([]);
   });
 
-  it('accepts optional fields being absent (discipline, location, intensity) when end is given', () => {
+  it('accepts optional fields being absent (location, intensity) when end is given', () => {
     const errors = validateCompletedSelfPostedTrainingInput(
-      makeInput({ discipline: undefined, location: undefined, intensity: undefined }),
+      makeInput({ location: undefined, intensity: undefined }),
     );
+    expect(errors).toEqual([]);
+  });
+
+  it('rejects a missing discipline — required for the completed self-posted training flow', () => {
+    const errors = validateCompletedSelfPostedTrainingInput(makeInput({ discipline: undefined }));
+    expect(errors).toContain('discipline is required');
+  });
+
+  it('rejects a blank discipline', () => {
+    const errors = validateCompletedSelfPostedTrainingInput(makeInput({ discipline: '   ' }));
+    expect(errors).toContain('discipline is required');
+  });
+
+  it('accepts a valid discipline from the existing category vocabulary', () => {
+    const errors = validateCompletedSelfPostedTrainingInput(makeInput({ discipline: 'MMA' }));
     expect(errors).toEqual([]);
   });
 

@@ -221,6 +221,7 @@ describe('logCoordinator', () => {
       dateISO: '2026-08-14',
       start: '18:00',
       durationMinutes: 90,
+      discipline: 'MMA',
     };
 
     await addCompletedTrainingLog(inputWithDuration, 'fighter@example.com', deps);
@@ -257,6 +258,22 @@ describe('logCoordinator', () => {
     await expect(
       addCompletedTrainingLog(validInput, 'fighter@example.com', deps),
     ).rejects.toThrow();
+    expect(deps.persist).not.toHaveBeenCalled();
+  });
+
+  // ──────────────────────────────────────────────
+  // Test 14: Missing discipline is rejected before persistence
+  // ──────────────────────────────────────────────
+  it('rejects missing discipline and does not call persistence', async () => {
+    const deps = createMockDeps();
+    const inputWithoutDiscipline: CompletedSelfPostedTrainingInput = {
+      ...validInput,
+      discipline: undefined,
+    };
+
+    await expect(
+      addCompletedTrainingLog(inputWithoutDiscipline, 'fighter@example.com', deps),
+    ).rejects.toThrow(/discipline is required/);
     expect(deps.persist).not.toHaveBeenCalled();
   });
 });
