@@ -216,18 +216,21 @@ export function buildLogContext(
           new Date(startDateTime).getTime() + (input.durationMinutes ?? 0) * 60000,
         ).toISOString();
 
-  return {
+  const occurrence: EventOccurrence = {
     id: occurrenceId,
     seriesId: null,
     type: 'self_posted_training',
     title: input.title,
-    discipline: input.discipline,
     startDateTime,
     endDateTime,
-    location: input.location,
     status: 'completed',
     hasLogs: true,
   };
+  // Firestore's setDoc() rejects `undefined` field values — omit rather than assign undefined.
+  if (input.discipline !== undefined) occurrence.discipline = input.discipline;
+  if (input.location !== undefined) occurrence.location = input.location;
+
+  return occurrence;
 }
 
 /**
@@ -267,10 +270,11 @@ export function buildCompletedSelfPostedTrainingLog(
     attended: true,
     actualStartDateTime: occurrence.startDateTime,
     actualEndDateTime: occurrence.endDateTime,
-    intensity: input.intensity,
-    discipline: input.discipline,
-    notes: input.notes,
   };
+  // Firestore's setDoc() rejects `undefined` field values — omit rather than assign undefined.
+  if (input.intensity !== undefined) log.intensity = input.intensity;
+  if (input.discipline !== undefined) log.discipline = input.discipline;
+  if (input.notes !== undefined) log.notes = input.notes;
 
   return {
     id: recordId,

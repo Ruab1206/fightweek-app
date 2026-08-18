@@ -276,4 +276,26 @@ describe('logCoordinator', () => {
     ).rejects.toThrow(/discipline is required/);
     expect(deps.persist).not.toHaveBeenCalled();
   });
+
+  // ──────────────────────────────────────────────
+  // Test 15: Passes the Firestore-safe record unchanged (no undefined
+  // values), reproducing the "setDoc() called with invalid data" defect
+  // when optional fields (location, notes, intensity) are omitted.
+  // ──────────────────────────────────────────────
+  it('passes a record with no undefined optional fields to persistence when location/notes/intensity are omitted', async () => {
+    const deps = createMockDeps();
+    const inputWithoutOptionalFields: CompletedSelfPostedTrainingInput = {
+      ...validInput,
+      location: undefined,
+      notes: undefined,
+      intensity: undefined,
+    };
+
+    await addCompletedTrainingLog(inputWithoutOptionalFields, 'fighter@example.com', deps);
+
+    const persistedRecord = deps.persist.mock.calls[0][1];
+    expect('location' in persistedRecord.occurrence).toBe(false);
+    expect('notes' in persistedRecord.log).toBe(false);
+    expect('intensity' in persistedRecord.log).toBe(false);
+  });
 });

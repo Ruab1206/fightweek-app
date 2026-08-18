@@ -36,6 +36,21 @@ function deterministicDeps() {
   };
 }
 
+/** Recursively fails if any `undefined` value exists anywhere in the object graph. */
+function assertNoUndefinedDeep(value: unknown, path = 'record'): void {
+  if (value === undefined) {
+    throw new Error(`Unexpected undefined at ${path}`);
+  }
+  if (value === null || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => assertNoUndefinedDeep(item, `${path}[${i}]`));
+    return;
+  }
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    assertNoUndefinedDeep(val, `${path}.${key}`);
+  }
+}
+
 // ──────────────────────────────────────────────
 // buildCompletedSelfPostedTrainingLog
 // ──────────────────────────────────────────────
@@ -92,6 +107,101 @@ describe('buildCompletedSelfPostedTrainingLog', () => {
     );
 
     expect(record.occurrence.location).toBeUndefined();
+  });
+});
+
+// ──────────────────────────────────────────────
+// buildCompletedSelfPostedTrainingLog — Firestore-safe record construction.
+// `setDoc()` rejects any field whose value is `undefined`, so an absent
+// optional field must be an OMITTED property, never a present property set
+// to `undefined`. See the "Function setDoc() called with invalid data"
+// production defect this guards against.
+// ──────────────────────────────────────────────
+
+describe('buildCompletedSelfPostedTrainingLog — Firestore-safe optional fields', () => {
+  it('builds successfully without location and omits the property entirely', () => {
+    const record = buildCompletedSelfPostedTrainingLog(
+      makeInput({ location: undefined }),
+      deterministicDeps(),
+    );
+
+    expect('location' in record.occurrence).toBe(false);
+    assertNoUndefinedDeep(record);
+  });
+
+  it('builds successfully without notes and omits the property entirely', () => {
+    const record = buildCompletedSelfPostedTrainingLog(
+      makeInput({ notes: undefined }),
+      deterministicDeps(),
+    );
+
+    expect('notes' in record.log).toBe(false);
+    assertNoUndefinedDeep(record);
+  });
+
+  it('builds successfully without intensity and omits the property entirely', () => {
+    const record = buildCompletedSelfPostedTrainingLog(
+      makeInput({ intensity: undefined }),
+      deterministicDeps(),
+    );
+
+    expect('intensity' in record.log).toBe(false);
+    assertNoUndefinedDeep(record);
+  });
+
+  it('contains no undefined values anywhere in the record when every optional field is omitted', () => {
+    const record = buildCompletedSelfPostedTrainingLog(
+      makeInput({ location: undefined, notes: undefined, intensity: undefined }),
+      deterministicDeps(),
+    );
+
+    expect('location' in record.occurrence).toBe(false);
+    expect('notes' in record.log).toBe(false);
+    expect('intensity' in record.log).toBe(false);
+    assertNoUndefinedDeep(record);
+  });
+
+  it('preserves supplied location, notes and intensity exactly', () => {
+    const record = buildCompletedSelfPostedTrainingLog(
+      makeInput({ location: 'Rumble Sports', notes: 'Good rounds', intensity: 4 }),
+      deterministicDeps(),
+    );
+
+    expect(record.occurrence.location).toBe('Rumble Sports');
+    expect(record.log.notes).toBe('Good rounds');
+    expect(record.log.intensity).toBe(4);
+    assertNoUndefinedDeep(record);
+  });
+
+  it('renders correctly via logToHistoryItem when optional fields are absent, with no notes placeholder introduced', () => {
+    const record = buildCompletedSelfPostedTrainingLog(
+      makeInput({ location: undefined, notes: undefined, intensity: undefined }),
+      deterministicDeps(),
+    );
+    const item = logToHistoryItem(record);
+
+    expect(item.location).toBeUndefined();
+    expect(item.notes).toBe('');
+    expect(item.intensity).toBeUndefined();
+  });
+
+  it('keeps required context unchanged when optional fields are omitted (regression)', () => {
+    const record = buildCompletedSelfPostedTrainingLog(
+      makeInput({ location: undefined, notes: undefined, intensity: undefined }),
+      deterministicDeps(),
+    );
+
+    expect(record.occurrence.title).toBe('MMA Sparring');
+    expect(record.occurrence.discipline).toBe('MMA');
+    expect(record.occurrence.startDateTime).toBe('2026-07-30T17:00:00');
+    expect(record.occurrence.endDateTime).toBe('2026-07-30T18:30:00');
+    expect(record.occurrence.status).toBe('completed');
+    expect(record.occurrence.id).toBeTruthy();
+    expect(record.calendarEntry.id).toBeTruthy();
+    expect(record.calendarEntry.occurrenceId).toBe(record.occurrence.id);
+    expect(record.log.id).toBeTruthy();
+    expect(record.log.occurrenceId).toBe(record.occurrence.id);
+    expect(record.log.calendarEntryId).toBe(record.calendarEntry.id);
   });
 
   it('is renderable as a history item even when calendarEntry visibility/status is not active', () => {
