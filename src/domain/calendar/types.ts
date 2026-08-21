@@ -172,6 +172,40 @@ export interface OccurrenceParticipation {
   source?: string;
 }
 
+// ──────────────────────────────────────────────
+// Optional log provenance (Phase 3 calendar-originated slice)
+// ──────────────────────────────────────────────
+
+/**
+ * Optional provenance recorded when a log is created from an existing legacy
+ * calendar session, instead of the standalone unplanned-training entry point.
+ * Provenance only: optional, and never required to render or understand the
+ * log — the `CompletedSelfPostedTrainingLog` snapshot fields (title,
+ * discipline, date/time, location, notes, intensity) remain self-sufficient
+ * on their own. Absent entirely on standalone logs; existing standalone logs
+ * remain valid without it.
+ *
+ * `sessionId` identifies the legacy session that was logged, but is NOT
+ * universally unique per occurrence: a manually materialized recurring
+ * session gets a distinct id per week, but a template-seeded recurring
+ * session (`templates/standard`, auto-fed per week) can carry the SAME id
+ * across multiple dates. `occurrenceDateISO` is therefore a genuine identity
+ * component, not merely defensive context — consumers must use `sessionId`
+ * together with `occurrenceDateISO` to identify the selected occurrence, the
+ * same pairing the existing activity-note key convention (`s_{date}_{id}`)
+ * already relies on.
+ *
+ * Fighter identity is intentionally NOT included here: ownership is already
+ * unambiguous from the owning `CompletedSelfPostedTrainingLog`'s Firestore
+ * path (`.../users/{fighterKey}/eventLogs/{id}`), so duplicating it into
+ * provenance would be redundant.
+ */
+export interface TrainingLogOrigin {
+  type: 'self_posted_calendar_session';
+  sessionId: string;
+  occurrenceDateISO: string;
+}
+
 /** The fighter's journal/log for what actually happened. Protected data. */
 export interface EventLog {
   id: string;
@@ -218,6 +252,8 @@ export interface CompletedSelfPostedTrainingLog {
   calendarEntry: CalendarEntry;
   /** What actually happened. */
   log: EventLog;
+  /** Optional — present only when created from an existing calendar session. */
+  origin?: TrainingLogOrigin;
   createdAt: string;
   updatedAt: string;
 }

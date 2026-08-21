@@ -4,6 +4,10 @@ import {
   eventToOccurrence,
   fraværToOccurrence,
   sessionToOccurrenceAndEntry,
+  isEligibleSelfPostedCalendarSession,
+  isLoggableSelfPostedCalendarOccurrence,
+  buildSelfPostedCalendarLogContext,
+  decideLogTrainingSheetClose,
 } from './adapters';
 import type { CatalogueClass } from '../../types/catalogue';
 import type { FightweekEvent } from '../../types/event';
@@ -260,5 +264,263 @@ describe('core field preservation', () => {
       expect(occ.startDateTime).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
       expect(occ.endDateTime).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
     }
+  });
+});
+
+// ──────────────────────────────────────────────
+// isEligibleSelfPostedCalendarSession (Phase 3 calendar-originated slice)
+// ──────────────────────────────────────────────
+
+describe('isEligibleSelfPostedCalendarSession', () => {
+  it('is eligible for a persisted manual session (no catalogueClassId, no type)', () => {
+    expect(isEligibleSelfPostedCalendarSession({ id: 'sess_1' })).toBe(true);
+  });
+
+  it('rejects a catalogue-linked session', () => {
+    expect(isEligibleSelfPostedCalendarSession({ id: 'sess_1', catalogueClassId: 'cls_1' })).toBe(false);
+  });
+
+  it('rejects a fravær entry', () => {
+    expect(isEligibleSelfPostedCalendarSession({ id: 'fravær_1', type: 'fravær' })).toBe(false);
+  });
+
+  it('rejects a virtual event session', () => {
+    expect(isEligibleSelfPostedCalendarSession({ id: 'event_1_2026-06-15', type: 'event' })).toBe(false);
+  });
+
+  it('rejects a virtual invitation session', () => {
+    expect(isEligibleSelfPostedCalendarSession({ id: 'invitation_1', type: 'invitation' })).toBe(false);
+  });
+
+  it('rejects a rest-day marker', () => {
+    expect(isEligibleSelfPostedCalendarSession({ id: 1, isRestDay: true })).toBe(false);
+  });
+
+  it('rejects a cancelled self-posted session', () => {
+    expect(isEligibleSelfPostedCalendarSession({ id: 'sess_1', status: 'cancelled' })).toBe(false);
+  });
+
+  it('rejects an unsaved new session with no id yet', () => {
+    expect(isEligibleSelfPostedCalendarSession({ id: undefined })).toBe(false);
+    expect(isEligibleSelfPostedCalendarSession({})).toBe(false);
+  });
+
+  it('rejects null/undefined', () => {
+    expect(isEligibleSelfPostedCalendarSession(null)).toBe(false);
+    expect(isEligibleSelfPostedCalendarSession(undefined)).toBe(false);
+  });
+
+  it('accepts a numeric legacy id', () => {
+    expect(isEligibleSelfPostedCalendarSession({ id: 12345 })).toBe(true);
+  });
+});
+
+// ──────────────────────────────────────────────
+// isLoggableSelfPostedCalendarOccurrence (application-level eligibility;
+// Phase 3 calendar-originated slice) — deterministic via injected
+// referenceDateTime, never the system clock.
+// ──────────────────────────────────────────────
+
+describe('isLoggableSelfPostedCalendarOccurrence', () => {
+  const referenceDateTime = new Date('2026-08-14T18:00:00');
+
+  it('is loggable for a past occurrence of an eligible session', () => {
+    expect(
+      isLoggableSelfPostedCalendarOccurrence(
+        { id: 'sess_1' },
+        { occurrenceStartDateTime: '2026-08-14T10:00:00', referenceDateTime },
+      ),
+    ).toBe(true);
+  });
+
+  it('is loggable for an occurrence starting exactly at the reference instant', () => {
+    expect(
+      isLoggableSelfPostedCalendarOccurrence(
+        { id: 'sess_1' },
+        { occurrenceStartDateTime: '2026-08-14T18:00:00', referenceDateTime },
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects a future occurrence, even for an otherwise-eligible session', () => {
+    expect(
+      isLoggableSelfPostedCalendarOccurrence(
+        { id: 'sess_1' },
+        { occurrenceStartDateTime: '2026-08-14T19:00:00', referenceDateTime },
+      ),
+    ).toBe(false);
+  });
+
+  it('rejects a future date entirely', () => {
+    expect(
+      isLoggableSelfPostedCalendarOccurrence(
+        { id: 'sess_1' },
+        { occurrenceStartDateTime: '2026-08-15T09:00:00', referenceDateTime },
+      ),
+    ).toBe(false);
+  });
+
+  it('still rejects a cancelled session even when its occurrence is in the past', () => {
+    expect(
+      isLoggableSelfPostedCalendarOccurrence(
+        { id: 'sess_1', status: 'cancelled' },
+        { occurrenceStartDateTime: '2026-08-14T10:00:00', referenceDateTime },
+      ),
+    ).toBe(false);
+  });
+
+  it('still rejects a catalogue-linked session even when its occurrence is in the past', () => {
+    expect(
+      isLoggableSelfPostedCalendarOccurrence(
+        { id: 'sess_1', catalogueClassId: 'cls_1' },
+        { occurrenceStartDateTime: '2026-08-14T10:00:00', referenceDateTime },
+      ),
+    ).toBe(false);
+  });
+
+  it('is deterministic — never reads the real system clock', () => {
+    // Same session/occurrence, two different injected reference instants,
+    // two different (correct) answers — proves no hidden `new Date()` call.
+    const past = isLoggableSelfPostedCalendarOccurrence(
+      { id: 'sess_1' },
+      { occurrenceStartDateTime: '2026-08-14T10:00:00', referenceDateTime: new Date('2026-08-14T09:00:00') },
+    );
+    const future = isLoggableSelfPostedCalendarOccurrence(
+      { id: 'sess_1' },
+      { occurrenceStartDateTime: '2026-08-14T10:00:00', referenceDateTime: new Date('2026-08-14T11:00:00') },
+    );
+    expect(past).toBe(false);
+    expect(future).toBe(true);
+  });
+});
+
+// ──────────────────────────────────────────────
+// buildSelfPostedCalendarLogContext (Phase 3 calendar-originated slice)
+// ──────────────────────────────────────────────
+
+describe('buildSelfPostedCalendarLogContext', () => {
+  function makeSelfPostedSession(overrides: Partial<TrainingSession> = {}): TrainingSession {
+    return {
+      id: 'sess_1',
+      day: 'Mandag',
+      name: 'Egen løbetur',
+      category: 'Fysisk træning',
+      start: '17:00',
+      end: '18:30',
+      location: 'Fælledparken',
+      status: 'active',
+      ...overrides,
+    };
+  }
+
+  const ctx = { dateISO: '2026-08-14', userId: 'fighter@example.com' };
+
+  it('throws for an ineligible (catalogue-linked) session', () => {
+    expect(() =>
+      buildSelfPostedCalendarLogContext(makeSelfPostedSession({ catalogueClassId: 'cls_1' }), ctx),
+    ).toThrow(/not an eligible self-posted calendar session/);
+  });
+
+  it('does not mutate the input session', () => {
+    const session = makeSelfPostedSession();
+    const snapshot = { ...session };
+    buildSelfPostedCalendarLogContext(session, ctx);
+    expect(session).toEqual(snapshot);
+  });
+
+  it('returns only the prefill required by the caller — no unused occurrence/calendarEntry structures', () => {
+    const prefill = buildSelfPostedCalendarLogContext(makeSelfPostedSession(), ctx);
+    expect(prefill).not.toHaveProperty('occurrence');
+    expect(prefill).not.toHaveProperty('calendarEntry');
+  });
+
+  it('prefills title, discipline, dateISO, start, location and computed duration', () => {
+    const prefill = buildSelfPostedCalendarLogContext(makeSelfPostedSession(), ctx);
+    expect(prefill.title).toBe('Egen løbetur');
+    expect(prefill.discipline).toBe('Fysisk træning');
+    expect(prefill.dateISO).toBe('2026-08-14');
+    expect(prefill.start).toBe('17:00');
+    expect(prefill.location).toBe('Fælledparken');
+    expect(prefill.durationMinutes).toBe(90);
+  });
+
+  it('does not prefill notes or intensity — those remain user-entered', () => {
+    const prefill = buildSelfPostedCalendarLogContext(makeSelfPostedSession(), ctx);
+    expect(prefill.notes).toBeUndefined();
+    expect(prefill.intensity).toBeUndefined();
+  });
+
+  it('attaches origin with the raw sessionId and occurrenceDateISO — not any adapter-derived formatted id', () => {
+    const prefill = buildSelfPostedCalendarLogContext(makeSelfPostedSession(), ctx);
+    expect(prefill.origin).toEqual({
+      type: 'self_posted_calendar_session',
+      sessionId: 'sess_1',
+      occurrenceDateISO: '2026-08-14',
+    });
+  });
+
+  it('uses the explicit occurrence date context, never a toISOString-derived date', () => {
+    const prefill = buildSelfPostedCalendarLogContext(makeSelfPostedSession(), {
+      dateISO: '2026-01-01',
+      userId: 'fighter@example.com',
+    });
+    expect(prefill.dateISO).toBe('2026-01-01');
+    expect(prefill.origin?.occurrenceDateISO).toBe('2026-01-01');
+  });
+
+  // ── Duration edge cases (Task #10) — reject rather than silently invent
+  // or return a zero/negative duration. Overnight sessions are out of scope.
+
+  it('throws when the end time is missing/blank rather than prefilling a zero duration', () => {
+    expect(() =>
+      buildSelfPostedCalendarLogContext(makeSelfPostedSession({ end: '' }), ctx),
+    ).toThrow(/valid positive duration/);
+  });
+
+  it('throws when end equals start (zero duration)', () => {
+    expect(() =>
+      buildSelfPostedCalendarLogContext(makeSelfPostedSession({ start: '17:00', end: '17:00' }), ctx),
+    ).toThrow(/valid positive duration/);
+  });
+
+  it('throws when end is before start under the current same-date model (negative duration)', () => {
+    expect(() =>
+      buildSelfPostedCalendarLogContext(makeSelfPostedSession({ start: '17:00', end: '16:00' }), ctx),
+    ).toThrow(/valid positive duration/);
+  });
+
+  it('still builds successfully for a valid same-day positive duration (regression)', () => {
+    const prefill = buildSelfPostedCalendarLogContext(makeSelfPostedSession({ start: '17:00', end: '18:30' }), ctx);
+    expect(prefill.durationMinutes).toBe(90);
+  });
+});
+
+// ──────────────────────────────────────────────
+// decideLogTrainingSheetClose (Task #5 cancel-return state transition)
+// ──────────────────────────────────────────────
+
+describe('decideLogTrainingSheetClose', () => {
+  it('does not reopen the SessionModal after a successful save', () => {
+    expect(decideLogTrainingSheetClose({ justSaved: true, hasEditingSession: true })).toEqual({
+      reopenSessionModal: false,
+    });
+  });
+
+  it('reopens the SessionModal on cancel when a session was being edited', () => {
+    expect(decideLogTrainingSheetClose({ justSaved: false, hasEditingSession: true })).toEqual({
+      reopenSessionModal: true,
+    });
+  });
+
+  it('does not reopen when there is no editing session to restore', () => {
+    expect(decideLogTrainingSheetClose({ justSaved: false, hasEditingSession: false })).toEqual({
+      reopenSessionModal: false,
+    });
+  });
+
+  it('does not reopen when saved and (defensively) no editing session remains', () => {
+    expect(decideLogTrainingSheetClose({ justSaved: true, hasEditingSession: false })).toEqual({
+      reopenSessionModal: false,
+    });
   });
 });

@@ -61,9 +61,17 @@ interface SessionModalProps {
      * recurrence (#1213). Falls back to single-occurrence onInvite otherwise. */
     onSeriesInvite?: (form: SessionForm, day: string, startDate: Date, recurrence: { interval: number; endDate: string | null }, inviteeEmails: string[]) => void;
     onUninvite?: (email: string) => void;
+    /**
+     * Phase 3 calendar-originated TrainingLog slice. The parent application
+     * layer computes eligibility (self-posted + ownership) and supplies these
+     * — SessionModal performs no conversion, persistence, or ownership checks
+     * itself; it only displays the action and notifies the parent on click.
+     */
+    canLogTraining?: boolean;
+    onLogTraining?: () => void;
 }
 
-const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onSeriesInvite, onUninvite }: SessionModalProps) => {
+const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onSeriesInvite, onUninvite, canLogTraining, onLogTraining }: SessionModalProps) => {
     const { isDark } = useTheme();
     const isNew = !initialData;
     const [form, setForm] = useState<SessionForm>({
@@ -261,6 +269,21 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                                 saveNote={saveNote}
                                 isDark={isDark}
                             />
+                        </div>
+                    )}
+
+                    {/* Log completed training (Phase 3 calendar-originated TrainingLog slice).
+                        Eligibility (self-posted + ownership) is decided entirely by the parent —
+                        this button only appears/fires when told to. */}
+                    {!isNew && canLogTraining && onLogTraining && (
+                        <div className={`px-5 py-3 border-t ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
+                            <button
+                                type="button"
+                                onClick={onLogTraining}
+                                className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${isDark ? 'text-blue-400 hover:bg-blue-900/20' : 'text-blue-600 hover:bg-blue-50'}`}
+                            >
+                                Log denne træning
+                            </button>
                         </div>
                     )}
 

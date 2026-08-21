@@ -277,3 +277,138 @@ describe('LogTrainingSheet — accessibility', () => {
     expect(screen.getByRole('button', { name: 'Luk' })).toBeTruthy();
   });
 });
+
+describe('LogTrainingSheet — standalone (no initialValues), unchanged', () => {
+  it('submits with origin undefined when no initialValues are supplied', async () => {
+    const onSubmit = vi.fn().mockResolvedValue('log-1');
+    render(<LogTrainingSheet open onClose={vi.fn()} onSubmit={onSubmit} />);
+
+    fillValidRequiredFields();
+    submit();
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].origin).toBeUndefined();
+  });
+});
+
+describe('LogTrainingSheet — calendar-originated initialValues', () => {
+  const initialValues = {
+    title: 'Egen løbetur',
+    dateISO: '2026-07-30',
+    start: '10:00',
+    durationMinutes: 60,
+    discipline: 'MMA',
+    location: 'Fælledparken',
+    origin: {
+      type: 'self_posted_calendar_session' as const,
+      sessionId: 'sess_1',
+      occurrenceDateISO: '2026-07-30',
+    },
+  };
+
+  it('prefills the form fields from initialValues on open', () => {
+    render(<LogTrainingSheet open onClose={vi.fn()} onSubmit={vi.fn()} initialValues={initialValues} />);
+
+    expect((screen.getByLabelText(/Titel/i) as HTMLInputElement).value).toBe('Egen løbetur');
+    expect((screen.getByLabelText(/Dato/i) as HTMLInputElement).value).toBe('2026-07-30');
+    expect((screen.getByLabelText(/Starttidspunkt/i) as HTMLInputElement).value).toBe('10:00');
+    expect((screen.getByLabelText(/Varighed/i) as HTMLInputElement).value).toBe('60');
+    expect((screen.getByLabelText(/Disciplin/i) as HTMLSelectElement).value).toBe('MMA');
+    expect((screen.getByLabelText(/Lokation/i) as HTMLInputElement).value).toBe('Fælledparken');
+  });
+
+  it('leaves intensity and notes empty for the fighter to fill in', () => {
+    render(<LogTrainingSheet open onClose={vi.fn()} onSubmit={vi.fn()} initialValues={initialValues} />);
+
+    expect((screen.getByLabelText(/Intensitet/i) as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText(/Noter/i) as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('submits the prefilled values plus the origin unchanged, and lets the fighter adjust actual details', async () => {
+    const onSubmit = vi.fn().mockResolvedValue('log-1');
+    render(<LogTrainingSheet open onClose={vi.fn()} onSubmit={onSubmit} initialValues={initialValues} />);
+
+    fireEvent.change(screen.getByLabelText(/Intensitet/i), { target: { value: '4' } });
+    fireEvent.change(screen.getByLabelText(/Noter/i), { target: { value: 'Følte mig stærk' } });
+    submit();
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    const input = onSubmit.mock.calls[0][0];
+    expect(input.title).toBe('Egen løbetur');
+    expect(input.dateISO).toBe('2026-07-30');
+    expect(input.start).toBe('10:00');
+    expect(input.durationMinutes).toBe(60);
+    expect(input.discipline).toBe('MMA');
+    expect(input.location).toBe('Fælledparken');
+    expect(input.intensity).toBe(4);
+    expect(input.notes).toBe('Følte mig stærk');
+    expect(input.origin).toEqual(initialValues.origin);
+  });
+
+  it('opening “Log træning” does not itself call onSubmit — only an explicit save does', () => {
+    const onSubmit = vi.fn();
+    render(<LogTrainingSheet open onClose={vi.fn()} onSubmit={onSubmit} initialValues={initialValues} />);
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('cancelling creates nothing', () => {
+    const onSubmit = vi.fn();
+    const onClose = vi.fn();
+    render(<LogTrainingSheet open onClose={onClose} onSubmit={onSubmit} initialValues={initialValues} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /annuller/i }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets to a different session’s values when reopened for another selected session (no stale carryover)', () => {
+    const { rerender } = render(
+      <LogTrainingSheet open onClose={vi.fn()} onSubmit={vi.fn()} initialValues={initialValues} />,
+    );
+    expect((screen.getByLabelText(/Titel/i) as HTMLInputElement).value).toBe('Egen løbetur');
+
+    const otherValues = {
+      title: 'BJJ Sparring',
+      dateISO: '2026-07-29',
+      start: '18:00',
+      durationMinutes: 90,
+      discipline: 'BJJ',
+      location: 'Rumble Sports',
+      origin: {
+        type: 'self_posted_calendar_session' as const,
+        sessionId: 'sess_2',
+        occurrenceDateISO: '2026-07-29',
+      },
+    };
+
+    // Parent always closes then reopens with a new session's prefill.
+    rerender(<LogTrainingSheet open={false} onClose={vi.fn()} onSubmit={vi.fn()} initialValues={initialValues} />);
+    rerender(<LogTrainingSheet open onClose={vi.fn()} onSubmit={vi.fn()} initialValues={otherValues} />);
+
+    expect((screen.getByLabelText(/Titel/i) as HTMLInputElement).value).toBe('BJJ Sparring');
+    expect((screen.getByLabelText(/Dato/i) as HTMLInputElement).value).toBe('2026-07-29');
+    expect((screen.getByLabelText(/Starttidspunkt/i) as HTMLInputElement).value).toBe('18:00');
+    expect((screen.getByLabelText(/Varighed/i) as HTMLInputElement).value).toBe('90');
+  });
+
+  it('resets to the empty standalone defaults when reopened without initialValues (no stale calendar prefill/origin)', async () => {
+    const onSubmit = vi.fn().mockResolvedValue('log-1');
+    const { rerender } = render(
+      <LogTrainingSheet open onClose={vi.fn()} onSubmit={onSubmit} initialValues={initialValues} />,
+    );
+    expect((screen.getByLabelText(/Titel/i) as HTMLInputElement).value).toBe('Egen løbetur');
+
+    rerender(<LogTrainingSheet open={false} onClose={vi.fn()} onSubmit={onSubmit} />);
+    rerender(<LogTrainingSheet open onClose={vi.fn()} onSubmit={onSubmit} />);
+
+    expect((screen.getByLabelText(/Titel/i) as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText(/Lokation/i) as HTMLInputElement).value).toBe('');
+
+    fillValidRequiredFields();
+    submit();
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].origin).toBeUndefined();
+  });
+});

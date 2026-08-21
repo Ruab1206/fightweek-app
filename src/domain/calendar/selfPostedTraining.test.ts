@@ -229,6 +229,72 @@ describe('buildCompletedSelfPostedTrainingLog — Firestore-safe optional fields
 });
 
 // ──────────────────────────────────────────────
+// buildCompletedSelfPostedTrainingLog — optional origin
+// (Phase 3 calendar-originated slice; backward-compat with standalone logs)
+// ──────────────────────────────────────────────
+
+describe('buildCompletedSelfPostedTrainingLog — optional origin', () => {
+  it('omits origin entirely for a standalone (non-calendar-originated) input — unchanged from before', () => {
+    const record = buildCompletedSelfPostedTrainingLog(makeInput(), deterministicDeps());
+
+    expect('origin' in record).toBe(false);
+    assertNoUndefinedDeep(record);
+  });
+
+  it('attaches the provided origin unchanged when supplied', () => {
+    const record = buildCompletedSelfPostedTrainingLog(
+      makeInput({
+        origin: {
+          type: 'self_posted_calendar_session',
+          sessionId: 'sess_1',
+          occurrenceDateISO: '2026-07-30',
+        },
+      }),
+      deterministicDeps(),
+    );
+
+    expect(record.origin).toEqual({
+      type: 'self_posted_calendar_session',
+      sessionId: 'sess_1',
+      occurrenceDateISO: '2026-07-30',
+    });
+    assertNoUndefinedDeep(record);
+  });
+
+  it('does not require origin to render — snapshot fields remain self-sufficient either way', () => {
+    const withOrigin = buildCompletedSelfPostedTrainingLog(
+      makeInput({
+        origin: { type: 'self_posted_calendar_session', sessionId: 'sess_1', occurrenceDateISO: '2026-07-30' },
+      }),
+      deterministicDeps(),
+    );
+    const withoutOrigin = buildCompletedSelfPostedTrainingLog(makeInput(), deterministicDeps());
+
+    const itemWithOrigin = logToHistoryItem(withOrigin);
+    const itemWithoutOrigin = logToHistoryItem(withoutOrigin);
+
+    expect(itemWithOrigin.title).toBe(itemWithoutOrigin.title);
+    expect(itemWithOrigin.durationMinutes).toBe(itemWithoutOrigin.durationMinutes);
+  });
+
+  // Task #6: multiple explicit logs for the same calendar origin are allowed
+  // (temporary, least-assumptive behavior) — no uniqueness is enforced here.
+  it('builds two distinct log ids for two logs sharing identical origin provenance (duplicates allowed, not prevented)', () => {
+    const sameOrigin = {
+      type: 'self_posted_calendar_session' as const,
+      sessionId: 'sess_1',
+      occurrenceDateISO: '2026-07-30',
+    };
+    const first = buildCompletedSelfPostedTrainingLog(makeInput({ origin: sameOrigin }));
+    const second = buildCompletedSelfPostedTrainingLog(makeInput({ origin: sameOrigin }));
+
+    expect(first.id).not.toBe(second.id);
+    expect(first.origin).toEqual(sameOrigin);
+    expect(second.origin).toEqual(sameOrigin);
+  });
+});
+
+// ──────────────────────────────────────────────
 // buildLogContext
 // ──────────────────────────────────────────────
 

@@ -54,6 +54,15 @@ import type { EventsPageHandle } from './pages/EventsPage';
 import AddScreen from './components/AddScreen';
 import type { AddType } from './components/AddScreen';
 import TrainingLogPage from './pages/TrainingLogPage';
+import { LogTrainingSheet } from './components/LogTrainingSheet';
+import { useEventLogs } from './hooks/useEventLogs';
+import {
+  isLoggableSelfPostedCalendarOccurrence,
+  buildSelfPostedCalendarLogContext,
+  decideLogTrainingSheetClose,
+  toDateTime,
+} from './domain/calendar/adapters';
+import type { CompletedSelfPostedTrainingInput } from './domain/calendar/selfPostedTraining';
 
 const App = () => {
   // --- Hooks ---
@@ -103,6 +112,20 @@ const App = () => {
   const { invitations, createInvitation, createSeriesInvitation, respondToInvitation, respondToSeries, cancelInvitation, cancelInvitationForActivity, cancelInvitationsForActivityFrom, cancelSeries, dismissInvitation, removeInvitee } = useInvitations();
   const { getNote, saveNote } = useActivityNotes(activeFighterKey);
   const { lastSeen: notificationsLastSeen, markSeen: markNotificationsSeen, dismissed: notificationsDismissed, dismiss: dismissNotification, dismissAll: dismissAllNotifications } = useNotificationsMeta(activeFighterKey);
+
+  // Phase 3 calendar-originated TrainingLog slice — reuses the SAME hook/
+  // coordinator/service/lifecycle as the standalone "Log træning" entry point
+  // (TrainingLogPage). Only `addLog` is needed here; the list itself is owned
+  // by TrainingLogPage's own instance of this hook. Known inefficiency (an
+  // extra one-shot eventLogs read on every mount, no live subscription) is
+  // deferred rather than fixed in this slice — see revision report.
+  const { addLog: addEventLog } = useEventLogs(activeFighterKey);
+  const [logTrainingOpen, setLogTrainingOpen] = useState(false);
+  const [logTrainingInitialValues, setLogTrainingInitialValues] = useState<CompletedSelfPostedTrainingInput | null>(null);
+  // True only between a successful save and the sheet's own onClose() call
+  // right after — lets onClose tell "saved, return to calendar" apart from
+  // "cancelled, restore the SessionModal for the same session" (Task #5).
+  const logTrainingJustSavedRef = useRef(false);
 
   // When the arranger removes or cancels an activity they invited people to, the
   // matching invitation must be cancelled too so invitees are notified (#1201).
@@ -280,6 +303,56 @@ const App = () => {
     todayRef, mobileTodayRef, view, user, currentWeek, setCurrentWeek,
     multiWeekData, scrollDays, weeksBack, setWeeksBack, weeksAhead, setWeeksAhead, searchMode,
   });
+
+  // Phase 3 calendar-originated TrainingLog slice — eligibility (self-posted,
+  // not cancelled, not future, plus ownership) for the session currently open
+  // in SessionModal. Computed once here so desktop, mobile and SearchOverlay
+  // all get the identical answer, since all three converge on the same
+  // `editingSession` state. Ownership stays composed through the existing
+  // `canCreateLog` gate (App-level identity check + Firestore rules remain
+  // the security boundary) — it is never folded into the pure predicate.
+  const canLogSelectedSession = useMemo(() => {
+    if (!canCreateLog) return false;
+    const weekNum = editingWeek || currentWeek;
+    const d = getDateForWeekDay(weekNum, editingDay);
+    const dateISO = d ? toLocalISODate(d) : '';
+    if (!dateISO) return false;
+    const occurrenceStartDateTime = toDateTime(dateISO, (editingSession as any)?.start);
+    return isLoggableSelfPostedCalendarOccurrence(editingSession as any, {
+      occurrenceStartDateTime,
+      referenceDateTime: new Date(),
+    });
+  }, [canCreateLog, editingSession, editingWeek, currentWeek, editingDay]);
+
+  // Parent-owned: verify eligibility/ownership, supply explicit occurrence
+  // context, invoke the pure adapter, then open the existing log form with
+  // initial values. SessionModal itself only notifies that logging was
+  // requested — no conversion/persistence/ownership logic lives there.
+  // `editingSession`/`editingDay`/`editingWeek` are deliberately left intact
+  // so the SessionModal can be restored unchanged if the fighter cancels
+  // instead of saving (Task #5 cancel-return behavior).
+  const handleLogTrainingRequested = useCallback(() => {
+    if (!editingSession || !canLogSelectedSession) return;
+    const weekNum = editingWeek || currentWeek;
+    const d = getDateForWeekDay(weekNum, editingDay);
+    const dateISO = d ? toLocalISODate(d) : '';
+    if (!dateISO) {
+      showToast('Kunne ikke bestemme træningens dato', 'error');
+      return;
+    }
+    try {
+      const prefill = buildSelfPostedCalendarLogContext(editingSession as any, {
+        dateISO,
+        userId: activeFighterKey,
+      });
+      setLogTrainingInitialValues(prefill);
+      setModalOpen(false);
+      setLogTrainingOpen(true);
+    } catch (err) {
+      console.error('[log-training] failed to build calendar log context:', err);
+      showToast('Kunne ikke forberede træningsloggen', 'error');
+    }
+  }, [editingSession, canLogSelectedSession, editingWeek, currentWeek, editingDay, activeFighterKey, showToast]);
 
   // #1216: keep the user anchored on an activity after they close or add it.
   // On mobile we only scroll when the activity's day is OFF-SCREEN, so glancing
@@ -1020,6 +1093,8 @@ const App = () => {
         onFeedback={(ctx) => setFeedbackContext(ctx)}
         getNote={getNote}
         saveNote={saveNote}
+        canLogTraining={canLogSelectedSession}
+        onLogTraining={handleLogTrainingRequested}
         inviteCandidates={inviteCandidates}
         existingInvitees={(() => {
           // Surface anyone already invited to *this* activity (same title + day)
@@ -1091,6 +1166,38 @@ const App = () => {
           }
         }}
       />}
+      {/* Phase 3 calendar-originated TrainingLog slice — same LogTrainingSheet,
+          coordinator, service and hook as the standalone entry point; only the
+          initial values differ. Cancelling creates nothing and restores the
+          originating SessionModal (Task #5); a fresh open with no
+          initialValues (below) matches the standalone flow unchanged. */}
+      {canCreateLog && (
+        <LogTrainingSheet
+          open={logTrainingOpen}
+          initialValues={logTrainingInitialValues ?? undefined}
+          onClose={() => {
+            const { reopenSessionModal } = decideLogTrainingSheetClose({
+              justSaved: logTrainingJustSavedRef.current,
+              hasEditingSession: !!editingSession,
+            });
+            logTrainingJustSavedRef.current = false;
+            setLogTrainingOpen(false);
+            setLogTrainingInitialValues(null);
+            if (reopenSessionModal) setModalOpen(true);
+          }}
+          onSubmit={async (input) => {
+            try {
+              const id = await addEventLog(input);
+              logTrainingJustSavedRef.current = true;
+              showToast('Træning logget.', 'success');
+              return id;
+            } catch (err) {
+              showToast(err instanceof Error ? err.message : 'Kunne ikke gemme træningen.', 'error');
+              throw err;
+            }
+          }}
+        />
+      )}
       {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}
       {feedbackContext && <FeedbackModal user={user} currentContext={feedbackContext} onClose={() => setFeedbackContext(null)} onShowToast={showToast} />}
       {adminOpen && (

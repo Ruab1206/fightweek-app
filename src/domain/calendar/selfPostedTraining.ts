@@ -27,6 +27,7 @@ import type {
   CalendarEntry,
   EventLog,
   TrainingHistoryItem,
+  TrainingLogOrigin,
 } from './types';
 
 // ──────────────────────────────────────────────
@@ -62,6 +63,12 @@ export interface CompletedSelfPostedTrainingInput {
    * to '' when omitted.
    */
   userId?: string;
+  /**
+   * Optional provenance — present only when this input was built from an
+   * existing legacy calendar session (see `buildSelfPostedCalendarLogContext`
+   * in `./adapters`). Absent for the standalone unplanned-training flow.
+   */
+  origin?: TrainingLogOrigin;
 }
 
 /** Injectable id/clock so builders stay deterministic and testable. */
@@ -276,7 +283,7 @@ export function buildCompletedSelfPostedTrainingLog(
   if (input.discipline !== undefined) log.discipline = input.discipline;
   if (input.notes !== undefined) log.notes = input.notes;
 
-  return {
+  const record: CompletedSelfPostedTrainingLog = {
     id: recordId,
     occurrence,
     calendarEntry,
@@ -284,6 +291,11 @@ export function buildCompletedSelfPostedTrainingLog(
     createdAt: now,
     updatedAt: now,
   };
+  // Optional provenance — omit rather than assign undefined (same Firestore-safe
+  // pattern as the other optional fields above). Absent for standalone logs.
+  if (input.origin !== undefined) record.origin = input.origin;
+
+  return record;
 }
 
 // ──────────────────────────────────────────────

@@ -3,8 +3,12 @@
  * completed training after the fact (Phase 3 active slice, Step 4.2).
  *
  * Deliberately knows nothing about Firestore, fighter keys, hooks, or
- * navigation — it only calls the injected `onSubmit`. A future page will
- * connect `onSubmit` to `useEventLogs().addLog`.
+ * navigation — it only calls the injected `onSubmit`. Used both by the
+ * standalone "Log træning" entry point (no `initialValues`) and by the
+ * calendar-originated flow, which supplies `initialValues` built by the
+ * application layer from `buildSelfPostedCalendarLogContext` (see
+ * `src/domain/calendar/adapters.ts`) — this component itself performs no
+ * conversion, persistence, or eligibility/ownership checks.
  *
  * Completion comes from using this flow, not from the presence of notes —
  * see `src/domain/calendar/selfPostedTraining.ts`. All business rules
@@ -20,11 +24,30 @@ import {
   validateCompletedSelfPostedTrainingInput,
   type CompletedSelfPostedTrainingInput,
 } from '../domain/calendar/selfPostedTraining';
+import type { TrainingLogOrigin } from '../domain/calendar/types';
+
+/**
+ * Prefillable subset for a calendar-originated opening. Only values the
+ * planned session already provides — the fighter still enters/adjusts actual
+ * details (intensity, notes) themselves. `origin` travels separately from the
+ * editable fields; it is never shown/edited in the form.
+ */
+export interface LogTrainingSheetInitialValues {
+  title?: string;
+  dateISO?: string;
+  start?: string;
+  durationMinutes?: number;
+  discipline?: string;
+  location?: string;
+  origin?: TrainingLogOrigin;
+}
 
 export interface LogTrainingSheetProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (input: CompletedSelfPostedTrainingInput) => Promise<string | void>;
+  /** Omit for the standalone flow — behavior is then unchanged from before. */
+  initialValues?: LogTrainingSheetInitialValues;
 }
 
 interface FormState {
@@ -55,6 +78,25 @@ function emptyFormState(): FormState {
     location: '',
     intensity: '',
     notes: '',
+  };
+}
+
+/**
+ * Seed the form from a calendar-originated prefill, falling back to the same
+ * empty defaults as the standalone flow for anything not supplied. Intensity
+ * and notes are never prefilled — they are always user-entered.
+ */
+function formStateFromInitialValues(initialValues?: LogTrainingSheetInitialValues): FormState {
+  const base = emptyFormState();
+  if (!initialValues) return base;
+  return {
+    ...base,
+    title: initialValues.title ?? base.title,
+    dateISO: initialValues.dateISO ?? base.dateISO,
+    start: initialValues.start ?? base.start,
+    duration: initialValues.durationMinutes !== undefined ? String(initialValues.durationMinutes) : base.duration,
+    discipline: initialValues.discipline ?? base.discipline,
+    location: initialValues.location ?? base.location,
   };
 }
 
@@ -89,22 +131,26 @@ const ERROR_FIELD: Record<string, string> = {
   'discipline is required': 'discipline',
 };
 
-export function LogTrainingSheet({ open, onClose, onSubmit }: LogTrainingSheetProps) {
+export function LogTrainingSheet({ open, onClose, onSubmit, initialValues }: LogTrainingSheetProps) {
   const { isDark } = useTheme();
   const [form, setForm] = useState<FormState>(emptyFormState);
+  const [origin, setOrigin] = useState<TrainingLogOrigin | undefined>(undefined);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  // Fresh form + cleared feedback each time the sheet is (re)opened.
+  // Fresh form + cleared feedback each time the sheet is (re)opened. Also
+  // re-seeds whenever `initialValues` itself changes (a different selected
+  // session) so no stale values/provenance leak from a previous opening.
   useEffect(() => {
     if (open) {
-      setForm(emptyFormState());
+      setForm(formStateFromInitialValues(initialValues));
+      setOrigin(initialValues?.origin);
       setErrors([]);
       setSubmitError(null);
     }
-  }, [open]);
+  }, [open, initialValues]);
 
   useEffect(() => {
     if (open) titleInputRef.current?.focus();
@@ -145,6 +191,7 @@ export function LogTrainingSheet({ open, onClose, onSubmit }: LogTrainingSheetPr
       location: form.location.trim() ? form.location.trim() : undefined,
       intensity: form.intensity !== '' ? Number(form.intensity) : undefined,
       notes: form.notes.trim() ? form.notes.trim() : undefined,
+      origin,
     };
 
     const domainErrors = validateCompletedSelfPostedTrainingInput(input);
