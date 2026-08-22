@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { stripEvents } from './useScheduleData';
+import { stripVirtualEntries } from './useScheduleData';
 
-describe('stripEvents', () => {
+describe('stripVirtualEntries', () => {
   it('removes sessions with type "event"', () => {
     const weekData = {
       Mandag: [
@@ -15,7 +15,7 @@ describe('stripEvents', () => {
       lastUpdated: '2026-04-18T10:00:00Z',
     };
 
-    const result = stripEvents(weekData);
+    const result = stripVirtualEntries(weekData);
 
     expect(result.Mandag).toHaveLength(2);
     expect(result.Mandag.map((s: any) => s.name)).toEqual(['MMA', 'Boksning']);
@@ -23,21 +23,50 @@ describe('stripEvents', () => {
     expect(result.lastUpdated).toBe('2026-04-18T10:00:00Z');
   });
 
+  it('removes sessions with type "calendar_entry" (Checkpoint B projected new-model entries)', () => {
+    const weekData = {
+      Mandag: [
+        { id: 1, name: 'MMA', type: 'training' },
+        { id: 2, name: 'Solo run', type: 'calendar_entry', readOnly: true },
+      ],
+    };
+
+    const result = stripVirtualEntries(weekData);
+
+    expect(result.Mandag).toHaveLength(1);
+    expect(result.Mandag[0].name).toBe('MMA');
+  });
+
+  it('does not remove "invitation" entries (unrelated behavior, unchanged)', () => {
+    const weekData = {
+      Mandag: [
+        { id: 1, name: 'MMA', type: 'training' },
+        { id: 2, name: 'Invited class', type: 'invitation' },
+      ],
+    };
+
+    const result = stripVirtualEntries(weekData);
+
+    expect(result.Mandag).toHaveLength(2);
+    expect(result.Mandag.map((s: any) => s.type)).toEqual(['training', 'invitation']);
+  });
+
   it('does not mutate the original data', () => {
     const weekData = {
       Mandag: [
         { id: 1, name: 'MMA', type: 'training' },
         { id: 2, name: 'Fight Night', type: 'event' },
+        { id: 3, name: 'Solo run', type: 'calendar_entry' },
       ],
     };
 
-    stripEvents(weekData);
+    stripVirtualEntries(weekData);
 
-    expect(weekData.Mandag).toHaveLength(2);
+    expect(weekData.Mandag).toHaveLength(3);
   });
 
   it('handles empty week data', () => {
-    const result = stripEvents({});
+    const result = stripVirtualEntries({});
     expect(result).toEqual({});
   });
 
@@ -48,7 +77,7 @@ describe('stripEvents', () => {
       notes: 'some text',
     };
 
-    const result = stripEvents(weekData);
+    const result = stripVirtualEntries(weekData);
     expect(result.notes).toBe('some text');
     expect(result.lastUpdated).toBe('2026-04-18T10:00:00Z');
     expect(result.Mandag).toHaveLength(0);

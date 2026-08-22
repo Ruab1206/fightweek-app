@@ -6,12 +6,21 @@ import { db } from '../config/firebase';
 import { FIGHTERS as DEFAULT_FIGHTERS, ROOT_COLLECTION, resolveFighterKey } from '../config/constants';
 import { getISOWeek } from '../utils/dateUtils';
 
-/** Strip virtual event sessions before persisting (events are merged at render time by useEventMerge). */
-export function stripEvents(weekData: DocumentData): DocumentData {
+/**
+ * Strip virtual/projected session entries before persisting to a legacy week
+ * document. `event` sessions are merged at render time by `useEventMerge`;
+ * `calendar_entry` entries are merged at render time by
+ * `useCalendarEntryMerge` (Checkpoint B new-model calendar aggregate
+ * projection) — NEITHER must ever be written into `weeks/*`. `invitation`
+ * entries are deliberately NOT included here: they are never routed into a
+ * legacy week save today (merged read-only, separately from this save path),
+ * so stripping them would be an unrelated behavior change.
+ */
+export function stripVirtualEntries(weekData: DocumentData): DocumentData {
   const data = structuredClone(weekData);
   for (const key of Object.keys(data)) {
     if (Array.isArray(data[key])) {
-      data[key] = data[key].filter((s: any) => s.type !== 'event');
+      data[key] = data[key].filter((s: any) => s.type !== 'event' && s.type !== 'calendar_entry');
     }
   }
   return data;
@@ -120,7 +129,7 @@ export function useScheduleData({ user, activeFighter, accessDenied, isBrowserBl
   }, [user, activeKey, currentWeek, accessDenied, isBrowserBlocked, FIGHTERS, teamKeysSig]);
 
   const saveToDb = async (newData: DocumentData) => {
-    const clean = stripEvents(newData);
+    const clean = stripVirtualEntries(newData);
     const docRef = doc(db, ROOT_COLLECTION, activeKey, 'weeks', `week_${currentWeek}`);
     clean.lastUpdated = new Date().toISOString();
     await setDoc(docRef, clean);
@@ -188,7 +197,7 @@ export function useMultiWeekData(
   }, [user, fighterKey, weekNumbers.join(','), accessDenied, isBrowserBlocked]);
 
   const saveWeekToDb = useCallback(async (weekNum: number, newData: DocumentData) => {
-    const clean = stripEvents(newData);
+    const clean = stripVirtualEntries(newData);
     const docRef = doc(db, ROOT_COLLECTION, fighterKey, 'weeks', `week_${weekNum}`);
     clean.lastUpdated = new Date().toISOString();
     await setDoc(docRef, clean);
