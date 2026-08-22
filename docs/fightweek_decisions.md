@@ -1,6 +1,6 @@
 # Fightweek Decisions
 
-_Last updated: 2026-07-18_
+_Last updated: 2026-08-22_
 
 This document captures current product and architecture decisions for the Fightweek scheduling, participation and logging domain.
 
@@ -224,3 +224,35 @@ Hedge:
 - Keep the domain model clean in app code.
 - Avoid coupling app logic too tightly to Firestore document shape.
 - Introduce repository/service boundaries before any migration.
+
+## 17. One TrainingLog per fighter and concrete calendar occurrence
+
+For one fighter and one concrete calendar occurrence, the intended cardinality is zero or one `TrainingLog`.
+
+- Two or more calendar-originated logs for the same fighter and occurrence are a data-integrity conflict, not normal behavior.
+- There is no automatic conflict resolution: existing conflicts are never automatically merged, deleted, overwritten, hidden, ranked, or resolved.
+- Standalone logs without calendar provenance remain outside this invariant — calendar-occurrence uniqueness does not apply to them.
+
+## 18. TrainingLog consistency direction for standalone/unplanned training
+
+Every `TrainingLog` conceptually belongs to a training occurrence. The historical log itself remains self-contained and snapshot-based; provenance remains optional for historical readability and standalone backward compatibility.
+
+The current standalone "Log tr\u00e6ning" flow is a transitional secondary flow for unplanned training, not the permanent conceptual end state. The final model must either:
+
+- consistently create the required `EventOccurrence` + `CalendarEntry` + `TrainingLog`, so unplanned training also participates in the calendar model; or
+- remove the standalone creation entry point once the calendar-originated flow can fully replace it.
+
+New coupling to the legacy week-document model must not be added merely to satisfy this direction. This decision records the direction only; it does not select or implement either option.
+
+## 19. Enforcement staging: UI mitigation vs atomic persistence enforcement
+
+UI mitigation (loading/error/none/one/conflict classification and visible creation gating) and atomic persistence-level enforcement are distinct and must not be conflated.
+
+- The verified UI mitigation must not be described as atomic enforcement.
+- A concurrent two-client race remains technically possible; the risk is currently assessed as low.
+- Concurrency-safe atomic reservation and persistence-level uniqueness are deferred hardening, not automatically the next active slice.
+- Any future reservation, rule, inventory, or backfill work to close this gap requires separate approval.
+
+## 20. Verification terminology: responsive mobile view vs physical mobile device
+
+"Responsive mobile view verified" means the mobile layout was manually tested by resizing the desktop browser until the application rendered its mobile layout. This is not the same as physical mobile-device testing, and documentation must preserve that distinction — neither claiming physical-device verification that did not happen, nor describing mobile as entirely unverified.

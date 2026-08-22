@@ -2,7 +2,7 @@
 
 _Tracks the in-progress refactor toward the CalendarEntry/EventLog target model: what's done, what's active now, and what's explicitly deferred. Complements /docs/target_architecture.md (the stable north star) and /docs/fightweek_decisions.md (durable domain decisions) — this file is the living status/decision log for the refactor itself._
 
-_Last updated: 2026-08-20_
+_Last updated: 2026-08-22_
 
 ---
 
@@ -21,7 +21,17 @@ Pure `decideDeletion` gate wired into session, fravær and event delete paths (d
 ### Phase 3 — CalendarEntry/EventLog strangler (in progress)
 **Slice 1: Log completed self-posted training** — completed, tested, deployed to preview, manually verified successfully (2026-08-20).
 
-See "Completed Slice: Log completed self-posted training" and "Next Planned Slice" below.
+**Slice 2: Calendar-originated logging** — completed, tested, deployed to preview:
+- calendar-entry discovery and candidate selection completed
+- individual self-posted legacy calendar occurrence selected and verified as the first calendar-originated candidate
+- calendar-originated create flow implemented and verified
+- exact-provenance read-side association implemented and verified
+- none/one/conflict classification and visible creation gating implemented and verified
+- verified in desktop view
+- verified in responsive mobile view using a resized desktop browser
+- physical mobile-device verification remains outstanding
+
+See "Completed Slice: Log completed self-posted training", "Phase 3 checkpoint (2026-08-22)" and "Next Planned Slice" below.
 
 ---
 
@@ -152,42 +162,78 @@ The standalone "log completed training" entry point (demonstrated in this slice)
 
 ---
 
-## Next Planned Slice: Discovery & Planning (not yet started)
+## Phase 3 checkpoint (2026-08-22): calendar-originated logging, association and integrity classification
 
-Before implementing a second slice to connect training logging to existing calendar entries, the following discovery work is required:
+Discovery for the second slice is complete. The chosen candidate — an individual self-posted legacy calendar occurrence — was selected, connected to logging, given read-side association, and given read-side integrity classification, across three verified commits:
 
-**Inventory and assess existing entry types:**
+- `503e207` — calendar-originated creation from an existing self-posted legacy calendar session.
+- `24ad192` — exact-provenance read-side association and read-only detail.
+- `27f1434` — loading/error/none/one/conflict classification and visible creation gating.
 
-1. Identify all types of calendar entries that already exist in fighter calendars (e.g., catalogue-class occurrences, self-posted training, events, fravær, etc.).
-2. For each type, examine identity stability:
-   - Does the entry persist with a stable id?
-   - How is the entry stored and queried?
-   - Are there transformation or reconciliation steps that could break the identity?
-3. Determine which entry type is safest to connect first:
-   - Prioritize simple, stable, single-owner types.
-   - Defer complex flows (participation, series, source reconciliation) to later slices.
-4. Define user-flow tests before implementation:
-   - Verify the chosen entry type's UI and behavior remain unchanged when logging is added.
-   - Define expectations for prefilled context.
-   - Clarify how edit/cancel/remove operations interact with logs.
+### What the first calendar-originated strangler slice proves
 
-**Likely candidates for inspection** (not selected yet):
+- A legacy session can be adapted without pretending it already is normalized persistence.
+- `EventOccurrence` and `CalendarEntry` context can be extracted in pure application/domain logic.
+- Explicit fighter action creates a self-contained `TrainingLog`.
+- History remains independent of later calendar changes.
+- Optional provenance supports exact read-side association.
+- Standalone visually similar logs are not associated without provenance.
+- Shared application behavior supports desktop, responsive mobile view, and SearchOverlay entry paths.
+- Data conflicts can be surfaced without destructive automatic cleanup.
 
-- Self-posted training already present in a fighter's calendar (simple, single-owner, no participation).
-- An individual catalogue-class occurrence with a stable occurrence id.
+### Product invariant and current enforcement level
 
-**Deliverables:**
+- Intended cardinality: zero or one `TrainingLog` per fighter and concrete calendar occurrence.
+- Two or more is a data-integrity conflict, not normal behavior.
+- The current UI mitigation (loading/error/none/one/conflict) is verified.
+- Atomic persistence enforcement is **not** implemented.
+- Concurrent duplicate writes remain a known, currently low-risk hardening gap.
+- Atomic reservation/rules work is deferred and separately approval-gated ("Slice B").
 
-- A decision document comparing entry types by stability and complexity.
-- User-flow tests for the chosen type.
-- Updated backlog with the chosen slice, acceptance criteria, and known risks.
+### Manual verification evidence (2026-08-22)
 
-**Guardrails to maintain during discovery:**
+The `feature/bedre-design` preview at commit `27f1434` was manually verified in desktop view and responsive mobile view in a resized desktop browser; physical mobile-device verification remains outstanding — it is not claimed as done, and mobile is not described as unverified, since shared application logic and automated tests already cover the common desktop/mobile/SearchOverlay path.
 
-- Do not implement logging integration during discovery — only inspect and assess.
-- Do not broaden the domain model to support special cases.
-- Preserve the note-vs-log distinction explicitly.
-- Do not begin FullCalendar work yet (that remains a future spike).
+Verified in both desktop view and responsive mobile view:
+
+- An eligible self-posted calendar training can be opened.
+- The calendar-originated logging flow is available when no associated log exists.
+- The logging form receives prefilled calendar context.
+- Associated TrainingLogs are shown through exact provenance.
+- A one-log state shows the existing log read-only and does not offer another create action.
+- A multi-log state shows a clear data-integrity conflict.
+- Conflicting logs remain inspectable read-only.
+- No log is selected as canonical.
+- "Log denne træning" is unavailable in the conflict state.
+
+### Standalone-flow consistency direction (clarification, not yet implemented)
+
+Conceptually, every `TrainingLog` belongs to a training occurrence. The existing standalone "Log træning" flow remains a valid transitional secondary flow for unplanned training. Today it creates self-contained occurrence, calendar-entry, and log context inside the new `TrainingLog` aggregate, but it does not create a visible legacy calendar session.
+
+This must not become the permanent conceptual end state. The target behavior for unplanned training must eventually be one of:
+
+- the action consistently creates the required new-model `EventOccurrence` + `CalendarEntry` + `TrainingLog`, allowing the training to participate in the calendar model; or
+- the standalone creation action is removed when the calendar-originated flow can fully replace it.
+
+No new special case is being added to the old week documents to satisfy this direction. This is recorded as a product/model clarification that must be resolved before expanding the standalone flow — it is not decided or implemented here.
+
+### Next planning focus
+
+- Optionally perform physical mobile-device verification when proportionate.
+- Clarify the target new-model behavior of standalone/unplanned completed training (see above).
+- Then select the next domain-model strangler step.
+- Atomic reservation/persistence-level uniqueness is **not** automatically the next active slice — it remains explicit deferred hardening.
+- Catalogue integration, Participation, recurrence, reconciliation, and FullCalendar remain deferred unless deliberately selected.
+
+### Retrospective
+
+- Define cardinality and conflict behavior before implementation.
+- Distinguish observe, mitigate, and atomically enforce as separate stages — do not conflate a UI mitigation with atomic enforcement.
+- Manually verify a vertical slice before adding migration or persistence hardening.
+- Preserve uncommitted isolation and small, reversible commits.
+- Verify Copilot reports against actual code, Git state, deployed commit, and UI evidence — not against the report alone.
+- Keep prompts checkpoint-specific instead of combining UI, rules, migration, and rollout in one pass.
+- Apply risk-proportionate hardening rather than automatically implementing every theoretically possible concurrency safeguard.
 
 ---
 
