@@ -56,7 +56,10 @@ import type { AddType } from './components/AddScreen';
 import TrainingLogPage from './pages/TrainingLogPage';
 import { LogTrainingSheet } from './components/LogTrainingSheet';
 import { TrainingLogDetailSheet } from './components/TrainingLogDetailSheet';
+import { ProjectedCalendarEntryStatusSheet } from './components/ProjectedCalendarEntryStatusSheet';
 import { useEventLogs } from './hooks/useEventLogs';
+import { useCalendarEntries } from './hooks/useCalendarEntries';
+import { useCalendarEntryMerge } from './hooks/useCalendarEntryMerge';
 import {
   isLoggableSelfPostedCalendarOccurrence,
   isEligibleSelfPostedCalendarSession,
@@ -66,7 +69,7 @@ import {
 } from './domain/calendar/adapters';
 import type { CompletedSelfPostedTrainingInput } from './domain/calendar/selfPostedTraining';
 import { logToHistoryItem } from './domain/calendar/selfPostedTraining';
-import { selectLogsForCalendarOccurrence, classifyOccurrenceLogAssociation } from './domain/calendar/logAssociation';
+import { selectLogsForCalendarOccurrence, selectLogsForNewModelCalendarEntry, classifyOccurrenceLogAssociation } from './domain/calendar/logAssociation';
 import type { TrainingHistoryItem } from './domain/calendar/types';
 import type { TrainingLogAssociationView } from './components/SessionModal';
 
@@ -134,6 +137,11 @@ const App = () => {
   // TrainingLog detail (from the association section), independent of the
   // create flow's state above.
   const [openTrainingLogDetail, setOpenTrainingLogDetail] = useState<TrainingHistoryItem | null>(null);
+  // Checkpoint B — the currently opened projected new-model `calendar_entry`
+  // (identity only; the classification below resolves it to a log/state).
+  // Independent of `openTrainingLogDetail` above (calendar-originated legacy
+  // association) and of the create-flow state above.
+  const [openProjectedEntry, setOpenProjectedEntry] = useState<{ aggregateId: string; occurrenceId: string } | null>(null);
   // True only between a successful save and the sheet's own onClose() call
   // right after — lets onClose tell "saved, return to calendar" apart from
   // "cancelled, restore the SessionModal for the same session" (Task #5).
@@ -202,6 +210,18 @@ const App = () => {
   // invitations the user has declined.
   const { multiWeekData, mergedScheduleData, mergedTeamData } = useInvitationMerge(
     invitations, activeFighterKey, eventMultiWeekData, eventScheduleData, eventTeamData, currentWeek, emailForName,
+  );
+
+  // Checkpoint B — read-only calendar bridge for prospectively created
+  // unplanned-training calendar aggregates. Chained AFTER the invitation
+  // merge (the narrowest seam: it already produces the final week/day shape
+  // desktop, mobile and search all consume). Never writes to legacy weeks —
+  // `stripVirtualEntries` also strips `type: 'calendar_entry'` defensively.
+  const { entries: calendarEntries, issues: calendarEntryIssues, status: calendarEntriesStatus } = useCalendarEntries(activeFighterKey);
+  const finalMultiWeekData = useCalendarEntryMerge(multiWeekData, calendarEntries, calendarEntriesStatus);
+  const finalScheduleData = useMemo(
+    () => finalMultiWeekData[currentWeek] ?? mergedScheduleData,
+    [finalMultiWeekData, currentWeek, mergedScheduleData],
   );
 
   // --- Local UI State ---
@@ -388,6 +408,35 @@ const App = () => {
     if (classification.kind === 'conflict') return { kind: 'conflict', logs: classification.logs.map(logToHistoryItem) };
     return classification;
   }, [trainingLogAssociationClassification]);
+
+  // Checkpoint B — exact new-model association + classification for the
+  // currently opened projected `calendar_entry` (if any). Reuses the SAME
+  // `eventLogs`/`eventLogsStatus` load as the legacy association above — no
+  // additional Firestore query is added.
+  const projectedEntryMatches = useMemo(() => {
+    if (!openProjectedEntry) return [];
+    return selectLogsForNewModelCalendarEntry(eventLogs, openProjectedEntry);
+  }, [eventLogs, openProjectedEntry]);
+
+  const projectedEntryClassification = useMemo(
+    () => classifyOccurrenceLogAssociation(eventLogsStatus, projectedEntryMatches),
+    [eventLogsStatus, projectedEntryMatches],
+  );
+
+  // Intercept a projected `calendar_entry` click BEFORE any legacy session
+  // handler — never opens SessionModal, never enters legacy edit/save/delete.
+  const handleProjectedCalendarEntryClick = useCallback((session: { aggregateId: string; occurrenceId: string }) => {
+    setOpenProjectedEntry({ aggregateId: session.aggregateId, occurrenceId: session.occurrenceId });
+  }, []);
+
+  // Non-blocking notice when the calendar-entries read surfaced structured
+  // load issues (Checkpoint B) — valid entries keep rendering regardless.
+  useEffect(() => {
+    if (calendarEntryIssues.length > 0) {
+      showToast('Nogle kalenderposter kunne ikke vises', 'error');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarEntryIssues.length]);
 
   // Final calendar-log creation eligibility: all existing eligibility
   // requirements (ownership, not-future, structural — `canLogSelectedSession`)
@@ -663,8 +712,11 @@ const App = () => {
       </div>
 
       {/* SEARCH RESULTS OVERLAY */}
-      {searchMode && view !== 'events' && <SearchOverlay searchQuery={searchQuery} scrollDays={scrollDays} multiWeekData={multiWeekData} isDark={isDark}
-        onOpenSession={(d, s, w) => { setEditingDay(d); setEditingSession(s); setEditingWeek(w); setModalOpen(true); }}
+      {searchMode && view !== 'events' && <SearchOverlay searchQuery={searchQuery} scrollDays={scrollDays} multiWeekData={finalMultiWeekData} isDark={isDark}
+        onOpenSession={(d, s, w) => {
+          if ((s as any).type === 'calendar_entry') { handleProjectedCalendarEntryClick(s as any); return; }
+          setEditingDay(d); setEditingSession(s); setEditingWeek(w); setModalOpen(true);
+        }}
         onOpenEvent={(id) => { setSearchMode(false); setSearchQuery(''); setInitialEventId(id); setView('events'); }} />}
 
       {/* MONTH PICKER */}
@@ -779,7 +831,7 @@ const App = () => {
             <div className="md:hidden">
               <MobileScrollView
                 scrollDays={scrollDays}
-                multiWeekData={multiWeekData}
+                multiWeekData={finalMultiWeekData}
                 isDark={isDark}
                 onFraværClick={(session, dayKey) => {
                   setEditingFravær({
@@ -795,6 +847,10 @@ const App = () => {
                   setAddScreenOpen(true);
                 }}
                 onEditSession={(day, session, weekNum) => {
+                  if (session.type === 'calendar_entry') {
+                    handleProjectedCalendarEntryClick(session);
+                    return;
+                  }
                   if (session.type === 'invitation' && session.invitationId) {
                     const inv = invitations.find(i => i.id === session.invitationId);
                     if (inv) { setActiveInvitation(inv); return; }
@@ -824,7 +880,7 @@ const App = () => {
             <div className="hidden md:block">
               <PersonalSchedule
                 days={DAYS}
-                scheduleData={mergedScheduleData}
+                scheduleData={finalScheduleData}
                 weekDates={weekDates}
                 fullWeekDates={fullWeekDates}
                 isReadOnly={isReadOnly}
@@ -832,6 +888,10 @@ const App = () => {
                 expandedDay={expandedDay}
                 onAddClick={handleAddClick}
                 onEditSession={(day, session) => {
+                  if (session.type === 'calendar_entry') {
+                    handleProjectedCalendarEntryClick(session);
+                    return;
+                  }
                   if (session.type === 'invitation' && session.invitationId) {
                     const inv = invitations.find(i => i.id === session.invitationId);
                     if (inv) { setActiveInvitation(inv); return; }
@@ -1277,6 +1337,28 @@ const App = () => {
         <TrainingLogDetailSheet
           item={openTrainingLogDetail}
           onClose={() => setOpenTrainingLogDetail(null)}
+        />
+      )}
+      {/* Checkpoint B — projected new-model `calendar_entry` detail routing.
+          Never opens SessionModal, never edits/deletes/mutates the calendar.
+          'one' goes straight to the existing read-only TrainingLogDetailSheet;
+          every other state uses the small dedicated read-only status sheet. */}
+      {openProjectedEntry && projectedEntryClassification.kind === 'one' && (
+        <TrainingLogDetailSheet
+          item={logToHistoryItem(projectedEntryClassification.log)}
+          onClose={() => setOpenProjectedEntry(null)}
+        />
+      )}
+      {openProjectedEntry && projectedEntryClassification.kind !== 'one' && (
+        <ProjectedCalendarEntryStatusSheet
+          state={
+            projectedEntryClassification.kind === 'conflict' ? 'conflict'
+            : projectedEntryClassification.kind === 'error' ? 'error'
+            : projectedEntryClassification.kind === 'none' ? 'none'
+            : 'loading'
+          }
+          logs={projectedEntryClassification.kind === 'conflict' ? projectedEntryClassification.logs.map(logToHistoryItem) : undefined}
+          onClose={() => setOpenProjectedEntry(null)}
         />
       )}
       {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}

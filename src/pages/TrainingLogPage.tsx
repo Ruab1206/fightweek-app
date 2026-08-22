@@ -32,7 +32,7 @@ export interface TrainingLogPageProps {
 
 export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, onError }: TrainingLogPageProps) {
   const { isDark } = useTheme();
-  const { logs, loading, error, addLog, refresh } = useEventLogs(fighterKey);
+  const { logs, loading, error, addUnplannedTraining, resetUnplannedAttempt, refresh } = useEventLogs(fighterKey);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const bg = isDark ? 'bg-slate-950 text-slate-200' : 'bg-surface-subtle text-ds-text';
@@ -41,13 +41,26 @@ export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, o
 
   const handleAddLog = async (input: CompletedSelfPostedTrainingInput) => {
     try {
-      const id = await addLog(input);
+      const ids = await addUnplannedTraining(input);
       onSuccess?.('Træning logget.');
-      return id;
+      return ids.logRecordId;
     } catch (err) {
       onError?.(err instanceof Error ? err.message : 'Kunne ikke gemme træningen.');
       throw err;
     }
+  };
+
+  // Checkpoint B: a genuinely new attempt (open) always starts with a fresh
+  // id bundle; an explicit cancel/close also resets it. A retry after a
+  // failed save (sheet stays open, LogTrainingSheet does not call onClose on
+  // failure) never goes through either path, so the same ids are reused.
+  const openSheet = () => {
+    resetUnplannedAttempt();
+    setSheetOpen(true);
+  };
+  const closeSheet = () => {
+    resetUnplannedAttempt();
+    setSheetOpen(false);
   };
 
   return (
@@ -58,7 +71,7 @@ export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, o
           {canCreateLog && (
             <button
               type="button"
-              onClick={() => setSheetOpen(true)}
+              onClick={openSheet}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold"
             >
               <Plus className="w-4 h-4" /> Log træning
@@ -104,7 +117,7 @@ export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, o
       {canCreateLog && (
         <LogTrainingSheet
           open={sheetOpen}
-          onClose={() => setSheetOpen(false)}
+          onClose={closeSheet}
           onSubmit={handleAddLog}
         />
       )}

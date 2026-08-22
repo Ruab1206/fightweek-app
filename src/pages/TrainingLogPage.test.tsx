@@ -63,6 +63,8 @@ function mockHookResult(overrides: Partial<UseEventLogsResult> = {}): UseEventLo
     status: 'loaded',
     addLog: vi.fn(),
     refresh: vi.fn(),
+    addUnplannedTraining: vi.fn().mockResolvedValue({ aggregateId: 'agg1', occurrenceId: 'occ1', calendarEntryId: 'entry1', logRecordId: 'log-1' }),
+    resetUnplannedAttempt: vi.fn(),
     ...overrides,
   };
 }
@@ -136,10 +138,19 @@ describe('TrainingLogPage — owner can log completed training', () => {
     expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
-  it('calls addLog on submit and reports success', async () => {
-    const addLog = vi.fn().mockResolvedValue('log-1');
+  it('resets the unplanned-training attempt when the sheet is opened (fresh attempt)', () => {
+    const resetUnplannedAttempt = vi.fn();
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ resetUnplannedAttempt }));
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    fireEvent.click(screen.getByRole('button', { name: /log træning/i }));
+    expect(resetUnplannedAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls addUnplannedTraining on submit and reports success', async () => {
+    const addUnplannedTraining = vi.fn().mockResolvedValue({ aggregateId: 'agg1', occurrenceId: 'occ1', calendarEntryId: 'entry1', logRecordId: 'log-1' });
     const onSuccess = vi.fn();
-    mockedUseEventLogs.mockReturnValue(mockHookResult({ addLog }));
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ addUnplannedTraining }));
 
     render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog onSuccess={onSuccess} />);
     fireEvent.click(screen.getByRole('button', { name: /log træning/i }));
@@ -151,18 +162,39 @@ describe('TrainingLogPage — owner can log completed training', () => {
     fireEvent.change(screen.getByLabelText(/Disciplin/i), { target: { value: 'MMA' } });
     fireEvent.click(screen.getByRole('button', { name: /gem træning/i }));
 
-    await waitFor(() => expect(addLog).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(addUnplannedTraining).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(expect.any(String)));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('reports failure and keeps the sheet open when addLog rejects', async () => {
-    const addLog = vi.fn().mockRejectedValue(new Error('Kunne ikke gemme'));
+  it('resets the attempt when the sheet is closed after a successful save (own onClose call)', async () => {
+    const resetUnplannedAttempt = vi.fn();
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ resetUnplannedAttempt }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+    fireEvent.click(screen.getByRole('button', { name: /log træning/i }));
+    resetUnplannedAttempt.mockClear(); // clear the open-time reset call
+
+    fireEvent.change(screen.getByLabelText(/Titel/i), { target: { value: 'MMA Sparring' } });
+    fireEvent.change(screen.getByLabelText(/Dato/i), { target: { value: '2020-01-01' } });
+    fireEvent.change(screen.getByLabelText(/Starttidspunkt/i), { target: { value: '10:00' } });
+    fireEvent.change(screen.getByLabelText(/Varighed/i), { target: { value: '60' } });
+    fireEvent.change(screen.getByLabelText(/Disciplin/i), { target: { value: 'MMA' } });
+    fireEvent.click(screen.getByRole('button', { name: /gem træning/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(resetUnplannedAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports failure and keeps the sheet open (retains the attempt) when addUnplannedTraining rejects', async () => {
+    const addUnplannedTraining = vi.fn().mockRejectedValue(new Error('Kunne ikke gemme'));
+    const resetUnplannedAttempt = vi.fn();
     const onError = vi.fn();
-    mockedUseEventLogs.mockReturnValue(mockHookResult({ addLog }));
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ addUnplannedTraining, resetUnplannedAttempt }));
 
     render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog onError={onError} />);
     fireEvent.click(screen.getByRole('button', { name: /log træning/i }));
+    resetUnplannedAttempt.mockClear();
 
     fireEvent.change(screen.getByLabelText(/Titel/i), { target: { value: 'MMA Sparring' } });
     fireEvent.change(screen.getByLabelText(/Dato/i), { target: { value: '2020-01-01' } });
@@ -173,6 +205,8 @@ describe('TrainingLogPage — owner can log completed training', () => {
 
     await waitFor(() => expect(onError).toHaveBeenCalledWith('Kunne ikke gemme'));
     expect(screen.getByRole('dialog')).toBeTruthy();
+    // Failure must NOT reset the attempt — a retry needs the same ids.
+    expect(resetUnplannedAttempt).not.toHaveBeenCalled();
   });
 });
 
