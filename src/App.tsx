@@ -66,8 +66,9 @@ import {
 } from './domain/calendar/adapters';
 import type { CompletedSelfPostedTrainingInput } from './domain/calendar/selfPostedTraining';
 import { logToHistoryItem } from './domain/calendar/selfPostedTraining';
-import { selectLogsForCalendarOccurrence } from './domain/calendar/logAssociation';
+import { selectLogsForCalendarOccurrence, classifyOccurrenceLogAssociation } from './domain/calendar/logAssociation';
 import type { TrainingHistoryItem } from './domain/calendar/types';
+import type { TrainingLogAssociationView } from './components/SessionModal';
 
 const App = () => {
   // --- Hooks ---
@@ -335,36 +336,6 @@ const App = () => {
     });
   }, [canCreateLog, editingSession, editingWeek, currentWeek, editingDay]);
 
-  // Parent-owned: verify eligibility/ownership, supply explicit occurrence
-  // context, invoke the pure adapter, then open the existing log form with
-  // initial values. SessionModal itself only notifies that logging was
-  // requested — no conversion/persistence/ownership logic lives there.
-  // `editingSession`/`editingDay`/`editingWeek` are deliberately left intact
-  // so the SessionModal can be restored unchanged if the fighter cancels
-  // instead of saving (Task #5 cancel-return behavior).
-  const handleLogTrainingRequested = useCallback(() => {
-    if (!editingSession || !canLogSelectedSession) return;
-    const weekNum = editingWeek || currentWeek;
-    const d = getDateForWeekDay(weekNum, editingDay);
-    const dateISO = d ? toLocalISODate(d) : '';
-    if (!dateISO) {
-      showToast('Kunne ikke bestemme træningens dato', 'error');
-      return;
-    }
-    try {
-      const prefill = buildSelfPostedCalendarLogContext(editingSession as any, {
-        dateISO,
-        userId: activeFighterKey,
-      });
-      setLogTrainingInitialValues(prefill);
-      setModalOpen(false);
-      setLogTrainingOpen(true);
-    } catch (err) {
-      console.error('[log-training] failed to build calendar log context:', err);
-      showToast('Kunne ikke forberede træningsloggen', 'error');
-    }
-  }, [editingSession, canLogSelectedSession, editingWeek, currentWeek, editingDay, activeFighterKey, showToast]);
-
   // Phase 3 read-side association slice ("Next Planned Slice") — availability
   // reuses the SAME structural eligibility predicate as calendar-originated
   // logging above, WITHOUT the ownership/future-time gate: an administrator
@@ -393,14 +364,68 @@ const App = () => {
   // Zero, one, or many exact matches — no product meaning is encoded here;
   // `logs`/`eventLogsStatus` come from the SAME `useEventLogs` load already
   // used for the standalone create action above (no new Firestore query).
-  const associatedTrainingLogs = useMemo<TrainingHistoryItem[]>(() => {
+  const associatedTrainingLogMatches = useMemo(() => {
     if (!selectedSessionOccurrenceIdentity) return [];
-    return selectLogsForCalendarOccurrence(eventLogs, selectedSessionOccurrenceIdentity)
-      .map(logToHistoryItem);
+    return selectLogsForCalendarOccurrence(eventLogs, selectedSessionOccurrenceIdentity);
   }, [eventLogs, selectedSessionOccurrenceIdentity]);
 
-  // #1216: keep the user anchored on an activity after they close or add it.
-  // On mobile we only scroll when the activity's day is OFF-SCREEN, so glancing
+  // Slice A: pure none/one/conflict/loading/error integrity classification
+  // over the exact matches above (see `/docs/fightweek_refactoring_plan.md`).
+  // Read-side only — does not provide atomic concurrency protection; two
+  // clients that both observe `'none'` before either writes may still create
+  // two logs until a separate atomic persistence slice is implemented.
+  const trainingLogAssociationClassification = useMemo(
+    () => classifyOccurrenceLogAssociation(eventLogsStatus, associatedTrainingLogMatches),
+    [eventLogsStatus, associatedTrainingLogMatches],
+  );
+
+  // Presentation-boundary mapping: only the log(s) actually carried by the
+  // classification are converted to `TrainingHistoryItem`, for `SessionModal`/
+  // `TrainingLogSummary`/`TrainingLogDetailSheet` display.
+  const trainingLogAssociationView = useMemo<TrainingLogAssociationView>(() => {
+    const classification = trainingLogAssociationClassification;
+    if (classification.kind === 'one') return { kind: 'one', log: logToHistoryItem(classification.log) };
+    if (classification.kind === 'conflict') return { kind: 'conflict', logs: classification.logs.map(logToHistoryItem) };
+    return classification;
+  }, [trainingLogAssociationClassification]);
+
+  // Final calendar-log creation eligibility: all existing eligibility
+  // requirements (ownership, not-future, structural — `canLogSelectedSession`)
+  // PLUS the Slice A integrity classification. SessionModal itself must not
+  // reconstruct this rule from a raw log count.
+  const canLogSelectedSessionFinal = canLogSelectedSession && trainingLogAssociationClassification.kind === 'none';
+
+  // Parent-owned: verify eligibility/ownership, supply explicit occurrence
+  // context, invoke the pure adapter, then open the existing log form with
+  // initial values. SessionModal itself only notifies that logging was
+  // requested — no conversion/persistence/ownership logic lives there.
+  // `editingSession`/`editingDay`/`editingWeek` are deliberately left intact
+  // so the SessionModal can be restored unchanged if the fighter cancels
+  // instead of saving (Task #5 cancel-return behavior).
+  const handleLogTrainingRequested = useCallback(() => {
+    if (!editingSession || !canLogSelectedSessionFinal) return;
+    const weekNum = editingWeek || currentWeek;
+    const d = getDateForWeekDay(weekNum, editingDay);
+    const dateISO = d ? toLocalISODate(d) : '';
+    if (!dateISO) {
+      showToast('Kunne ikke bestemme træningens dato', 'error');
+      return;
+    }
+    try {
+      const prefill = buildSelfPostedCalendarLogContext(editingSession as any, {
+        dateISO,
+        userId: activeFighterKey,
+      });
+      setLogTrainingInitialValues(prefill);
+      setModalOpen(false);
+      setLogTrainingOpen(true);
+    } catch (err) {
+      console.error('[log-training] failed to build calendar log context:', err);
+      showToast('Kunne ikke forberede træningsloggen', 'error');
+    }
+  }, [editingSession, canLogSelectedSessionFinal, editingWeek, currentWeek, editingDay, activeFighterKey, showToast]);
+
+
   // at an already-visible activity never jolts the list out from under you; on
   // desktop we only navigate when the activity is in a different week than the
   // one shown. Repositioning is instant — it happens underneath the closing
@@ -1138,10 +1163,9 @@ const App = () => {
         onFeedback={(ctx) => setFeedbackContext(ctx)}
         getNote={getNote}
         saveNote={saveNote}
-        canLogTraining={canLogSelectedSession}
+        canLogTraining={canLogSelectedSessionFinal}
         onLogTraining={handleLogTrainingRequested}
-        associatedTrainingLogs={showLogAssociationForSelectedSession ? associatedTrainingLogs : undefined}
-        associatedTrainingLogsStatus={showLogAssociationForSelectedSession ? eventLogsStatus : undefined}
+        trainingLogAssociation={showLogAssociationForSelectedSession ? trainingLogAssociationView : undefined}
         onOpenTrainingLogDetail={setOpenTrainingLogDetail}
         inviteCandidates={inviteCandidates}
         existingInvitees={(() => {

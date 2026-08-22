@@ -50,3 +50,56 @@ export function selectLogsForCalendarOccurrence(
       return a.id.localeCompare(b.id);
     });
 }
+
+// ──────────────────────────────────────────────
+// Slice A: read-side integrity classification (none/one/conflict)
+// ──────────────────────────────────────────────
+
+/**
+ * Structural shape of the `useEventLogs` load status, kept as a local type so
+ * this module has no React/hook dependency. Matches `EventLogsStatus` in
+ * `src/hooks/useEventLogs.ts` field-for-field.
+ */
+export type AssociationLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
+
+/**
+ * Read-side integrity classification of the exact matches returned by
+ * `selectLogsForCalendarOccurrence` for one calendar occurrence (Phase 3,
+ * Slice A — see `/docs/fightweek_refactoring_plan.md`).
+ *
+ * Describes TrainingLog ASSOCIATION INTEGRITY ONLY: it must never be read as
+ * attendance, completion, Participation, registration, interest, favorite
+ * state, or calendar status. `'conflict'` means more than one TrainingLog
+ * exists for the same occurrence — a data-integrity condition, not a normal
+ * list — and selects no log as canonical. Only `'none'` may enable creating
+ * a new calendar-originated TrainingLog; `'loading'` and `'error'` must never
+ * be treated as `'none'`.
+ *
+ * This is a read-side classification only. It does not provide atomic
+ * concurrency protection: two clients that both observe `'none'` before
+ * either writes may still create two logs for the same occurrence until a
+ * separate atomic persistence slice (Slice B) is implemented.
+ */
+export type OccurrenceLogAssociation =
+  | { kind: 'loading' }
+  | { kind: 'error' }
+  | { kind: 'none' }
+  | { kind: 'one'; log: CompletedSelfPostedTrainingLog }
+  | { kind: 'conflict'; logs: CompletedSelfPostedTrainingLog[] };
+
+/**
+ * Classify the exact-match result of `selectLogsForCalendarOccurrence`
+ * against the load status it came from. Pure — no React, no Firestore, no
+ * mutation of `matches`; the `'conflict'` payload is a defensive copy.
+ */
+export function classifyOccurrenceLogAssociation(
+  status: AssociationLoadStatus,
+  matches: readonly CompletedSelfPostedTrainingLog[],
+): OccurrenceLogAssociation {
+  if (status === 'error') return { kind: 'error' };
+  if (status === 'idle' || status === 'loading') return { kind: 'loading' };
+
+  if (matches.length === 0) return { kind: 'none' };
+  if (matches.length === 1) return { kind: 'one', log: matches[0] };
+  return { kind: 'conflict', logs: matches.slice() };
+}

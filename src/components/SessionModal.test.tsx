@@ -1,20 +1,25 @@
 // @vitest-environment jsdom
 /**
  * SessionModal.test.tsx — read-side TrainingLog association section
- * (Phase 3 strangler slice). Eligibility gating (catalogue/frav\u00e6r/event/
- * invitation/cancelled/rest-day/unsaved) is decided entirely by the parent
- * via the already-tested `isEligibleSelfPostedCalendarSession` predicate
- * (see `src/domain/calendar/adapters.test.ts`) \u2014 SessionModal itself only
- * reacts to whether `associatedTrainingLogsStatus` is provided at all, which
- * is what these tests exercise.
+ * (Phase 3 strangler slice, Slice A: read-side integrity classification).
+ *
+ * SessionModal consumes an already-classified `trainingLogAssociation`
+ * (`TrainingLogAssociationView` — loading/error/none/one/conflict) from the
+ * parent; it renders purely by `kind` and never reconstructs none/one/
+ * conflict from a raw log count itself. Eligibility gating (catalogue/
+ * fravær/event/invitation/cancelled/rest-day/unsaved) is decided entirely by
+ * the parent via the already-tested `isEligibleSelfPostedCalendarSession`
+ * predicate (see `src/domain/calendar/adapters.test.ts`) — SessionModal
+ * itself only reacts to whether `trainingLogAssociation` is provided at all,
+ * which is what the first test below exercises.
  *
  * Existing SessionModal behavior (recurrence, invites, delete, notes) is
- * intentionally not re-tested here \u2014 only the new association-section
+ * intentionally not re-tested here — only the association-section
  * props/rendering are covered.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import SessionModal from './SessionModal';
+import SessionModal, { type TrainingLogAssociationView } from './SessionModal';
 import type { TrainingHistoryItem } from '../domain/calendar/types';
 
 const baseInitialData = {
@@ -69,19 +74,25 @@ const otherItem: TrainingHistoryItem = {
   title: 'MMA Sparring (second log)',
 };
 
-describe('SessionModal — read-side TrainingLog association section', () => {
-  it('renders nothing for the section when the parent supplies no status (session type not eligible)', () => {
-    renderModal({ associatedTrainingLogsStatus: undefined, associatedTrainingLogs: undefined });
+const none: TrainingLogAssociationView = { kind: 'none' };
+const loading: TrainingLogAssociationView = { kind: 'loading' };
+const error: TrainingLogAssociationView = { kind: 'error' };
+const one: TrainingLogAssociationView = { kind: 'one', log: oneItem };
+const conflict: TrainingLogAssociationView = { kind: 'conflict', logs: [oneItem, otherItem] };
+
+describe('SessionModal — read-side TrainingLog association section (Slice A)', () => {
+  it('renders nothing for the section when the parent supplies no association (session type not eligible)', () => {
+    renderModal({ trainingLogAssociation: undefined, canLogTraining: false, onLogTraining: undefined });
 
     expect(screen.queryByText('Træningslogs')).toBeNull();
+    expect(screen.queryByText('Log denne træning')).toBeNull();
   });
 
-  it('shows nothing (no empty list, no "Ikke logget") for zero matching logs, but keeps "Log denne træning"', () => {
+  it('none: shows "Log denne træning" for an eligible owner, with no empty "Træningslogs" section', () => {
     renderModal({
       canLogTraining: true,
       onLogTraining: vi.fn(),
-      associatedTrainingLogsStatus: 'loaded',
-      associatedTrainingLogs: [],
+      trainingLogAssociation: none,
     });
 
     expect(screen.queryByText('Træningslogs')).toBeNull();
@@ -89,56 +100,44 @@ describe('SessionModal — read-side TrainingLog association section', () => {
     expect(screen.getByText('Log denne træning')).toBeTruthy();
   });
 
-  it('shows a compact loading indicator while the association is loading, not an empty state', () => {
+  it('loading: shows a neutral loading line; the parent never supplies creation eligibility for this kind', () => {
     renderModal({
-      associatedTrainingLogsStatus: 'loading',
-      associatedTrainingLogs: [],
+      canLogTraining: false,
+      onLogTraining: undefined,
+      trainingLogAssociation: loading,
     });
 
     expect(screen.getByText(/Indlæser træningslogs/i)).toBeTruthy();
-    expect(screen.queryByText(/ikke logget/i)).toBeNull();
+    expect(screen.queryByText('Log denne træning')).toBeNull();
   });
 
-  it('shows a compact error indicator on a failed association load, distinct from empty', () => {
+  it('error: shows a neutral error line; the parent never supplies creation eligibility for this kind', () => {
     renderModal({
-      associatedTrainingLogsStatus: 'error',
-      associatedTrainingLogs: [],
+      canLogTraining: false,
+      onLogTraining: undefined,
+      trainingLogAssociation: error,
     });
 
     expect(screen.getByText(/Kunne ikke hente træningslogs/i)).toBeTruthy();
+    expect(screen.queryByText('Log denne træning')).toBeNull();
   });
 
-  it('shows exactly one matching log and keeps "Log denne træning" available', () => {
+  it('one: shows the existing log under "Træningslogs" and hides "Log denne træning"', () => {
     renderModal({
-      canLogTraining: true,
-      onLogTraining: vi.fn(),
-      associatedTrainingLogsStatus: 'loaded',
-      associatedTrainingLogs: [oneItem],
+      canLogTraining: false,
+      onLogTraining: undefined,
+      trainingLogAssociation: one,
     });
 
     expect(screen.getByText('Træningslogs')).toBeTruthy();
-    expect(screen.getByText('Log denne træning')).toBeTruthy();
-  });
-
-  it('shows every matching log when there are multiple, without ranking or a duplicate warning', () => {
-    renderModal({
-      canLogTraining: true,
-      onLogTraining: vi.fn(),
-      associatedTrainingLogsStatus: 'loaded',
-      associatedTrainingLogs: [oneItem, otherItem],
-    });
-
     expect(screen.getByText('MMA Sparring')).toBeTruthy();
-    expect(screen.getByText('MMA Sparring (second log)')).toBeTruthy();
-    expect(screen.queryByText(/duplikat/i)).toBeNull();
-    expect(screen.queryByText(/fejl/i)).toBeNull();
+    expect(screen.queryByText('Log denne træning')).toBeNull();
   });
 
-  it('opens the read-only detail view when a displayed log is selected', () => {
+  it('one: opens the existing log read-only when selected', () => {
     const onOpenTrainingLogDetail = vi.fn();
     renderModal({
-      associatedTrainingLogsStatus: 'loaded',
-      associatedTrainingLogs: [oneItem],
+      trainingLogAssociation: one,
       onOpenTrainingLogDetail,
     });
 
@@ -147,16 +146,50 @@ describe('SessionModal — read-side TrainingLog association section', () => {
     expect(onOpenTrainingLogDetail).toHaveBeenCalledWith(oneItem);
   });
 
-  it('shows the association section for a read-only viewer without exposing create behavior', () => {
+  it('conflict: hides "Log denne træning" and shows the neutral Danish integrity-conflict message', () => {
     renderModal({
       canLogTraining: false,
       onLogTraining: undefined,
-      associatedTrainingLogsStatus: 'loaded',
-      associatedTrainingLogs: [oneItem],
+      trainingLogAssociation: conflict,
     });
 
-    expect(screen.getByText('Træningslogs')).toBeTruthy();
     expect(screen.queryByText('Log denne træning')).toBeNull();
+    expect(
+      screen.getByText('Der findes flere træningslogs for denne træning. Oprettelse af en ny log er deaktiveret, indtil konflikten er afklaret.'),
+    ).toBeTruthy();
+  });
+
+  it('conflict: displays every conflicting log read-only, without selecting one as canonical', () => {
+    const onOpenTrainingLogDetail = vi.fn();
+    renderModal({
+      trainingLogAssociation: conflict,
+      onOpenTrainingLogDetail,
+    });
+
+    expect(screen.getByText('MMA Sparring')).toBeTruthy();
+    expect(screen.getByText('MMA Sparring (second log)')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('MMA Sparring (second log)').closest('button')!);
+    expect(onOpenTrainingLogDetail).toHaveBeenCalledWith(otherItem);
+  });
+
+  it('conflict: never labels the multiple result a duplicate or an error', () => {
+    renderModal({ trainingLogAssociation: conflict });
+
+    expect(screen.queryByText(/duplikat/i)).toBeNull();
+    expect(screen.queryByText(/fejl/i)).toBeNull();
+  });
+
+  it('read-only viewing hides creation in every state, even when logs are shown', () => {
+    for (const view of [none, loading, error, one, conflict]) {
+      const { unmount } = renderModal({
+        canLogTraining: false,
+        onLogTraining: undefined,
+        trainingLogAssociation: view,
+      });
+      expect(screen.queryByText('Log denne træning')).toBeNull();
+      unmount();
+    }
   });
 
   it('renders the log from its own snapshot, not the currently edited session fields', () => {
@@ -166,8 +199,7 @@ describe('SessionModal — read-side TrainingLog association section', () => {
     };
     renderModal({
       initialData: { ...baseInitialData, name: 'Edited title in form' },
-      associatedTrainingLogsStatus: 'loaded',
-      associatedTrainingLogs: [snapshotItem],
+      trainingLogAssociation: { kind: 'one', log: snapshotItem },
     });
 
     expect(screen.getByText('Original snapshot title')).toBeTruthy();

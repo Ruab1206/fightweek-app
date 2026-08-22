@@ -10,9 +10,23 @@ import { InvitePicker, type InviteCandidate } from './shared/InvitePicker';
 import type { InvitationResponse } from '../types/invitation';
 import { TrainingLogSummary } from './TrainingLogSummary';
 import type { TrainingHistoryItem } from '../domain/calendar/types';
-import type { EventLogsStatus } from '../hooks/useEventLogs';
 
 import { RECURRENCE_OPTIONS } from '../config/constants';
+
+/**
+ * Presentation-boundary view of `OccurrenceLogAssociation`
+ * (`src/domain/calendar/logAssociation.ts`) with carried log(s) already
+ * mapped to `TrainingHistoryItem` by the parent — SessionModal never sees the
+ * raw `CompletedSelfPostedTrainingLog` domain record. Mirrors the same
+ * `kind` discriminant so the component renders purely by `kind` and never
+ * reconstructs none/one/conflict from a log count itself.
+ */
+export type TrainingLogAssociationView =
+    | { kind: 'loading' }
+    | { kind: 'error' }
+    | { kind: 'none' }
+    | { kind: 'one'; log: TrainingHistoryItem }
+    | { kind: 'conflict'; logs: TrainingHistoryItem[] };
 
 /**
  * Decide whether saving the session should (re)apply a recurring series
@@ -73,20 +87,23 @@ interface SessionModalProps {
     canLogTraining?: boolean;
     onLogTraining?: () => void;
     /**
-     * Phase 3 read-side association slice. Undefined means the parent has
-     * already decided (via the shared eligibility predicate, not duplicated
-     * here) that this session type does not get a "Træningslogs" section at
-     * all — e.g. catalogue-linked, fravær, event, invitation, cancelled,
-     * rest-day, or unsaved. When present, it is shown independently of
+     * Phase 3 read-side association slice (Slice A: read-side integrity
+     * classification). Undefined means the parent has already decided (via
+     * the shared eligibility predicate, not duplicated here) that this
+     * session type does not get a "Træningslogs" section at all — e.g.
+     * catalogue-linked, fravær, event, invitation, cancelled, rest-day, or
+     * unsaved. When present, it is shown independently of
      * `canLogTraining`/`onLogTraining` (an admin viewing another fighter may
-     * see existing logs without being able to create one).
+     * see existing logs without being able to create one). SessionModal
+     * renders purely by `kind` — it does not infer none/one/conflict from a
+     * raw log count itself; the parent already decided that via
+     * `classifyOccurrenceLogAssociation`.
      */
-    associatedTrainingLogs?: TrainingHistoryItem[];
-    associatedTrainingLogsStatus?: EventLogsStatus;
+    trainingLogAssociation?: TrainingLogAssociationView;
     onOpenTrainingLogDetail?: (item: TrainingHistoryItem) => void;
 }
 
-const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onSeriesInvite, onUninvite, canLogTraining, onLogTraining, associatedTrainingLogs, associatedTrainingLogsStatus, onOpenTrainingLogDetail }: SessionModalProps) => {
+const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onSeriesInvite, onUninvite, canLogTraining, onLogTraining, trainingLogAssociation, onOpenTrainingLogDetail }: SessionModalProps) => {
     const { isDark } = useTheme();
     const isNew = !initialData;
     const [form, setForm] = useState<SessionForm>({
@@ -136,6 +153,15 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
     const cat = CATEGORIES.find(c => c.label === form.category) || CATEGORIES[6];
     const labelCls = `text-[10px] font-bold uppercase tracking-wider mb-1.5 block ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`;
     const inputCls = `w-full px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-surface-border text-ds-text'}`;
+
+    // Slice A: rows to render for the association section, if any. SessionModal
+    // does not decide none/one/conflict itself — it only maps the parent's
+    // already-classified `trainingLogAssociation.kind` to a list of read-only
+    // rows to display.
+    const trainingLogAssociationItems: TrainingHistoryItem[] =
+        trainingLogAssociation?.kind === 'one' ? [trainingLogAssociation.log]
+        : trainingLogAssociation?.kind === 'conflict' ? trainingLogAssociation.logs
+        : [];
 
     const handleSave = () => {
         const applyRecurrence = shouldApplyRecurrence({ interval: recurrenceInterval, isNew, recurrenceTouched });
@@ -287,27 +313,36 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                         </div>
                     )}
 
-                    {/* Read-side association (Phase 3 strangler slice): existing
-                        TrainingLogs already associated with this exact calendar
-                        occurrence, by explicit provenance only (never by title/date/
-                        time). Zero matches after a successful load render nothing —
-                        no empty list, no "Ikke logget" placeholder — since that would
-                        imply a completion state this slice does not define. */}
-                    {!isNew && associatedTrainingLogsStatus !== undefined && (
-                        associatedTrainingLogsStatus !== 'loaded' || (associatedTrainingLogs?.length ?? 0) > 0
-                    ) && (
+                    {/* Read-side association (Phase 3 strangler slice, Slice A):
+                        existing TrainingLogs already associated with this exact
+                        calendar occurrence, by explicit provenance only (never by
+                        title/date/time). The parent has already classified the
+                        result as loading/error/none/one/conflict — this component
+                        renders purely by `kind` and never reconstructs that from a
+                        raw log count. `none` renders nothing here — no empty list,
+                        no "Ikke logget" placeholder — since that would imply a
+                        completion state this slice does not define. */}
+                    {!isNew && trainingLogAssociation && trainingLogAssociation.kind !== 'none' && (
                         <div className={`px-5 py-3 border-t ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
-                            {associatedTrainingLogsStatus === 'error' && (
+                            {trainingLogAssociation.kind === 'error' && (
                                 <p className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>Kunne ikke hente træningslogs.</p>
                             )}
-                            {(associatedTrainingLogsStatus === 'loading' || associatedTrainingLogsStatus === 'idle') && (
+                            {trainingLogAssociation.kind === 'loading' && (
                                 <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Indlæser træningslogs…</p>
                             )}
-                            {associatedTrainingLogsStatus === 'loaded' && (associatedTrainingLogs?.length ?? 0) > 0 && (
+                            {trainingLogAssociationItems.length > 0 && (
                                 <div>
                                     <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Træningslogs</p>
+                                    {/* Data-integrity conflict: more than one TrainingLog for this
+                                        occurrence. No log is selected as canonical; all remain
+                                        inspectable read-only until a future explicit resolution. */}
+                                    {trainingLogAssociation.kind === 'conflict' && (
+                                        <p className={`text-xs mb-2 ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
+                                            Der findes flere træningslogs for denne træning. Oprettelse af en ny log er deaktiveret, indtil konflikten er afklaret.
+                                        </p>
+                                    )}
                                     <ul className="space-y-2">
-                                        {associatedTrainingLogs!.map((item) => (
+                                        {trainingLogAssociationItems.map((item) => (
                                             <li key={item.id}>
                                                 <button
                                                     type="button"
@@ -323,6 +358,7 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                             )}
                         </div>
                     )}
+
 
                     {/* Log completed training (Phase 3 calendar-originated TrainingLog slice).
                         Eligibility (self-posted + ownership) is decided entirely by the parent —

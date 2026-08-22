@@ -3,7 +3,7 @@
  * occurrence. No Firestore, no React.
  */
 import { describe, it, expect } from 'vitest';
-import { selectLogsForCalendarOccurrence } from './logAssociation';
+import { selectLogsForCalendarOccurrence, classifyOccurrenceLogAssociation } from './logAssociation';
 import type { CompletedSelfPostedTrainingLog } from './types';
 
 function makeLog(
@@ -111,5 +111,64 @@ describe('selectLogsForCalendarOccurrence', () => {
 
     expect(resultA.map((r) => r.id)).toEqual(['a', 'b', 'c']);
     expect(resultB.map((r) => r.id)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('classifyOccurrenceLogAssociation', () => {
+  it('classifies idle as loading', () => {
+    expect(classifyOccurrenceLogAssociation('idle', [])).toEqual({ kind: 'loading' });
+  });
+
+  it('classifies loading as loading', () => {
+    expect(classifyOccurrenceLogAssociation('loading', [])).toEqual({ kind: 'loading' });
+  });
+
+  it('classifies error as error, regardless of any matches already held', () => {
+    expect(classifyOccurrenceLogAssociation('error', [])).toEqual({ kind: 'error' });
+    expect(classifyOccurrenceLogAssociation('error', [makeLog('1')])).toEqual({ kind: 'error' });
+  });
+
+  it('classifies a resolved load with zero matches as none', () => {
+    expect(classifyOccurrenceLogAssociation('loaded', [])).toEqual({ kind: 'none' });
+  });
+
+  it('classifies a resolved load with exactly one match as one, carrying exactly that log', () => {
+    const match = makeLog('1');
+    const result = classifyOccurrenceLogAssociation('loaded', [match]);
+    expect(result).toEqual({ kind: 'one', log: match });
+  });
+
+  it('classifies a resolved load with multiple matches as conflict, carrying every log', () => {
+    const first = makeLog('1');
+    const second = makeLog('2');
+    const result = classifyOccurrenceLogAssociation('loaded', [first, second]);
+    expect(result).toEqual({ kind: 'conflict', logs: [first, second] });
+  });
+
+  it('returns a defensive copy of matches for the conflict payload, not the same array reference', () => {
+    const matches = [makeLog('1'), makeLog('2')];
+    const result = classifyOccurrenceLogAssociation('loaded', matches);
+    expect(result.kind).toBe('conflict');
+    if (result.kind === 'conflict') {
+      expect(result.logs).toEqual(matches);
+      expect(result.logs).not.toBe(matches);
+    }
+  });
+
+  it('does not mutate the input matches array', () => {
+    const matches = [makeLog('1'), makeLog('2')];
+    const snapshot = JSON.parse(JSON.stringify(matches));
+    classifyOccurrenceLogAssociation('loaded', matches);
+    expect(matches).toEqual(snapshot);
+  });
+
+  it('only classifies as none when creation should be enabled — every other kind is a distinct, non-none value', () => {
+    const creationEligibleKinds = ['idle', 'loading', 'error'].map((status) =>
+      classifyOccurrenceLogAssociation(status as any, []).kind,
+    );
+    expect(creationEligibleKinds.every((kind) => kind !== 'none')).toBe(true);
+    expect(classifyOccurrenceLogAssociation('loaded', [makeLog('1')]).kind).not.toBe('none');
+    expect(classifyOccurrenceLogAssociation('loaded', [makeLog('1'), makeLog('2')]).kind).not.toBe('none');
+    expect(classifyOccurrenceLogAssociation('loaded', []).kind).toBe('none');
   });
 });
