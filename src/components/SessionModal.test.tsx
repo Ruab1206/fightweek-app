@@ -122,16 +122,26 @@ describe('SessionModal — read-side TrainingLog association section (Slice A)',
     expect(screen.queryByText('Log denne træning')).toBeNull();
   });
 
-  it('one: shows the existing log under "Træningslogs" and hides "Log denne træning"', () => {
+  it('one: shows the existing log under singular "Træningslog" (not the plural heading) and hides "Log denne træning"', () => {
     renderModal({
       canLogTraining: false,
       onLogTraining: undefined,
       trainingLogAssociation: one,
     });
 
-    expect(screen.getByText('Træningslogs')).toBeTruthy();
+    expect(screen.getByText('Træningslog', { exact: true })).toBeTruthy();
+    expect(screen.queryByText('Træningslogs')).toBeNull();
     expect(screen.getByText('MMA Sparring')).toBeTruthy();
     expect(screen.queryByText('Log denne træning')).toBeNull();
+  });
+
+  it('one: exposes a clear accessible "Se træningslog" open action', () => {
+    renderModal({
+      trainingLogAssociation: one,
+      onOpenTrainingLogDetail: vi.fn(),
+    });
+
+    expect(screen.getByRole('button', { name: /se træningslog/i })).toBeTruthy();
   });
 
   it('one: opens the existing log read-only when selected', () => {
@@ -144,6 +154,14 @@ describe('SessionModal — read-side TrainingLog association section (Slice A)',
     fireEvent.click(screen.getByText('MMA Sparring').closest('button')!);
 
     expect(onOpenTrainingLogDetail).toHaveBeenCalledWith(oneItem);
+  });
+
+  it('conflict: shows the plural heading "Træningslogs"', () => {
+    renderModal({
+      trainingLogAssociation: conflict,
+    });
+
+    expect(screen.getByText('Træningslogs', { exact: true })).toBeTruthy();
   });
 
   it('conflict: hides "Log denne træning" and shows the neutral Danish integrity-conflict message', () => {

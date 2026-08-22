@@ -61,6 +61,12 @@ import { useEventLogs } from './hooks/useEventLogs';
 import { useCalendarEntries } from './hooks/useCalendarEntries';
 import { useCalendarEntryMerge } from './hooks/useCalendarEntryMerge';
 import {
+  isUnplannedTrainingRefreshSettled,
+  didUnplannedTrainingRefreshFail,
+  isPendingRefreshOwnedByActiveFighter,
+  type PendingUnplannedTrainingRefresh,
+} from './hooks/unplannedTrainingRefreshStatus';
+import {
   isLoggableSelfPostedCalendarOccurrence,
   isEligibleSelfPostedCalendarSession,
   buildSelfPostedCalendarLogContext,
@@ -130,7 +136,7 @@ const App = () => {
   // inefficiency (an extra one-shot eventLogs read on every mount, no live
   // subscription) is deferred rather than fixed in this slice — see revision
   // report.
-  const { addLog: addEventLog, logs: eventLogs, status: eventLogsStatus } = useEventLogs(activeFighterKey);
+  const { addLog: addEventLog, logs: eventLogs, status: eventLogsStatus, refresh: refreshEventLogs } = useEventLogs(activeFighterKey);
   const [logTrainingOpen, setLogTrainingOpen] = useState(false);
   const [logTrainingInitialValues, setLogTrainingInitialValues] = useState<CompletedSelfPostedTrainingInput | null>(null);
   // Phase 3 read-side association slice — the currently opened read-only
@@ -217,7 +223,7 @@ const App = () => {
   // merge (the narrowest seam: it already produces the final week/day shape
   // desktop, mobile and search all consume). Never writes to legacy weeks —
   // `stripVirtualEntries` also strips `type: 'calendar_entry'` defensively.
-  const { entries: calendarEntries, issues: calendarEntryIssues, status: calendarEntriesStatus } = useCalendarEntries(activeFighterKey);
+  const { entries: calendarEntries, issues: calendarEntryIssues, status: calendarEntriesStatus, refresh: refreshCalendarEntries } = useCalendarEntries(activeFighterKey);
   const finalMultiWeekData = useCalendarEntryMerge(multiWeekData, calendarEntries, calendarEntriesStatus);
   const finalScheduleData = useMemo(
     () => finalMultiWeekData[currentWeek] ?? mergedScheduleData,
@@ -437,6 +443,48 @@ const App = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calendarEntryIssues.length]);
+
+  // UX fix — TrainingLogPage's atomic creation persists via its OWN
+  // `useEventLogs` instance, entirely separate from the `calendarEntries`/
+  // `eventLogs` instances App.tsx holds for the calendar. Without an explicit
+  // refresh here, a newly created projected entry only appeared after a full
+  // page reload. Re-fetches via the EXISTING refresh paths (no second local
+  // record, no optimistic write) — the created records are already returned
+  // as ids only, not full objects, so plumbing them across two independent
+  // hook instances would be a larger change than reusing the established
+  // read-refresh. `pendingUnplannedTrainingRefreshRef` distinguishes THIS
+  // refresh (which may need to report a save-succeeded-but-refresh-failed
+  // notice) from any unrelated status change. It records WHICH fighter the
+  // refresh belongs to, because `activeFighterKey` can change before the
+  // refresh settles (switching the viewed fighter) — the other fighter's
+  // own status changes must never be misread as this refresh's outcome.
+  const pendingUnplannedTrainingRefreshRef = useRef<PendingUnplannedTrainingRefresh>(null);
+
+  const handleUnplannedTrainingCreated = useCallback(() => {
+    if (!activeFighterKey) return;
+    pendingUnplannedTrainingRefreshRef.current = { fighterKey: activeFighterKey };
+    refreshCalendarEntries();
+    refreshEventLogs();
+  }, [activeFighterKey, refreshCalendarEntries, refreshEventLogs]);
+
+  useEffect(() => {
+    // Runs on every activeFighterKey change too, so a fighter switch
+    // invalidates stale tracking immediately rather than waiting for the
+    // new fighter's statuses to happen to settle.
+    if (!isPendingRefreshOwnedByActiveFighter(pendingUnplannedTrainingRefreshRef.current, activeFighterKey)) {
+      pendingUnplannedTrainingRefreshRef.current = null;
+      return;
+    }
+    if (!isUnplannedTrainingRefreshSettled(calendarEntriesStatus, eventLogsStatus)) return;
+    pendingUnplannedTrainingRefreshRef.current = null;
+    // The training itself was already saved successfully (TrainingLogPage's
+    // own success toast already fired) — a failed refresh here must never be
+    // reported as a failed save, must never retry creation automatically,
+    // and must not encourage creating a duplicate.
+    if (didUnplannedTrainingRefreshFail(calendarEntriesStatus, eventLogsStatus)) {
+      showToast('Træningen er gemt, men kalenderen kunne ikke opdateres med det samme. Skift visning eller genindlæs for at se den.', 'error');
+    }
+  }, [activeFighterKey, calendarEntriesStatus, eventLogsStatus, showToast]);
 
   // Final calendar-log creation eligibility: all existing eligibility
   // requirements (ownership, not-future, structural — `canLogSelectedSession`)
@@ -800,6 +848,7 @@ const App = () => {
             canCreateLog={canCreateLog}
             onSuccess={(message) => showToast(message, 'success')}
             onError={(message) => showToast(message, 'error')}
+            onUnplannedTrainingCreated={handleUnplannedTrainingCreated}
           />
         ) : (
           <>

@@ -28,9 +28,18 @@ export interface TrainingLogPageProps {
   canCreateLog: boolean;
   onSuccess?: (message: string) => void;
   onError?: (message: string) => void;
+  /**
+   * Called once, after a successful atomic unplanned-training creation
+   * (`useEventLogs.addUnplannedTraining`), so a parent holding its own
+   * separate `calendarEntries`/`eventLogs` state (e.g. the main calendar in
+   * App.tsx) can refresh it. This page's own history list already refreshes
+   * independently via the hook itself — this callback exists only for
+   * cross-instance state that this page has no visibility into.
+   */
+  onUnplannedTrainingCreated?: () => void;
 }
 
-export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, onError }: TrainingLogPageProps) {
+export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, onError, onUnplannedTrainingCreated }: TrainingLogPageProps) {
   const { isDark } = useTheme();
   const { logs, loading, error, addUnplannedTraining, resetUnplannedAttempt, refresh } = useEventLogs(fighterKey);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -43,6 +52,7 @@ export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, o
     try {
       const ids = await addUnplannedTraining(input);
       onSuccess?.('Træning logget.');
+      onUnplannedTrainingCreated?.();
       return ids.logRecordId;
     } catch (err) {
       onError?.(err instanceof Error ? err.message : 'Kunne ikke gemme træningen.');

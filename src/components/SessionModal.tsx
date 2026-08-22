@@ -332,7 +332,9 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                             )}
                             {trainingLogAssociationItems.length > 0 && (
                                 <div>
-                                    <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Træningslogs</p>
+                                    <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>
+                                        {trainingLogAssociation.kind === 'one' ? 'Træningslog' : 'Træningslogs'}
+                                    </p>
                                     {/* Data-integrity conflict: more than one TrainingLog for this
                                         occurrence. No log is selected as canonical; all remain
                                         inspectable read-only until a future explicit resolution. */}
@@ -347,6 +349,7 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                                                 <button
                                                     type="button"
                                                     onClick={() => onOpenTrainingLogDetail?.(item)}
+                                                    aria-label={`Se træningslog: ${item.title}`}
                                                     className={`w-full text-left rounded-lg border px-3 py-2 transition-colors ${isDark ? 'border-slate-800 hover:bg-slate-800/60' : 'border-surface-border hover:bg-surface-hover'}`}
                                                 >
                                                     <TrainingLogSummary item={item} isDark={isDark} />

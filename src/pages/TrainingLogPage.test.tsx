@@ -167,6 +167,43 @@ describe('TrainingLogPage — owner can log completed training', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('calls onUnplannedTrainingCreated once after a successful atomic creation, so a parent calendar can refresh', async () => {
+    const addUnplannedTraining = vi.fn().mockResolvedValue({ aggregateId: 'agg1', occurrenceId: 'occ1', calendarEntryId: 'entry1', logRecordId: 'log-1' });
+    const onUnplannedTrainingCreated = vi.fn();
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ addUnplannedTraining }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog onUnplannedTrainingCreated={onUnplannedTrainingCreated} />);
+    fireEvent.click(screen.getByRole('button', { name: /log træning/i }));
+
+    fireEvent.change(screen.getByLabelText(/Titel/i), { target: { value: 'MMA Sparring' } });
+    fireEvent.change(screen.getByLabelText(/Dato/i), { target: { value: '2020-01-01' } });
+    fireEvent.change(screen.getByLabelText(/Starttidspunkt/i), { target: { value: '10:00' } });
+    fireEvent.change(screen.getByLabelText(/Varighed/i), { target: { value: '60' } });
+    fireEvent.change(screen.getByLabelText(/Disciplin/i), { target: { value: 'MMA' } });
+    fireEvent.click(screen.getByRole('button', { name: /gem træning/i }));
+
+    await waitFor(() => expect(onUnplannedTrainingCreated).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not call onUnplannedTrainingCreated when addUnplannedTraining rejects', async () => {
+    const addUnplannedTraining = vi.fn().mockRejectedValue(new Error('Kunne ikke gemme'));
+    const onUnplannedTrainingCreated = vi.fn();
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ addUnplannedTraining }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog onUnplannedTrainingCreated={onUnplannedTrainingCreated} onError={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /log træning/i }));
+
+    fireEvent.change(screen.getByLabelText(/Titel/i), { target: { value: 'MMA Sparring' } });
+    fireEvent.change(screen.getByLabelText(/Dato/i), { target: { value: '2020-01-01' } });
+    fireEvent.change(screen.getByLabelText(/Starttidspunkt/i), { target: { value: '10:00' } });
+    fireEvent.change(screen.getByLabelText(/Varighed/i), { target: { value: '60' } });
+    fireEvent.change(screen.getByLabelText(/Disciplin/i), { target: { value: 'MMA' } });
+    fireEvent.click(screen.getByRole('button', { name: /gem træning/i }));
+
+    await waitFor(() => expect(addUnplannedTraining).toHaveBeenCalledTimes(1));
+    expect(onUnplannedTrainingCreated).not.toHaveBeenCalled();
+  });
+
   it('resets the attempt when the sheet is closed after a successful save (own onClose call)', async () => {
     const resetUnplannedAttempt = vi.fn();
     mockedUseEventLogs.mockReturnValue(mockHookResult({ resetUnplannedAttempt }));
