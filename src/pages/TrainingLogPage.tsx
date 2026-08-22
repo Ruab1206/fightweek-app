@@ -18,6 +18,7 @@ import { Plus } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { useEventLogs } from '../hooks/useEventLogs';
 import { LogTrainingSheet } from '../components/LogTrainingSheet';
+import { TrainingLogSummary } from '../components/TrainingLogSummary';
 import { logToHistoryItem } from '../domain/calendar/selfPostedTraining';
 import type { CompletedSelfPostedTrainingInput } from '../domain/calendar/selfPostedTraining';
 
@@ -27,18 +28,6 @@ export interface TrainingLogPageProps {
   canCreateLog: boolean;
   onSuccess?: (message: string) => void;
   onError?: (message: string) => void;
-}
-
-function formatHistoryDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('da-DK', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function formatHistoryTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' });
 }
 
 export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, onError }: TrainingLogPageProps) {
@@ -104,18 +93,7 @@ export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, o
               const item = logToHistoryItem(record);
               return (
                 <li key={item.id} className={`rounded-2xl border p-4 ${card}`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <h2 className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-ds-text'}`}>{item.title}</h2>
-                    {item.discipline && (
-                      <span className={`text-[10px] font-bold uppercase tracking-wider ${subtle}`}>{item.discipline}</span>
-                    )}
-                  </div>
-                  <p className={`text-xs mt-1 capitalize ${subtle}`}>
-                    {formatHistoryDate(item.startDateTime)} · {formatHistoryTime(item.startDateTime)} · {item.durationMinutes} min
-                  </p>
-                  {item.location && <p className={`text-xs mt-1 ${subtle}`}>{item.location}</p>}
-                  {item.intensity != null && <p className={`text-xs mt-1 ${subtle}`}>Intensitet: {item.intensity}/5</p>}
-                  {item.notes && <p className={`text-sm mt-2 ${isDark ? 'text-slate-300' : 'text-ds-text'}`}>{item.notes}</p>}
+                  <TrainingLogSummary item={item} isDark={isDark} />
                 </li>
               );
             })}

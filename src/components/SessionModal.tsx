@@ -8,6 +8,9 @@ import { NotesEditor } from './NotesEditor';
 import { sessionNoteKey } from '../hooks/useActivityNotes';
 import { InvitePicker, type InviteCandidate } from './shared/InvitePicker';
 import type { InvitationResponse } from '../types/invitation';
+import { TrainingLogSummary } from './TrainingLogSummary';
+import type { TrainingHistoryItem } from '../domain/calendar/types';
+import type { EventLogsStatus } from '../hooks/useEventLogs';
 
 import { RECURRENCE_OPTIONS } from '../config/constants';
 
@@ -69,9 +72,21 @@ interface SessionModalProps {
      */
     canLogTraining?: boolean;
     onLogTraining?: () => void;
+    /**
+     * Phase 3 read-side association slice. Undefined means the parent has
+     * already decided (via the shared eligibility predicate, not duplicated
+     * here) that this session type does not get a "Træningslogs" section at
+     * all — e.g. catalogue-linked, fravær, event, invitation, cancelled,
+     * rest-day, or unsaved. When present, it is shown independently of
+     * `canLogTraining`/`onLogTraining` (an admin viewing another fighter may
+     * see existing logs without being able to create one).
+     */
+    associatedTrainingLogs?: TrainingHistoryItem[];
+    associatedTrainingLogsStatus?: EventLogsStatus;
+    onOpenTrainingLogDetail?: (item: TrainingHistoryItem) => void;
 }
 
-const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onSeriesInvite, onUninvite, canLogTraining, onLogTraining }: SessionModalProps) => {
+const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onSeriesInvite, onUninvite, canLogTraining, onLogTraining, associatedTrainingLogs, associatedTrainingLogsStatus, onOpenTrainingLogDetail }: SessionModalProps) => {
     const { isDark } = useTheme();
     const isNew = !initialData;
     const [form, setForm] = useState<SessionForm>({
@@ -269,6 +284,43 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                                 saveNote={saveNote}
                                 isDark={isDark}
                             />
+                        </div>
+                    )}
+
+                    {/* Read-side association (Phase 3 strangler slice): existing
+                        TrainingLogs already associated with this exact calendar
+                        occurrence, by explicit provenance only (never by title/date/
+                        time). Zero matches after a successful load render nothing —
+                        no empty list, no "Ikke logget" placeholder — since that would
+                        imply a completion state this slice does not define. */}
+                    {!isNew && associatedTrainingLogsStatus !== undefined && (
+                        associatedTrainingLogsStatus !== 'loaded' || (associatedTrainingLogs?.length ?? 0) > 0
+                    ) && (
+                        <div className={`px-5 py-3 border-t ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
+                            {associatedTrainingLogsStatus === 'error' && (
+                                <p className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>Kunne ikke hente træningslogs.</p>
+                            )}
+                            {(associatedTrainingLogsStatus === 'loading' || associatedTrainingLogsStatus === 'idle') && (
+                                <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Indlæser træningslogs…</p>
+                            )}
+                            {associatedTrainingLogsStatus === 'loaded' && (associatedTrainingLogs?.length ?? 0) > 0 && (
+                                <div>
+                                    <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Træningslogs</p>
+                                    <ul className="space-y-2">
+                                        {associatedTrainingLogs!.map((item) => (
+                                            <li key={item.id}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onOpenTrainingLogDetail?.(item)}
+                                                    className={`w-full text-left rounded-lg border px-3 py-2 transition-colors ${isDark ? 'border-slate-800 hover:bg-slate-800/60' : 'border-surface-border hover:bg-surface-hover'}`}
+                                                >
+                                                    <TrainingLogSummary item={item} isDark={isDark} />
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                         </div>
                     )}
 

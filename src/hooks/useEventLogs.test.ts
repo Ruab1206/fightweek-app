@@ -71,6 +71,36 @@ describe('useEventLogs', () => {
     expect(result.current.logs).toEqual([]);
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
+    expect(result.current.status).toBe('idle');
+  });
+
+  it('reports a loading status (not a loaded-empty result) before the initial request resolves', () => {
+    mockedListLogs.mockImplementationOnce(() => new Promise(() => {})); // never resolves
+
+    const { result } = renderHook(() => useEventLogs('fighter@example.com'));
+
+    expect(result.current.status).toBe('loading');
+    expect(result.current.logs).toEqual([]);
+  });
+
+  it('reaches a loaded status with an empty result after a successful empty load', async () => {
+    mockedListLogs.mockResolvedValueOnce([]);
+
+    const { result } = renderHook(() => useEventLogs('fighter@example.com'));
+
+    await waitFor(() => expect(result.current.status).toBe('loaded'));
+    expect(result.current.logs).toEqual([]);
+  });
+
+  it('reaches an error status distinguishable from a loaded-empty result on failure', async () => {
+    const err = new Error('Firestore read failed');
+    mockedListLogs.mockRejectedValueOnce(err);
+
+    const { result } = renderHook(() => useEventLogs('fighter@example.com'));
+
+    await waitFor(() => expect(result.current.status).toBe('error'));
+    expect(result.current.logs).toEqual([]);
+    expect(result.current.error).toBe(err);
   });
 
   it('loads logs for a valid fighter key', async () => {

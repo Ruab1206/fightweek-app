@@ -55,14 +55,19 @@ import AddScreen from './components/AddScreen';
 import type { AddType } from './components/AddScreen';
 import TrainingLogPage from './pages/TrainingLogPage';
 import { LogTrainingSheet } from './components/LogTrainingSheet';
+import { TrainingLogDetailSheet } from './components/TrainingLogDetailSheet';
 import { useEventLogs } from './hooks/useEventLogs';
 import {
   isLoggableSelfPostedCalendarOccurrence,
+  isEligibleSelfPostedCalendarSession,
   buildSelfPostedCalendarLogContext,
   decideLogTrainingSheetClose,
   toDateTime,
 } from './domain/calendar/adapters';
 import type { CompletedSelfPostedTrainingInput } from './domain/calendar/selfPostedTraining';
+import { logToHistoryItem } from './domain/calendar/selfPostedTraining';
+import { selectLogsForCalendarOccurrence } from './domain/calendar/logAssociation';
+import type { TrainingHistoryItem } from './domain/calendar/types';
 
 const App = () => {
   // --- Hooks ---
@@ -115,13 +120,19 @@ const App = () => {
 
   // Phase 3 calendar-originated TrainingLog slice — reuses the SAME hook/
   // coordinator/service/lifecycle as the standalone "Log træning" entry point
-  // (TrainingLogPage). Only `addLog` is needed here; the list itself is owned
-  // by TrainingLogPage's own instance of this hook. Known inefficiency (an
-  // extra one-shot eventLogs read on every mount, no live subscription) is
-  // deferred rather than fixed in this slice — see revision report.
-  const { addLog: addEventLog } = useEventLogs(activeFighterKey);
+  // (TrainingLogPage). `logs`/`status` now also feed the read-side association
+  // section below (Next Planned Slice), so this single load serves both
+  // purposes — no second Firestore query is added for association. Known
+  // inefficiency (an extra one-shot eventLogs read on every mount, no live
+  // subscription) is deferred rather than fixed in this slice — see revision
+  // report.
+  const { addLog: addEventLog, logs: eventLogs, status: eventLogsStatus } = useEventLogs(activeFighterKey);
   const [logTrainingOpen, setLogTrainingOpen] = useState(false);
   const [logTrainingInitialValues, setLogTrainingInitialValues] = useState<CompletedSelfPostedTrainingInput | null>(null);
+  // Phase 3 read-side association slice — the currently opened read-only
+  // TrainingLog detail (from the association section), independent of the
+  // create flow's state above.
+  const [openTrainingLogDetail, setOpenTrainingLogDetail] = useState<TrainingHistoryItem | null>(null);
   // True only between a successful save and the sheet's own onClose() call
   // right after — lets onClose tell "saved, return to calendar" apart from
   // "cancelled, restore the SessionModal for the same session" (Task #5).
@@ -353,6 +364,40 @@ const App = () => {
       showToast('Kunne ikke forberede træningsloggen', 'error');
     }
   }, [editingSession, canLogSelectedSession, editingWeek, currentWeek, editingDay, activeFighterKey, showToast]);
+
+  // Phase 3 read-side association slice ("Next Planned Slice") — availability
+  // reuses the SAME structural eligibility predicate as calendar-originated
+  // logging above, WITHOUT the ownership/future-time gate: an administrator
+  // viewing another fighter's calendar may still see that fighter's already-
+  // created logs for an eligible self-posted session (existing read privacy
+  // model — see firestore.rules eventLogs), even though only the owner can
+  // create a new one (`canLogSelectedSession`/`canCreateLog`). No second
+  // eligibility implementation — this calls the same
+  // `isEligibleSelfPostedCalendarSession` used by `canLogSelectedSession`.
+  const showLogAssociationForSelectedSession = useMemo(
+    () => isEligibleSelfPostedCalendarSession(editingSession as any),
+    [editingSession],
+  );
+
+  // Explicit occurrence identity (sessionId + occurrenceDateISO) passed into
+  // the pure selector — never inferred from mutable snapshot fields.
+  const selectedSessionOccurrenceIdentity = useMemo(() => {
+    if (!showLogAssociationForSelectedSession || !editingSession) return null;
+    const weekNum = editingWeek || currentWeek;
+    const d = getDateForWeekDay(weekNum, editingDay);
+    const dateISO = d ? toLocalISODate(d) : '';
+    if (!dateISO) return null;
+    return { sessionId: String((editingSession as any).id), occurrenceDateISO: dateISO };
+  }, [showLogAssociationForSelectedSession, editingSession, editingWeek, currentWeek, editingDay]);
+
+  // Zero, one, or many exact matches — no product meaning is encoded here;
+  // `logs`/`eventLogsStatus` come from the SAME `useEventLogs` load already
+  // used for the standalone create action above (no new Firestore query).
+  const associatedTrainingLogs = useMemo<TrainingHistoryItem[]>(() => {
+    if (!selectedSessionOccurrenceIdentity) return [];
+    return selectLogsForCalendarOccurrence(eventLogs, selectedSessionOccurrenceIdentity)
+      .map(logToHistoryItem);
+  }, [eventLogs, selectedSessionOccurrenceIdentity]);
 
   // #1216: keep the user anchored on an activity after they close or add it.
   // On mobile we only scroll when the activity's day is OFF-SCREEN, so glancing
@@ -1095,6 +1140,9 @@ const App = () => {
         saveNote={saveNote}
         canLogTraining={canLogSelectedSession}
         onLogTraining={handleLogTrainingRequested}
+        associatedTrainingLogs={showLogAssociationForSelectedSession ? associatedTrainingLogs : undefined}
+        associatedTrainingLogsStatus={showLogAssociationForSelectedSession ? eventLogsStatus : undefined}
+        onOpenTrainingLogDetail={setOpenTrainingLogDetail}
         inviteCandidates={inviteCandidates}
         existingInvitees={(() => {
           // Surface anyone already invited to *this* activity (same title + day)
@@ -1196,6 +1244,15 @@ const App = () => {
               throw err;
             }
           }}
+        />
+      )}
+      {/* Phase 3 read-side association slice — read-only detail for a log
+          selected from the association section above. Renders exclusively
+          from the log's own snapshot; no calendar mutation, no edit/delete. */}
+      {openTrainingLogDetail && (
+        <TrainingLogDetailSheet
+          item={openTrainingLogDetail}
+          onClose={() => setOpenTrainingLogDetail(null)}
         />
       )}
       {confirmDialog && <ConfirmModal title={confirmDialog.title} message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)} />}

@@ -16,17 +16,36 @@ import {
   listCompletedSelfPostedTrainingLogs,
 } from '../services/eventLogService';
 
+/**
+ * Explicit lifecycle status, distinct from the `loading` boolean below:
+ * `'idle'` means no load has started yet for the current `fighterKey` (e.g.
+ * an empty key), `'loading'` covers both the very first request and any
+ * refresh, `'loaded'` is a resolved (possibly empty) result, and `'error'` is
+ * a failed request. This lets a consumer tell "not yet loaded"/"loading"
+ * apart from "loaded successfully with zero results" — a plain boolean
+ * cannot represent that distinction (see the calendar-occurrence log
+ * association slice in App.tsx, which must not treat an unresolved request
+ * as "no logs").
+ */
+export type EventLogsStatus = 'idle' | 'loading' | 'loaded' | 'error';
+
 export interface UseEventLogsResult {
   logs: CompletedSelfPostedTrainingLog[];
+  /** Convenience alias for `status === 'loading'`. Kept for existing callers. */
   loading: boolean;
   error: Error | null;
+  status: EventLogsStatus;
   addLog: (input: CompletedSelfPostedTrainingInput) => Promise<string>;
   refresh: () => Promise<void>;
 }
 
 export function useEventLogs(fighterKey: string): UseEventLogsResult {
   const [logs, setLogs] = useState<CompletedSelfPostedTrainingLog[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Initialize to 'loading' (not 'idle') when a fighterKey is already present
+  // on first render, since the effect below will start a request for it
+  // before the next paint — otherwise there would be a one-render window
+  // where `status` looks like "loaded empty" before the request even started.
+  const [status, setStatus] = useState<EventLogsStatus>(fighterKey ? 'loading' : 'idle');
   const [error, setError] = useState<Error | null>(null);
 
   // Bumped whenever a load becomes stale (fighterKey changed / unmounted) so
@@ -36,24 +55,24 @@ export function useEventLogs(fighterKey: string): UseEventLogsResult {
   const load = useCallback(async () => {
     if (!fighterKey) {
       setLogs([]);
-      setLoading(false);
+      setStatus('idle');
       setError(null);
       return;
     }
 
     const requestId = ++requestIdRef.current;
-    setLoading(true);
+    setStatus('loading');
 
     try {
       const result = await listCompletedSelfPostedTrainingLogs(fighterKey);
       if (requestIdRef.current !== requestId) return;
       setLogs(result);
       setError(null);
-      setLoading(false);
+      setStatus('loaded');
     } catch (err) {
       if (requestIdRef.current !== requestId) return;
       setError(err instanceof Error ? err : new Error(String(err)));
-      setLoading(false);
+      setStatus('error');
     }
   }, [fighterKey]);
 
@@ -88,5 +107,5 @@ export function useEventLogs(fighterKey: string): UseEventLogsResult {
 
   const refresh = useCallback(() => load(), [load]);
 
-  return { logs, loading, error, addLog, refresh };
+  return { logs, loading: status === 'loading', error, status, addLog, refresh };
 }

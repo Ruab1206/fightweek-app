@@ -60,6 +60,7 @@ function mockHookResult(overrides: Partial<UseEventLogsResult> = {}): UseEventLo
     logs: [],
     loading: false,
     error: null,
+    status: 'loaded',
     addLog: vi.fn(),
     refresh: vi.fn(),
     ...overrides,
