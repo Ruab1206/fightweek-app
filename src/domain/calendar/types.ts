@@ -316,6 +316,14 @@ export interface NewModelCalendarAggregate {
   updatedAt: string;
   /** Always 1 in Checkpoint A — reserved for future prospective schema evolution. */
   schemaVersion: 1;
+  /**
+   * The paired `CompletedSelfPostedTrainingLog.id` created atomically with
+   * this aggregate (Checkpoint B). Required, immutable — equals
+   * `UnplannedTrainingCreationIds.logRecordId`. Enables bilateral Firestore
+   * pair-integrity validation; it is a co-persistence identity reference,
+   * not a general one-log-per-occurrence uniqueness mechanism.
+   */
+  logRecordId: string;
 }
 
 /**

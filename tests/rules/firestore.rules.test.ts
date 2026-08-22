@@ -50,7 +50,7 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 
 const PROJECT_ID = 'demo-fightweek-rules'; // synthetic; `demo-` => offline mode
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -357,5 +357,219 @@ describe('TARGET rules — unenumerated user path is denied (wildcard narrowed)'
   });
   it('other team member cannot read an unenumerated path', async () => {
     await assertFails(getDoc(doc(as('other@x'), P.unenumerated)));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Checkpoint B — bilateral new-model calendar-aggregate + TrainingLog pair.
+//
+// Minimum test record builders. Pure fixture data only (no domain imports —
+// this harness is deliberately independent of the app's TypeScript build).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const AGG_PATH = (userKey: string, aggregateId: string) =>
+  `artifacts/production/users/${userKey}/calendarEntries/${aggregateId}`;
+const LOG_PATH = (userKey: string, logId: string) =>
+  `artifacts/production/users/${userKey}/eventLogs/${logId}`;
+
+function makeAggregate(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'agg1',
+    userId: OWNER,
+    occurrence: {
+      id: 'occ1',
+      seriesId: null,
+      type: 'self_posted_training',
+      title: 'Solo run',
+      startDateTime: '2026-08-14T18:00:00',
+      endDateTime: '2026-08-14T19:00:00',
+      status: 'completed',
+    },
+    calendarEntry: { id: 'entry1', occurrenceId: 'occ1', status: 'completed', userId: OWNER },
+    createdAt: '2026-08-14T19:05:00.000Z',
+    updatedAt: '2026-08-14T19:05:00.000Z',
+    schemaVersion: 1,
+    logRecordId: 'nmlog1',
+    ...overrides,
+  };
+}
+
+function makeNewModelLog(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'nmlog1',
+    occurrence: {
+      id: 'occ1',
+      seriesId: null,
+      type: 'self_posted_training',
+      title: 'Solo run',
+      startDateTime: '2026-08-14T18:00:00',
+      endDateTime: '2026-08-14T19:00:00',
+      status: 'completed',
+    },
+    calendarEntry: { id: 'entry1', occurrenceId: 'occ1', status: 'completed' },
+    log: { id: 'evlog1', occurrenceId: 'occ1', userId: OWNER, attended: true },
+    origin: { type: 'new_model_calendar_entry', aggregateId: 'agg1', occurrenceId: 'occ1' },
+    createdAt: '2026-08-14T19:05:00.000Z',
+    updatedAt: '2026-08-14T19:05:00.000Z',
+    ...overrides,
+  };
+}
+
+function makeStandaloneLog(id = 'standalone1', overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    occurrence: {
+      id: 'occ_standalone',
+      seriesId: null,
+      type: 'self_posted_training',
+      title: 'Unplanned',
+      startDateTime: '2026-08-14T06:00:00',
+      endDateTime: '2026-08-14T07:00:00',
+      status: 'completed',
+    },
+    calendarEntry: { id: 'entry_standalone', occurrenceId: 'occ_standalone', status: 'completed' },
+    log: { id: 'evlog_standalone', occurrenceId: 'occ_standalone', userId: OWNER, attended: true },
+    createdAt: '2026-08-14T07:05:00.000Z',
+    updatedAt: '2026-08-14T07:05:00.000Z',
+    ...overrides,
+  };
+}
+
+function makeLegacyOriginLog(id = 'legacy1', overrides: Record<string, unknown> = {}) {
+  return {
+    ...makeStandaloneLog(id),
+    origin: { type: 'self_posted_calendar_session', sessionId: 'sess1', occurrenceDateISO: '2026-08-14' },
+    ...overrides,
+  };
+}
+
+describe('Checkpoint B — calendarEntries permissions', () => {
+  beforeEach(async () => {
+    // Seed a valid, already-consistent pair with rules disabled, for read/update/delete assertions.
+    // Uses a log id distinct from the globally-seeded P.eventLog ('log1') fixture.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate());
+      await setDoc(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog());
+    });
+  });
+
+  it('owner can read own calendarEntries document', async () => {
+    await assertSucceeds(getDoc(doc(as(OWNER), AGG_PATH(OWNER, 'agg1'))));
+  });
+  it('admin can read (read-only policy)', async () => {
+    await assertSucceeds(getDoc(doc(as('admin@x'), AGG_PATH(OWNER, 'agg1'))));
+  });
+  it('admin cannot create', async () => {
+    await assertFails(
+      setDoc(doc(as('admin@x'), AGG_PATH(OWNER, 'agg2')), makeAggregate({ id: 'agg2', logRecordId: 'log2' })),
+    );
+  });
+  it('owner cannot update an existing calendarEntries document (no edit lifecycle yet)', async () => {
+    await assertFails(updateDoc(doc(as(OWNER), AGG_PATH(OWNER, 'agg1')), { 'occurrence.title': 'Changed' }));
+  });
+  it('owner cannot delete an existing calendarEntries document (no delete lifecycle yet)', async () => {
+    await assertFails(deleteDoc(doc(as(OWNER), AGG_PATH(OWNER, 'agg1'))));
+  });
+  it('coach cannot read', async () => {
+    await assertFails(getDoc(doc(as('coach@x'), AGG_PATH(OWNER, 'agg1'))));
+  });
+  it('coach cannot create', async () => {
+    await assertFails(
+      setDoc(doc(as('coach@x'), AGG_PATH(OWNER, 'agg2')), makeAggregate({ id: 'agg2', logRecordId: 'log2' })),
+    );
+  });
+  it("other fighter cannot read another fighter's calendarEntries document", async () => {
+    await assertFails(getDoc(doc(as('other@x'), AGG_PATH(OWNER, 'agg1'))));
+  });
+  it("other fighter cannot create in another fighter's path", async () => {
+    await assertFails(
+      setDoc(doc(as('other@x'), AGG_PATH(OWNER, 'agg2')), makeAggregate({ id: 'agg2', logRecordId: 'log2' })),
+    );
+  });
+  it('unauthenticated cannot read', async () => {
+    await assertFails(getDoc(doc(as(null), AGG_PATH(OWNER, 'agg1'))));
+  });
+  it('unauthenticated cannot create', async () => {
+    await assertFails(
+      setDoc(doc(as(null), AGG_PATH(OWNER, 'agg2')), makeAggregate({ id: 'agg2', logRecordId: 'log2' })),
+    );
+  });
+});
+
+describe('Checkpoint B — bilateral pair-integrity invariant (co-persistence, not uniqueness)', () => {
+  it('owner batch-creating a consistent aggregate + new-model log together succeeds', async () => {
+    const db = as(OWNER);
+    const batch = writeBatch(db);
+    batch.set(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate());
+    batch.set(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog());
+    await assertSucceeds(batch.commit());
+  });
+
+  it('a new-model-origin log created ALONE (no matching aggregate in the same commit) fails', async () => {
+    await assertFails(setDoc(doc(as(OWNER), LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog()));
+  });
+
+  it('a calendarEntries aggregate created ALONE (no matching log in the same commit) fails', async () => {
+    await assertFails(setDoc(doc(as(OWNER), AGG_PATH(OWNER, 'agg1')), makeAggregate()));
+  });
+
+  it('fails when aggregate.occurrence.id does not match the log occurrence.id', async () => {
+    const db = as(OWNER);
+    const batch = writeBatch(db);
+    batch.set(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate({ occurrence: { ...makeAggregate().occurrence, id: 'occ_DIFFERENT' } }));
+    batch.set(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog());
+    await assertFails(batch.commit());
+  });
+
+  it('fails when aggregate.calendarEntry.id does not match the log calendarEntry.id', async () => {
+    const db = as(OWNER);
+    const batch = writeBatch(db);
+    batch.set(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate({ calendarEntry: { ...makeAggregate().calendarEntry, id: 'entry_DIFFERENT' } }));
+    batch.set(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog());
+    await assertFails(batch.commit());
+  });
+
+  it('fails when the log origin.aggregateId points at a different aggregate id', async () => {
+    const db = as(OWNER);
+    const batch = writeBatch(db);
+    batch.set(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate());
+    batch.set(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog({ origin: { type: 'new_model_calendar_entry', aggregateId: 'agg_DIFFERENT', occurrenceId: 'occ1' } }));
+    await assertFails(batch.commit());
+  });
+
+  it('fails when aggregate.logRecordId does not match the actual log document id', async () => {
+    const db = as(OWNER);
+    const batch = writeBatch(db);
+    batch.set(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate({ logRecordId: 'log_DIFFERENT' }));
+    batch.set(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog());
+    await assertFails(batch.commit());
+  });
+
+  it("fails when aggregate.userId does not match the path owner", async () => {
+    const db = as(OWNER);
+    const batch = writeBatch(db);
+    batch.set(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate({ userId: 'someone-else@x' }));
+    batch.set(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog());
+    await assertFails(batch.commit());
+  });
+
+  it('standalone log create (no origin) is unaffected by the bilateral gate', async () => {
+    await assertSucceeds(setDoc(doc(as(OWNER), LOG_PATH(OWNER, 'standalone1')), makeStandaloneLog()));
+  });
+
+  it('legacy self_posted_calendar_session-origin log create is unaffected by the bilateral gate', async () => {
+    await assertSucceeds(setDoc(doc(as(OWNER), LOG_PATH(OWNER, 'legacy1')), makeLegacyOriginLog()));
+  });
+
+  it('update/delete of an existing new-model log remain allowed for the owner (unchanged from before)', async () => {
+    const db = as(OWNER);
+    const batch = writeBatch(db);
+    batch.set(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate());
+    batch.set(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog());
+    await assertSucceeds(batch.commit());
+
+    await assertSucceeds(updateDoc(doc(db, LOG_PATH(OWNER, 'nmlog1')), { 'log.notes': 'Updated' }));
+    await assertSucceeds(deleteDoc(doc(db, LOG_PATH(OWNER, 'nmlog1'))));
   });
 });

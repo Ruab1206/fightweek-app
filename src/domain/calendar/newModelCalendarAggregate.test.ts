@@ -118,6 +118,7 @@ describe('buildNewModelCalendarAggregate', () => {
     expect(aggregate.id).toBe(ids.aggregateId);
     expect(aggregate.occurrence.id).toBe(ids.occurrenceId);
     expect(aggregate.calendarEntry.id).toBe(ids.calendarEntryId);
+    expect(aggregate.logRecordId).toBe(ids.logRecordId);
   });
 
   it('sets occurrence.seriesId to null', () => {
@@ -276,6 +277,7 @@ function makeAggregate(
     createdAt: '2026-08-22T19:00:00.000Z',
     updatedAt: '2026-08-22T19:00:00.000Z',
     schemaVersion: 1,
+    logRecordId: 'log_1',
     ...overrides,
   };
 }

@@ -147,6 +147,7 @@ export function buildNewModelCalendarAggregate(
     createdAt: now,
     updatedAt: now,
     schemaVersion: 1,
+    logRecordId: ids.logRecordId,
   };
 }
 

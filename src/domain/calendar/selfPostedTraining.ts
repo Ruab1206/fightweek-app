@@ -75,6 +75,21 @@ export interface CompletedSelfPostedTrainingInput {
 export interface CompletedSelfPostedTrainingDeps {
   generateId?: () => string;
   nowISO?: () => string;
+  /**
+   * Optional pre-minted ids (Checkpoint B) — when supplied, used instead of
+   * calling `generateId()` for these three identities, so a paired
+   * `NewModelCalendarAggregate` and this log can share the same occurrence/
+   * calendarEntry identity and a known record id. Omit for existing callers
+   * (standalone/calendar-originated) — behavior is then unchanged: all ids
+   * are minted internally via `generateId()`, exactly as before. The
+   * `EventLog`'s own internal `log.id` always continues via `generateId()`
+   * regardless — it is not identity-bearing for calendar-aggregate pairing.
+   */
+  ids?: {
+    occurrenceId: string;
+    calendarEntryId: string;
+    recordId: string;
+  };
 }
 
 /**
@@ -255,10 +270,10 @@ export function buildCompletedSelfPostedTrainingLog(
   const generateId = deps.generateId ?? defaultId;
   const nowISO = deps.nowISO ?? defaultNowISO;
 
-  const occurrenceId = generateId();
-  const calendarEntryId = generateId();
+  const occurrenceId = deps.ids?.occurrenceId ?? generateId();
+  const calendarEntryId = deps.ids?.calendarEntryId ?? generateId();
   const logId = generateId();
-  const recordId = generateId();
+  const recordId = deps.ids?.recordId ?? generateId();
   const now = nowISO();
 
   const occurrence = buildLogContext(input, occurrenceId);

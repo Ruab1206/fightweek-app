@@ -16,6 +16,8 @@ import {
   addCompletedSelfPostedTrainingLog,
   listCompletedSelfPostedTrainingLogs,
 } from '../services/eventLogService';
+import { buildUnplannedTrainingRecords } from '../domain/calendar/unplannedTrainingCoordinator';
+import { persistUnplannedTrainingAtomically } from '../services/unplannedTrainingService';
 import type { CompletedSelfPostedTrainingLog } from '../domain/calendar/types';
 import type { CompletedSelfPostedTrainingInput } from '../domain/calendar/selfPostedTraining';
 
@@ -28,9 +30,19 @@ vi.mock('../services/eventLogService', () => ({
   listCompletedSelfPostedTrainingLogs: vi.fn(),
 }));
 
+vi.mock('../domain/calendar/unplannedTrainingCoordinator', () => ({
+  buildUnplannedTrainingRecords: vi.fn(),
+}));
+
+vi.mock('../services/unplannedTrainingService', () => ({
+  persistUnplannedTrainingAtomically: vi.fn(),
+}));
+
 const mockedAddCompletedTrainingLog = vi.mocked(addCompletedTrainingLog);
 const mockedListLogs = vi.mocked(listCompletedSelfPostedTrainingLogs);
 const mockedAddPersist = vi.mocked(addCompletedSelfPostedTrainingLog);
+const mockedBuildUnplannedTrainingRecords = vi.mocked(buildUnplannedTrainingRecords);
+const mockedPersistAtomically = vi.mocked(persistUnplannedTrainingAtomically);
 
 function makeLog(id: string, startDateTime = '2026-08-14T18:00:00.000Z'): CompletedSelfPostedTrainingLog {
   return {
@@ -289,5 +301,296 @@ describe('useEventLogs', () => {
     expect(caught).toBeInstanceOf(Error);
     expect(mockedAddCompletedTrainingLog).not.toHaveBeenCalled();
     expect(mockedAddPersist).not.toHaveBeenCalled();
+  });
+});
+
+// ──────────────────────────────────────────────
+// addUnplannedTraining / resetUnplannedAttempt — Checkpoint B pendingIdsRef
+// lifecycle. Mocks the pure coordinator and atomic persistence adapter, same
+// isolation approach as addLog's tests above.
+// ──────────────────────────────────────────────
+
+function makeAggregateFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'agg1',
+    userId: 'fighter@example.com',
+    occurrence: { id: 'occ1', seriesId: null, type: 'self_posted_training', title: 'Unplanned', startDateTime: '2026-08-14T06:00:00', endDateTime: '2026-08-14T07:00:00', status: 'completed' },
+    calendarEntry: { id: 'entry1', occurrenceId: 'occ1', status: 'completed', userId: 'fighter@example.com' },
+    createdAt: '2026-08-14T07:05:00.000Z',
+    updatedAt: '2026-08-14T07:05:00.000Z',
+    schemaVersion: 1 as const,
+    logRecordId: 'log1',
+    ...overrides,
+  };
+}
+
+function makeLogRecordFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'log1',
+    occurrence: { id: 'occ1', seriesId: null, type: 'self_posted_training', title: 'Unplanned', startDateTime: '2026-08-14T06:00:00', endDateTime: '2026-08-14T07:00:00', status: 'completed' },
+    calendarEntry: { id: 'entry1', occurrenceId: 'occ1', status: 'completed' },
+    log: { id: 'evlog1', occurrenceId: 'occ1', userId: 'fighter@example.com', attended: true },
+    origin: { type: 'new_model_calendar_entry', aggregateId: 'agg1', occurrenceId: 'occ1' },
+    createdAt: '2026-08-14T07:05:00.000Z',
+    updatedAt: '2026-08-14T07:05:00.000Z',
+    ...overrides,
+  };
+}
+
+const unplannedInput: CompletedSelfPostedTrainingInput = {
+  title: 'Solo run',
+  dateISO: '2026-08-14',
+  start: '06:00',
+  durationMinutes: 60,
+};
+
+describe('useEventLogs — addUnplannedTraining / resetUnplannedAttempt', () => {
+  beforeEach(() => {
+    mockedBuildUnplannedTrainingRecords.mockImplementation((input, ids) => ({
+      aggregate: makeAggregateFixture({ id: ids.aggregateId, logRecordId: ids.logRecordId, userId: input.userId }),
+      logRecord: makeLogRecordFixture({ id: ids.logRecordId }),
+    }));
+  });
+
+  it('mints a shared id bundle on the first submit and persists atomically, then refreshes', async () => {
+    mockedListLogs.mockResolvedValueOnce([]); // initial load
+    mockedPersistAtomically.mockResolvedValueOnce(undefined);
+    mockedListLogs.mockResolvedValueOnce([makeLog('new')]); // refresh after add
+
+    const { result } = renderHook(() => useEventLogs('fighter@example.com'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.addUnplannedTraining(unplannedInput);
+    });
+
+    expect(mockedBuildUnplannedTrainingRecords).toHaveBeenCalledTimes(1);
+    const [, idsArg] = mockedBuildUnplannedTrainingRecords.mock.calls[0];
+    expect(idsArg.aggregateId).toEqual(expect.any(String));
+    expect(idsArg.occurrenceId).toEqual(expect.any(String));
+    expect(idsArg.calendarEntryId).toEqual(expect.any(String));
+    expect(idsArg.logRecordId).toEqual(expect.any(String));
+    expect(mockedPersistAtomically).toHaveBeenCalledWith('fighter@example.com', expect.anything(), expect.anything());
+    expect(mockedListLogs).toHaveBeenCalledTimes(2); // initial + post-success refresh
+  });
+
+  it('sets input.userId to the resolved fighterKey regardless of caller-supplied value', async () => {
+    mockedListLogs.mockResolvedValueOnce([]);
+    mockedPersistAtomically.mockResolvedValueOnce(undefined);
+    mockedListLogs.mockResolvedValueOnce([]);
+
+    const { result } = renderHook(() => useEventLogs('fighter@example.com'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.addUnplannedTraining({ ...unplannedInput, userId: 'someone-else@x' });
+    });
+
+    const [inputArg] = mockedBuildUnplannedTrainingRecords.mock.calls[0];
+    expect(inputArg.userId).toBe('fighter@example.com');
+  });
+
+  it('retains the SAME id bundle for a retry after a failed persist', async () => {
+    mockedListLogs.mockResolvedValueOnce([]);
+    const persistErr = new Error('network error');
+    mockedPersistAtomically.mockRejectedValueOnce(persistErr);
+
+    const { result } = renderHook(() => useEventLogs('fighter@example.com'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await expect(result.current.addUnplannedTraining(unplannedInput)).rejects.toBe(persistErr);
+    });
+    const firstIds = mockedBuildUnplannedTrainingRecords.mock.calls[0][1];
+
+    mockedPersistAtomically.mockResolvedValueOnce(undefined);
+    mockedListLogs.mockResolvedValueOnce([]);
+    await act(async () => {
+      await result.current.addUnplannedTraining(unplannedInput);
+    });
+    const secondIds = mockedBuildUnplannedTrainingRecords.mock.calls[1][1];
+
+    expect(secondIds).toEqual(firstIds);
+  });
+
+  it('mints a FRESH id bundle for the next attempt after a successful creation', async () => {
+    mockedListLogs.mockResolvedValueOnce([]);
+    mockedPersistAtomically.mockResolvedValueOnce(undefined);
+    mockedListLogs.mockResolvedValueOnce([]);
+
+    const { result } = renderHook(() => useEventLogs('fighter@example.com'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.addUnplannedTraining(unplannedInput);
+    });
+    const firstIds = mockedBuildUnplannedTrainingRecords.mock.calls[0][1];
+
+    mockedPersistAtomically.mockResolvedValueOnce(undefined);
+    mockedListLogs.mockResolvedValueOnce([]);
+    await act(async () => {
+      await result.current.addUnplannedTraining(unplannedInput);
+    });
+    const secondIds = mockedBuildUnplannedTrainingRecords.mock.calls[1][1];
+
+    expect(secondIds).not.toEqual(firstIds);
+  });
+
+  it('mints a FRESH id bundle after resetUnplannedAttempt(), even without success or failure in between', async () => {
+    mockedListLogs.mockResolvedValueOnce([]);
+    const persistErr = new Error('network error');
+    mockedPersistAtomically.mockRejectedValueOnce(persistErr);
+
+    const { result } = renderHook(() => useEventLogs('fighter@example.com'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await expect(result.current.addUnplannedTraining(unplannedInput)).rejects.toBe(persistErr);
+    });
+    const firstIds = mockedBuildUnplannedTrainingRecords.mock.calls[0][1];
+
+    act(() => {
+      result.current.resetUnplannedAttempt();
+    });
+
+    mockedPersistAtomically.mockResolvedValueOnce(undefined);
+    mockedListLogs.mockResolvedValueOnce([]);
+    await act(async () => {
+      await result.current.addUnplannedTraining(unplannedInput);
+    });
+    const secondIds = mockedBuildUnplannedTrainingRecords.mock.calls[1][1];
+
+    expect(secondIds).not.toEqual(firstIds);
+  });
+
+  it('resetUnplannedAttempt does not trigger a logs reload by itself', async () => {
+    mockedListLogs.mockResolvedValueOnce([]);
+    const { result } = renderHook(() => useEventLogs('fighter@example.com'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      result.current.resetUnplannedAttempt();
+    });
+
+    expect(mockedListLogs).toHaveBeenCalledTimes(1); // only the initial load
+  });
+
+  it('an ordinary rerender with the same fighterKey does not reset an in-progress attempt', async () => {
+    mockedListLogs.mockResolvedValueOnce([]);
+    const persistErr = new Error('network error');
+    mockedPersistAtomically.mockRejectedValueOnce(persistErr);
+
+    const { result, rerender } = renderHook(
+      ({ fighterKey }) => useEventLogs(fighterKey),
+      { initialProps: { fighterKey: 'fighter@example.com' } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await expect(result.current.addUnplannedTraining(unplannedInput)).rejects.toBe(persistErr);
+    });
+    const firstIds = mockedBuildUnplannedTrainingRecords.mock.calls[0][1];
+
+    rerender({ fighterKey: 'fighter@example.com' }); // same key — no reset expected
+
+    mockedPersistAtomically.mockResolvedValueOnce(undefined);
+    mockedListLogs.mockResolvedValueOnce([]);
+    await act(async () => {
+      await result.current.addUnplannedTraining(unplannedInput);
+    });
+    const secondIds = mockedBuildUnplannedTrainingRecords.mock.calls[1][1];
+
+    expect(secondIds).toEqual(firstIds);
+  });
+
+  it('a normal logs refresh() does not reset an in-progress attempt', async () => {
+    mockedListLogs.mockResolvedValueOnce([]);
+    const persistErr = new Error('network error');
+    mockedPersistAtomically.mockRejectedValueOnce(persistErr);
+
+    const { result } = renderHook(() => useEventLogs('fighter@example.com'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await expect(result.current.addUnplannedTraining(unplannedInput)).rejects.toBe(persistErr);
+    });
+    const firstIds = mockedBuildUnplannedTrainingRecords.mock.calls[0][1];
+
+    mockedListLogs.mockResolvedValueOnce([]);
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    mockedPersistAtomically.mockResolvedValueOnce(undefined);
+    mockedListLogs.mockResolvedValueOnce([]);
+    await act(async () => {
+      await result.current.addUnplannedTraining(unplannedInput);
+    });
+    const secondIds = mockedBuildUnplannedTrainingRecords.mock.calls[1][1];
+
+    expect(secondIds).toEqual(firstIds);
+  });
+
+  it('clears the pending bundle when the fighter key changes', async () => {
+    mockedListLogs.mockResolvedValueOnce([]);
+    const persistErr = new Error('network error');
+    mockedPersistAtomically.mockRejectedValueOnce(persistErr);
+
+    const { result, rerender } = renderHook(
+      ({ fighterKey }) => useEventLogs(fighterKey),
+      { initialProps: { fighterKey: 'fighterA@example.com' } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await expect(result.current.addUnplannedTraining(unplannedInput)).rejects.toBe(persistErr);
+    });
+    const firstIds = mockedBuildUnplannedTrainingRecords.mock.calls[0][1];
+
+    mockedListLogs.mockResolvedValueOnce([]);
+    rerender({ fighterKey: 'fighterB@example.com' });
+    await waitFor(() => expect(mockedListLogs).toHaveBeenCalledTimes(2));
+
+    mockedPersistAtomically.mockResolvedValueOnce(undefined);
+    mockedListLogs.mockResolvedValueOnce([]);
+    await act(async () => {
+      await result.current.addUnplannedTraining(unplannedInput);
+    });
+    const secondIds = mockedBuildUnplannedTrainingRecords.mock.calls[1][1];
+
+    expect(secondIds).not.toEqual(firstIds);
+  });
+
+  it('rejects addUnplannedTraining when fighter key is missing, without minting ids or persisting', async () => {
+    const { result } = renderHook(() => useEventLogs(''));
+
+    let caught: unknown;
+    await act(async () => {
+      try {
+        await result.current.addUnplannedTraining(unplannedInput);
+      } catch (e) {
+        caught = e;
+      }
+    });
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(mockedBuildUnplannedTrainingRecords).not.toHaveBeenCalled();
+    expect(mockedPersistAtomically).not.toHaveBeenCalled();
+  });
+
+  it('does not refresh logs when persistence fails', async () => {
+    mockedListLogs.mockResolvedValueOnce([]);
+    const persistErr = new Error('network error');
+    mockedPersistAtomically.mockRejectedValueOnce(persistErr);
+
+    const { result } = renderHook(() => useEventLogs('fighter@example.com'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await expect(result.current.addUnplannedTraining(unplannedInput)).rejects.toBe(persistErr);
+    });
+
+    expect(mockedListLogs).toHaveBeenCalledTimes(1); // only the initial load, no refresh
+    expect(result.current.error).toBe(persistErr);
   });
 });

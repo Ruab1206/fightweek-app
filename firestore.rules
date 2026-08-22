@@ -84,12 +84,79 @@ service cloud.firestore {
     // No broader user-scoped rule matches this path, so additive rules cannot
     // re-grant team-member or coach access. Any future EXPLICIT sharing would be
     // added here (e.g. an allow read gated on a `sharedWith` field) — not now.
+    //
+    // ─── Checkpoint B: bilateral new-model pair-integrity gate ───
+    // A log create is split from update/delete so that ONLY the create path
+    // for a log declaring `origin.type == 'new_model_calendar_entry'` (the
+    // Checkpoint B atomic calendar-aggregate + TrainingLog pair) requires the
+    // matching `calendarEntries` document to exist, in the SAME atomic
+    // commit, with identity fields that agree. Standalone (no `origin`) and
+    // legacy `self_posted_calendar_session` creates are UNCHANGED — they hit
+    // the second `allow create` branch below, exactly as before. This is
+    // co-persistence PAIR INTEGRITY, not general one-log-per-occurrence
+    // uniqueness: it does not prevent a second log for the same occurrence.
+    function hasNewModelOrigin(data) {
+      return 'origin' in data && data.origin.type == 'new_model_calendar_entry';
+    }
+
+    function logPairsWithAggregate(userKey, logId, logData) {
+      let agg = getAfter(/databases/$(database)/documents/artifacts/production/users/$(userKey)/calendarEntries/$(logData.origin.aggregateId)).data;
+      return agg.id == logData.origin.aggregateId
+          && agg.occurrence.id == logData.origin.occurrenceId
+          && agg.occurrence.id == logData.occurrence.id
+          && agg.calendarEntry.id == logData.calendarEntry.id
+          && agg.userId == userKey
+          && agg.logRecordId == logData.id
+          && logData.id == logId;
+    }
+
     match /artifacts/production/users/{userKey}/eventLogs/{logId} {
       allow read: if isAuthenticated()
         && request.auth.token.email == userKey;
       allow read: if isAdmin();
-      allow write: if isAuthenticated()
+
+      allow create: if isAuthenticated()
+        && request.auth.token.email == userKey
+        && !hasNewModelOrigin(request.resource.data);
+
+      allow create: if isAuthenticated()
+        && request.auth.token.email == userKey
+        && hasNewModelOrigin(request.resource.data)
+        && logPairsWithAggregate(userKey, logId, request.resource.data);
+
+      allow update, delete: if isAuthenticated()
         && request.auth.token.email == userKey;
+    }
+
+    // ─── Checkpoint B: separately persisted new-model calendar aggregate ───
+    // Path: artifacts/production/users/{userKey}/calendarEntries/{aggregateId}
+    //
+    // Owner create + read; administrator read-only. No update, no delete —
+    // no edit/delete lifecycle exists yet for this slice (least privilege).
+    // Create requires the matching `eventLogs` document to exist, in the SAME
+    // atomic commit, with identity fields that agree (bilateral with the
+    // eventLogs gate above). Coach/other team members/unauthenticated denied
+    // (no matching allow; not covered by any broader wildcard).
+    function aggregatePairsWithLog(userKey, aggregateId, aggData) {
+      let log = getAfter(/databases/$(database)/documents/artifacts/production/users/$(userKey)/eventLogs/$(aggData.logRecordId)).data;
+      return aggData.id == aggregateId
+          && aggData.userId == userKey
+          && hasNewModelOrigin(log)
+          && log.origin.aggregateId == aggData.id
+          && log.origin.occurrenceId == aggData.occurrence.id
+          && log.occurrence.id == aggData.occurrence.id
+          && log.calendarEntry.id == aggData.calendarEntry.id
+          && log.id == aggData.logRecordId;
+    }
+
+    match /artifacts/production/users/{userKey}/calendarEntries/{aggregateId} {
+      allow read: if isAuthenticated()
+        && request.auth.token.email == userKey;
+      allow read: if isAdmin();
+
+      allow create: if isAuthenticated()
+        && request.auth.token.email == userKey
+        && aggregatePairsWithLog(userKey, aggregateId, request.resource.data);
     }
 
     // ─── Public catalogue & gyms ───

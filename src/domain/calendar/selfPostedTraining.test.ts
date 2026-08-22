@@ -108,6 +108,46 @@ describe('buildCompletedSelfPostedTrainingLog', () => {
 
     expect(record.occurrence.location).toBeUndefined();
   });
+
+  it('mints all ids internally when deps.ids is omitted (existing callers unchanged)', () => {
+    let calls = 0;
+    const record = buildCompletedSelfPostedTrainingLog(makeInput(), {
+      generateId: () => `id_${++calls}`,
+      nowISO: () => '2026-07-30T20:00:00.000Z',
+    });
+    // occurrenceId, calendarEntryId, logId, recordId — 4 generator calls.
+    expect(calls).toBe(4);
+    expect(record.occurrence.id).toBe('id_1');
+    expect(record.calendarEntry.id).toBe('id_2');
+    expect(record.log.id).toBe('id_3');
+    expect(record.id).toBe('id_4');
+  });
+
+  it('uses supplied deps.ids for occurrenceId/calendarEntryId/recordId (Checkpoint B pairing)', () => {
+    let calls = 0;
+    const record = buildCompletedSelfPostedTrainingLog(makeInput(), {
+      generateId: () => `gen_${++calls}`,
+      nowISO: () => '2026-07-30T20:00:00.000Z',
+      ids: { occurrenceId: 'occ_shared', calendarEntryId: 'entry_shared', recordId: 'record_shared' },
+    });
+    expect(record.occurrence.id).toBe('occ_shared');
+    expect(record.calendarEntry.id).toBe('entry_shared');
+    expect(record.id).toBe('record_shared');
+    // The EventLog's own internal id is NOT part of the supplied bundle —
+    // it still comes from generateId(), called exactly once here.
+    expect(record.log.id).toBe('gen_1');
+    expect(calls).toBe(1);
+  });
+
+  it('supplied ids keep calendarEntry.occurrenceId and log.occurrenceId/calendarEntryId consistent with the shared identities', () => {
+    const record = buildCompletedSelfPostedTrainingLog(makeInput(), {
+      nowISO: () => '2026-07-30T20:00:00.000Z',
+      ids: { occurrenceId: 'occ_shared', calendarEntryId: 'entry_shared', recordId: 'record_shared' },
+    });
+    expect(record.calendarEntry.occurrenceId).toBe('occ_shared');
+    expect(record.log.occurrenceId).toBe('occ_shared');
+    expect(record.log.calendarEntryId).toBe('entry_shared');
+  });
 });
 
 // ──────────────────────────────────────────────
