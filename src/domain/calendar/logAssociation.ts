@@ -51,6 +51,47 @@ export function selectLogsForCalendarOccurrence(
     });
 }
 
+/** Explicit identity of a new-model `NewModelCalendarAggregate`/occurrence pair. */
+export interface NewModelCalendarEntryIdentity {
+  aggregateId: string;
+  occurrenceId: string;
+}
+
+/**
+ * Return every log whose `origin` exactly matches the given new-model
+ * calendar-aggregate identity (Checkpoint A — see
+ * `/docs/fightweek_refactoring_plan.md`). Sibling to
+ * `selectLogsForCalendarOccurrence` above; matches only the
+ * `'new_model_calendar_entry'` origin variant on `aggregateId` +
+ * `occurrenceId` — never on mutable snapshot fields (title/discipline/time/
+ * location/notes/intensity/duration), and never on the legacy
+ * `'self_posted_calendar_session'` variant. A log without `origin` (a
+ * standalone log) never matches. Pure — does not mutate `logs`. Ordering
+ * matches `selectLogsForCalendarOccurrence`: ascending by the log's own
+ * saved occurrence start time, with the log id as a stable tiebreaker.
+ */
+export function selectLogsForNewModelCalendarEntry(
+  logs: readonly CompletedSelfPostedTrainingLog[],
+  identity: NewModelCalendarEntryIdentity,
+): CompletedSelfPostedTrainingLog[] {
+  const matches = logs.filter((record) => {
+    const origin = record.origin;
+    if (!origin) return false;
+    if (origin.type !== 'new_model_calendar_entry') return false;
+    if (origin.aggregateId !== identity.aggregateId) return false;
+    if (origin.occurrenceId !== identity.occurrenceId) return false;
+    return true;
+  });
+
+  return matches
+    .slice()
+    .sort((a, b) => {
+      const cmp = a.occurrence.startDateTime.localeCompare(b.occurrence.startDateTime);
+      if (cmp !== 0) return cmp;
+      return a.id.localeCompare(b.id);
+    });
+}
+
 // ──────────────────────────────────────────────
 // Slice A: read-side integrity classification (none/one/conflict)
 // ──────────────────────────────────────────────

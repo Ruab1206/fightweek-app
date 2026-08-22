@@ -3,7 +3,11 @@
  * occurrence. No Firestore, no React.
  */
 import { describe, it, expect } from 'vitest';
-import { selectLogsForCalendarOccurrence, classifyOccurrenceLogAssociation } from './logAssociation';
+import {
+  selectLogsForCalendarOccurrence,
+  selectLogsForNewModelCalendarEntry,
+  classifyOccurrenceLogAssociation,
+} from './logAssociation';
 import type { CompletedSelfPostedTrainingLog } from './types';
 
 function makeLog(
@@ -170,5 +174,95 @@ describe('classifyOccurrenceLogAssociation', () => {
     expect(classifyOccurrenceLogAssociation('loaded', [makeLog('1')]).kind).not.toBe('none');
     expect(classifyOccurrenceLogAssociation('loaded', [makeLog('1'), makeLog('2')]).kind).not.toBe('none');
     expect(classifyOccurrenceLogAssociation('loaded', []).kind).toBe('none');
+  });
+});
+
+describe('selectLogsForNewModelCalendarEntry', () => {
+  const IDENTITY = { aggregateId: 'agg_1', occurrenceId: 'occ_1' };
+
+  it('returns no matches for an empty log list', () => {
+    expect(selectLogsForNewModelCalendarEntry([], IDENTITY)).toEqual([]);
+  });
+
+  it('returns no match for a standalone log without origin', () => {
+    const standalone = makeLog('1');
+    expect(selectLogsForNewModelCalendarEntry([standalone], IDENTITY)).toEqual([]);
+  });
+
+  it('returns no match for a legacy-origin log', () => {
+    const legacy = makeLog('1', {
+      origin: { type: 'self_posted_calendar_session', sessionId: 'agg_1', occurrenceDateISO: '2026-08-14' },
+    });
+    expect(selectLogsForNewModelCalendarEntry([legacy], IDENTITY)).toEqual([]);
+  });
+
+  it('returns no match for a different aggregateId', () => {
+    const other = makeLog('1', {
+      origin: { type: 'new_model_calendar_entry', aggregateId: 'agg_OTHER', occurrenceId: 'occ_1' },
+    });
+    expect(selectLogsForNewModelCalendarEntry([other], IDENTITY)).toEqual([]);
+  });
+
+  it('returns no match for a different occurrenceId', () => {
+    const other = makeLog('1', {
+      origin: { type: 'new_model_calendar_entry', aggregateId: 'agg_1', occurrenceId: 'occ_OTHER' },
+    });
+    expect(selectLogsForNewModelCalendarEntry([other], IDENTITY)).toEqual([]);
+  });
+
+  it('returns exactly one exact match', () => {
+    const match = makeLog('1', {
+      origin: { type: 'new_model_calendar_entry', aggregateId: 'agg_1', occurrenceId: 'occ_1' },
+    });
+    const unrelated = makeLog('2');
+    const result = selectLogsForNewModelCalendarEntry([match, unrelated], IDENTITY);
+    expect(result).toEqual([match]);
+  });
+
+  it('does not match by identical title/date/time/discipline/location/notes/intensity/duration when origin differs or is absent', () => {
+    const noOrigin = makeLog('1', {}, { title: 'MMA Sparring', startDateTime: '2026-08-14T18:00:00', endDateTime: '2026-08-14T19:00:00' });
+    const differentOrigin = makeLog('2', {
+      origin: { type: 'new_model_calendar_entry', aggregateId: 'agg_OTHER', occurrenceId: 'occ_1' },
+    }, { title: 'MMA Sparring', startDateTime: '2026-08-14T18:00:00', endDateTime: '2026-08-14T19:00:00' });
+    const result = selectLogsForNewModelCalendarEntry([noOrigin, differentOrigin], IDENTITY);
+    expect(result).toEqual([]);
+  });
+
+  it('returns every exact match when multiple logs share the same new-model origin', () => {
+    const origin = { type: 'new_model_calendar_entry' as const, aggregateId: 'agg_1', occurrenceId: 'occ_1' };
+    const first = makeLog('1', { origin }, { startDateTime: '2026-08-14T18:00:00', endDateTime: '2026-08-14T19:00:00' });
+    const second = makeLog('2', { origin }, { startDateTime: '2026-08-14T20:00:00', endDateTime: '2026-08-14T21:00:00' });
+    const result = selectLogsForNewModelCalendarEntry([first, second], IDENTITY);
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.id).sort()).toEqual(['1', '2']);
+  });
+
+  it('uses deterministic ordering regardless of input order', () => {
+    const origin = { type: 'new_model_calendar_entry' as const, aggregateId: 'agg_1', occurrenceId: 'occ_1' };
+    const early = makeLog('a', { origin }, { startDateTime: '2026-08-14T06:00:00', endDateTime: '2026-08-14T07:00:00' });
+    const mid = makeLog('b', { origin }, { startDateTime: '2026-08-14T12:00:00', endDateTime: '2026-08-14T13:00:00' });
+    const late = makeLog('c', { origin }, { startDateTime: '2026-08-14T20:00:00', endDateTime: '2026-08-14T21:00:00' });
+
+    const resultA = selectLogsForNewModelCalendarEntry([late, early, mid], IDENTITY);
+    const resultB = selectLogsForNewModelCalendarEntry([mid, late, early], IDENTITY);
+
+    expect(resultA.map((r) => r.id)).toEqual(['a', 'b', 'c']);
+    expect(resultB.map((r) => r.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('does not mutate the input logs', () => {
+    const origin = { type: 'new_model_calendar_entry' as const, aggregateId: 'agg_1', occurrenceId: 'occ_1' };
+    const logs = [makeLog('1', { origin }), makeLog('2')];
+    const snapshot = JSON.parse(JSON.stringify(logs));
+    selectLogsForNewModelCalendarEntry(logs, IDENTITY);
+    expect(logs).toEqual(snapshot);
+  });
+
+  it('the legacy selector still accepts the unchanged legacy origin shape unaffected by the new variant', () => {
+    const legacyMatch = makeLog('1', {
+      origin: { type: 'self_posted_calendar_session', sessionId: 'sess_1', occurrenceDateISO: '2026-08-14' },
+    });
+    const result = selectLogsForCalendarOccurrence([legacyMatch], { sessionId: 'sess_1', occurrenceDateISO: '2026-08-14' });
+    expect(result).toEqual([legacyMatch]);
   });
 });

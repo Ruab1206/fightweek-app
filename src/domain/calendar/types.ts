@@ -200,11 +200,30 @@ export interface OccurrenceParticipation {
  * path (`.../users/{fighterKey}/eventLogs/{id}`), so duplicating it into
  * provenance would be redundant.
  */
-export interface TrainingLogOrigin {
+export interface SelfPostedCalendarSessionOrigin {
   type: 'self_posted_calendar_session';
   sessionId: string;
   occurrenceDateISO: string;
 }
+
+/**
+ * Provenance recorded when a log is created from a separately persisted
+ * new-model `NewModelCalendarAggregate` (Checkpoint A — see
+ * `/docs/fightweek_refactoring_plan.md`). `calendarEntryId` is deliberately
+ * omitted: the aggregate id already uniquely identifies the owning document,
+ * and the occurrence id is the identity that matters for association, so a
+ * third id would be redundant. Fighter identity is omitted for the same
+ * reason as the legacy variant above (ownership is already unambiguous from
+ * the log's own Firestore path).
+ */
+export interface NewModelCalendarEntryOrigin {
+  type: 'new_model_calendar_entry';
+  aggregateId: string;
+  occurrenceId: string;
+}
+
+/** Provenance recorded when a log originates from an existing calendar entry — either the legacy per-week session or a new-model aggregate. */
+export type TrainingLogOrigin = SelfPostedCalendarSessionOrigin | NewModelCalendarEntryOrigin;
 
 /** The fighter's journal/log for what actually happened. Protected data. */
 export interface EventLog {
@@ -270,4 +289,53 @@ export interface TrainingHistoryItem {
   location?: string;
   notes: string;
   intensity?: number;
+}
+
+// ──────────────────────────────────────────────
+// New-model calendar aggregate (Checkpoint A — pure types only, no
+// persistence/hooks/UI; see /docs/fightweek_refactoring_plan.md)
+// ──────────────────────────────────────────────
+
+/**
+ * A separately persisted new-model calendar record: a Firestore-native
+ * embedding of an `EventOccurrence` and a `CalendarEntry` that keeps the two
+ * concepts conceptually distinct (occurrence = scheduled atom, calendarEntry
+ * = its appearance/planning context) even though both live in one document.
+ *
+ * Distinct from `CompletedSelfPostedTrainingLog`: this aggregate is the
+ * calendar/planning source of truth, while the log remains its own
+ * self-contained historical snapshot. Deleting or editing this aggregate
+ * must never delete or mutate a `TrainingLog` that references it.
+ */
+export interface NewModelCalendarAggregate {
+  id: string;
+  userId: string;
+  occurrence: EventOccurrence;
+  calendarEntry: CalendarEntry;
+  createdAt: string;
+  updatedAt: string;
+  /** Always 1 in Checkpoint A — reserved for future prospective schema evolution. */
+  schemaVersion: 1;
+}
+
+/**
+ * Read-only projection of a `NewModelCalendarAggregate` into the minimum
+ * shape the current calendar UI (`PersonalSchedule`/`MobileScrollView`/
+ * `SearchOverlay`) needs to render a card. Deliberately NOT `TrainingSession`
+ * — that type carries legacy edit/delete/save semantics this projection must
+ * never imply. `readOnly` is always `true`: this slice creates no editing
+ * path for the projected entry.
+ */
+export interface ProjectedNewModelCalendarEntry {
+  type: 'calendar_entry';
+  readOnly: true;
+  aggregateId: string;
+  occurrenceId: string;
+  calendarEntryId: string;
+  name: string;
+  category: string;
+  start: string;
+  end: string;
+  location?: string;
+  status: 'active' | 'cancelled';
 }
