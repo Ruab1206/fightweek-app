@@ -562,14 +562,120 @@ describe('Checkpoint B — bilateral pair-integrity invariant (co-persistence, n
     await assertSucceeds(setDoc(doc(as(OWNER), LOG_PATH(OWNER, 'legacy1')), makeLegacyOriginLog()));
   });
 
-  it('update/delete of an existing new-model log remain allowed for the owner (unchanged from before)', async () => {
+  it('fails when the calendarEntries document id differs from aggregate.id, all other pair fields otherwise consistent', async () => {
     const db = as(OWNER);
     const batch = writeBatch(db);
-    batch.set(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate());
-    batch.set(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog());
-    await assertSucceeds(batch.commit());
+    // Seeded at doc id 'agg_WRONG_DOC_ID' but the persisted field still says 'agg1'.
+    batch.set(doc(db, AGG_PATH(OWNER, 'agg_WRONG_DOC_ID')), makeAggregate({ id: 'agg1' }));
+    batch.set(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog({ origin: { type: 'new_model_calendar_entry', aggregateId: 'agg1', occurrenceId: 'occ1' } }));
+    await assertFails(batch.commit());
+  });
 
-    await assertSucceeds(updateDoc(doc(db, LOG_PATH(OWNER, 'nmlog1')), { 'log.notes': 'Updated' }));
-    await assertSucceeds(deleteDoc(doc(db, LOG_PATH(OWNER, 'nmlog1'))));
+  it('fails when the eventLogs document id differs from log.id, all other pair fields otherwise consistent', async () => {
+    const db = as(OWNER);
+    const batch = writeBatch(db);
+    batch.set(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate({ logRecordId: 'nmlog1' }));
+    // Seeded at doc id 'nmlog_WRONG_DOC_ID' but the persisted field still says 'nmlog1'.
+    batch.set(doc(db, LOG_PATH(OWNER, 'nmlog_WRONG_DOC_ID')), makeNewModelLog({ id: 'nmlog1' }));
+    await assertFails(batch.commit());
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Checkpoint B — paired new-model TrainingLogs are create-once and read-only
+// in this slice: editing/deleting is not implemented, and allowing it would
+// risk corrupting the bilaterally validated pair identity or orphaning the
+// immutable calendarEntries aggregate. Classified on the EXISTING persisted
+// resource.data (not request.resource.data), so an update cannot bypass the
+// restriction by rewriting/removing `origin` in the replacement document.
+// Standalone and legacy self_posted_calendar_session logs are unaffected.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Checkpoint B — paired new-model TrainingLog immutability (update/delete denied)', () => {
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate());
+      await setDoc(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog());
+    });
+  });
+
+  it('owner cannot update ordinary log content', async () => {
+    await assertFails(updateDoc(doc(as(OWNER), LOG_PATH(OWNER, 'nmlog1')), { 'log.attended': false }));
+  });
+  it('owner cannot change notes', async () => {
+    await assertFails(updateDoc(doc(as(OWNER), LOG_PATH(OWNER, 'nmlog1')), { 'log.notes': 'Changed' }));
+  });
+  it('owner cannot change intensity', async () => {
+    await assertFails(updateDoc(doc(as(OWNER), LOG_PATH(OWNER, 'nmlog1')), { 'log.intensity': 5 }));
+  });
+  it('owner cannot change data.id', async () => {
+    await assertFails(updateDoc(doc(as(OWNER), LOG_PATH(OWNER, 'nmlog1')), { id: 'nmlog_OTHER' }));
+  });
+  it('owner cannot change origin.type', async () => {
+    await assertFails(updateDoc(doc(as(OWNER), LOG_PATH(OWNER, 'nmlog1')), { 'origin.type': 'self_posted_calendar_session' }));
+  });
+  it('owner cannot change origin.aggregateId', async () => {
+    await assertFails(updateDoc(doc(as(OWNER), LOG_PATH(OWNER, 'nmlog1')), { 'origin.aggregateId': 'agg_OTHER' }));
+  });
+  it('owner cannot change origin.occurrenceId', async () => {
+    await assertFails(updateDoc(doc(as(OWNER), LOG_PATH(OWNER, 'nmlog1')), { 'origin.occurrenceId': 'occ_OTHER' }));
+  });
+  it('owner cannot change occurrence.id', async () => {
+    await assertFails(updateDoc(doc(as(OWNER), LOG_PATH(OWNER, 'nmlog1')), { 'occurrence.id': 'occ_OTHER' }));
+  });
+  it('owner cannot change calendarEntry.id', async () => {
+    await assertFails(updateDoc(doc(as(OWNER), LOG_PATH(OWNER, 'nmlog1')), { 'calendarEntry.id': 'entry_OTHER' }));
+  });
+  it('owner cannot delete the paired log', async () => {
+    await assertFails(deleteDoc(doc(as(OWNER), LOG_PATH(OWNER, 'nmlog1'))));
+  });
+  it('admin cannot update the paired log', async () => {
+    await assertFails(updateDoc(doc(as('admin@x'), LOG_PATH(OWNER, 'nmlog1')), { 'log.notes': 'Changed' }));
+  });
+  it('admin cannot delete the paired log', async () => {
+    await assertFails(deleteDoc(doc(as('admin@x'), LOG_PATH(OWNER, 'nmlog1'))));
+  });
+  it('coach cannot update or delete the paired log', async () => {
+    await assertFails(updateDoc(doc(as('coach@x'), LOG_PATH(OWNER, 'nmlog1')), { 'log.notes': 'Changed' }));
+    await assertFails(deleteDoc(doc(as('coach@x'), LOG_PATH(OWNER, 'nmlog1'))));
+  });
+  it('other fighter cannot update or delete the paired log', async () => {
+    await assertFails(updateDoc(doc(as('other@x'), LOG_PATH(OWNER, 'nmlog1')), { 'log.notes': 'Changed' }));
+    await assertFails(deleteDoc(doc(as('other@x'), LOG_PATH(OWNER, 'nmlog1'))));
+  });
+  it('unauthenticated cannot update or delete the paired log', async () => {
+    await assertFails(updateDoc(doc(as(null), LOG_PATH(OWNER, 'nmlog1')), { 'log.notes': 'Changed' }));
+    await assertFails(deleteDoc(doc(as(null), LOG_PATH(OWNER, 'nmlog1'))));
+  });
+});
+
+describe('Checkpoint B — standalone/legacy log update-delete backward compatibility (unchanged)', () => {
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      await setDoc(doc(db, LOG_PATH(OWNER, 'standalone1')), makeStandaloneLog());
+      await setDoc(doc(db, LOG_PATH(OWNER, 'legacy1')), makeLegacyOriginLog());
+    });
+  });
+
+  it('owner can still update a standalone log without origin', async () => {
+    await assertSucceeds(updateDoc(doc(as(OWNER), LOG_PATH(OWNER, 'standalone1')), { 'log.notes': 'Updated' }));
+  });
+  it('owner can still delete a standalone log without origin', async () => {
+    await assertSucceeds(deleteDoc(doc(as(OWNER), LOG_PATH(OWNER, 'standalone1'))));
+  });
+  it('owner can still update a legacy self_posted_calendar_session log', async () => {
+    await assertSucceeds(updateDoc(doc(as(OWNER), LOG_PATH(OWNER, 'legacy1')), { 'log.notes': 'Updated' }));
+  });
+  it('owner can still delete a legacy self_posted_calendar_session log', async () => {
+    await assertSucceeds(deleteDoc(doc(as(OWNER), LOG_PATH(OWNER, 'legacy1'))));
+  });
+  it('admin remains unable to update or delete a standalone log (unchanged — admin has no write)', async () => {
+    await assertFails(updateDoc(doc(as('admin@x'), LOG_PATH(OWNER, 'standalone1')), { 'log.notes': 'Changed' }));
+    await assertFails(deleteDoc(doc(as('admin@x'), LOG_PATH(OWNER, 'standalone1'))));
+  });
+  it('admin remains unable to update or delete a legacy log (unchanged — admin has no write)', async () => {
+    await assertFails(updateDoc(doc(as('admin@x'), LOG_PATH(OWNER, 'legacy1')), { 'log.notes': 'Changed' }));
+    await assertFails(deleteDoc(doc(as('admin@x'), LOG_PATH(OWNER, 'legacy1'))));
   });
 });

@@ -124,8 +124,18 @@ service cloud.firestore {
         && hasNewModelOrigin(request.resource.data)
         && logPairsWithAggregate(userKey, logId, request.resource.data);
 
+      // Checkpoint B: a paired new-model TrainingLog is create-once and
+      // read-only in this slice — editing/deleting it is not implemented,
+      // and allowing it would risk corrupting the bilaterally validated pair
+      // identity or orphaning the immutable `calendarEntries` aggregate.
+      // Classified on the EXISTING persisted `resource.data`, not
+      // `request.resource.data` — an update must not be able to bypass this
+      // by rewriting/removing `origin` in the replacement document.
+      // Standalone (no origin) and legacy `self_posted_calendar_session`
+      // logs are unaffected and keep their existing owner update/delete.
       allow update, delete: if isAuthenticated()
-        && request.auth.token.email == userKey;
+        && request.auth.token.email == userKey
+        && !hasNewModelOrigin(resource.data);
     }
 
     // ─── Checkpoint B: separately persisted new-model calendar aggregate ───
