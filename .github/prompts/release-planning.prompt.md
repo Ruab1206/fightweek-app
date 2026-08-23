@@ -16,6 +16,12 @@ the PO gives an explicit written "go" on a refined item.
 2. Read the team charter (`src/content/team-charter.md.ts`), especially the
    **Ceremonies** and **Release Planning** sections, and the **Target Architecture**
    (`src/content/target-architecture.md.ts`).
+   - **Domain/persistence work** (calendar, occurrence, CalendarEntry, TrainingLog,
+     Participation, notes, projection, routing) is **mandatory** to also read, in order:
+     `.github/copilot-instructions.md` → `/docs/self_posted_lifecycle_and_invariants.md`
+     (normative) → `/docs/target_architecture.md` → relevant `/docs/fightweek_decisions.md`
+     → `/docs/fightweek_refactoring_plan.md` → the current code and tests. These reads are
+     **optional** for unrelated low-risk UI-copy or styling work.
 3. **Summarise where we are** in a few lines: what shipped last (with the release
    number + commit refs), the current release/backlog state, and the current branch
    / deploy state (tst = `feature/bedre-design`, prod = `main`).

@@ -38,6 +38,10 @@ The current source-of-truth order is:
 
 If older architecture language conflicts with the newer FightWeek decisions, the newer FightWeek decisions win.
 
+### Normative contract for self-posted lifecycle work
+
+For any change touching the self-posted-training lifecycle — `EventOccurrence`, `CalendarEntry`, `TrainingLog`/`EventLog`, `Participation`, notes, favorites, their persistence, projections, or routing — `/docs/self_posted_lifecycle_and_invariants.md` is the **canonical, normative contract**. It defines the domain concepts, application operations, invariants, transitional-state register, and slice gate. This document (the target architecture) remains the north-star vocabulary; where the two overlap on the self-posted lifecycle, the canonical contract governs. Do not duplicate its content here — reference it.
+
 ---
 
 ## Design Principles

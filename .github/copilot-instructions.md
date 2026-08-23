@@ -25,6 +25,21 @@ Use the new scheduling domain language:
 - EventLog: fighter journal/log after an occurrence.
 - Favorite: private bookmark, separate from participation.
 
+## Fightweek canonical data-model gate
+
+Before changing calendar, occurrence, participation, notes, TrainingLog/EventLog, favorites, persistence, projection, or routing:
+
+- Read `/docs/self_posted_lifecycle_and_invariants.md` (the **normative** canonical contract) plus the linked `/docs/target_architecture.md` and `/docs/fightweek_decisions.md`.
+- Treat the lifecycle-and-invariants document as normative; it governs where it overlaps the target architecture.
+- Do **not** create use-case-specific domain or persisted types from a UI entry point.
+- Do **not** make CalendarEntry depend on TrainingLog.
+- Do **not** infer Participation from CalendarEntry, TrainingLog, or Note.
+- Do **not** introduce a new CalendarEntry source until the documented lifecycle gate permits it (invariants I2/I18).
+- Every implementation plan must list the affected invariants and classify any new construct as durable or TRANSITIONAL.
+- Business rules must be identical across desktop, mobile, and SearchOverlay.
+- Stop and report a guardrail concern **before** implementation if the plan violates or cannot satisfy the contract. For a full pre-implementation review, use `/.github/prompts/fightweek-architecture-check.prompt.md`.
+
+
 ## Core rules
 
 - Logged occurrences must never be hard-deleted.
@@ -59,6 +74,7 @@ Avoid:
 
 Use these when relevant, but do not read all of them by default:
 
+- /docs/self_posted_lifecycle_and_invariants.md (normative for self-posted lifecycle work — see the data-model gate above)
 - /docs/fightweek_decisions.md
 - /docs/fightweek_domain_model.md
 - /docs/fightweek_core_flows.md

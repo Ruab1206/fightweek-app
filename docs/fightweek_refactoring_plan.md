@@ -207,7 +207,6 @@ Verified in both desktop view and responsive mobile view:
 - "Log denne træning" is unavailable in the conflict state.
 
 ### Standalone-flow consistency direction (clarification, not yet implemented)
-
 Conceptually, every `TrainingLog` belongs to a training occurrence. The existing standalone "Log træning" flow remains a valid transitional secondary flow for unplanned training. Today it creates self-contained occurrence, calendar-entry, and log context inside the new `TrainingLog` aggregate, but it does not create a visible legacy calendar session.
 
 This must not become the permanent conceptual end state. The target behavior for unplanned training must eventually be one of:
@@ -216,6 +215,24 @@ This must not become the permanent conceptual end state. The target behavior for
 - the standalone creation action is removed when the calendar-originated flow can fully replace it.
 
 No new special case is being added to the old week documents to satisfy this direction. This is recorded as a product/model clarification that must be resolved before expanding the standalone flow — it is not decided or implemented here.
+
+### Application-boundary drift + architecture gate (2026-08-23)
+
+A read-only architecture investigation (against committed HEAD `cea8a3e`) confirmed a real application-boundary drift, distinct from — and more precise than — the standalone-flow clarification above:
+
+- `EventOccurrence`, `CalendarEntry`, and `TrainingLog` are valid separate target concepts, and the completed-unplanned-training slice atomically creating all three was useful and **remains valid**.
+- However, the current new-model `CalendarEntry` (the `NewModelCalendarAggregate` envelope) is **log-gated in that specific use case**: it cannot exist without the paired `TrainingLog` (coordinator builds both; service writes both; Firestore rules require bilateral pairing).
+- The projected calendar entry opens the `TrainingLog` as its **primary detail**, so the "Log træning" entry point partially leaked into application-boundary and presentation ownership.
+- This is **important transitional debt, not a blocker**, and MUST NOT become a pattern for future slices.
+
+**Pause / gate (in force):**
+
+- **No new `CalendarEntry` source may be implemented** until the canonical `CalendarEntry` lifecycle is independent of `TrainingLog` (invariants I2/I18 in the canonical contract).
+- Existing commits (`503e207`, Checkpoint B → `598e488`, `cea8a3e`) remain valid verified evidence and **must not be reverted** merely because their implementation is transitional.
+
+**Canonical contract:** the normative domain concepts, application operations, invariants, transitional-state register, and slice gate now live in [/docs/self_posted_lifecycle_and_invariants.md](./self_posted_lifecycle_and_invariants.md). This plan tracks status against that contract; it does not restate it.
+
+**Next required architecture checkpoint:** approve the canonical contract, evaluate current code against it, then introduce a shared `CalendarEntry` read/detail contract (presentation convergence) followed by independently usable new-model occurrence/`CalendarEntry` creation — see the canonical contract's "Current next architectural sequence".
 
 ### Next planning focus
 

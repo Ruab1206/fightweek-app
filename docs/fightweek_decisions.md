@@ -1,6 +1,6 @@
 # Fightweek Decisions
 
-_Last updated: 2026-08-22_
+_Last updated: 2026-08-23_
 
 This document captures current product and architecture decisions for the Fightweek scheduling, participation and logging domain.
 
@@ -256,3 +256,18 @@ UI mitigation (loading/error/none/one/conflict classification and visible creati
 ## 20. Verification terminology: responsive mobile view vs physical mobile device
 
 "Responsive mobile view verified" means the mobile layout was manually tested by resizing the desktop browser until the application rendered its mobile layout. This is not the same as physical mobile-device testing, and documentation must preserve that distinction — neither claiming physical-device verification that did not happen, nor describing mobile as entirely unverified.
+
+## 21. Canonical self-posted lifecycle contract and CalendarEntry-independence gate
+
+**Decision.** The normative contract for the self-posted-training lifecycle — its domain concepts, application operations, invariants, transitional-state register, slice gate, and stop conditions — lives in a single source of truth, `/docs/self_posted_lifecycle_and_invariants.md`. Repository-wide and path-specific Copilot instructions, the target architecture, and this refactoring plan reference that contract rather than restating it. Until the canonical `CalendarEntry` lifecycle is independent of `TrainingLog` (invariants I2 and I18), **no new `CalendarEntry` source may be implemented**.
+
+**Rationale.** The completed-unplanned-training slice atomically creates `EventOccurrence` + `CalendarEntry` + `TrainingLog`. That transaction is useful and valid, but its current implementation log-gates the new-model `CalendarEntry` (it cannot exist without the paired `TrainingLog`) and routes the projected entry's primary detail to the log. Left ungoverned, this would let different UI entry points create different persisted models and business rules — the opposite of the strangler's objective. A single canonical contract with enforced invariants prevents that drift.
+
+**Consequences.**
+- The canonical contract is normative; conflicting or older language is reconciled to point at it (this decision does not rewrite decisions §17, §18, or §19 — it is consistent with them).
+- New CalendarEntry sources are paused behind the lifecycle-separation gate (I18).
+- Every domain/persistence implementation plan must list affected invariants and classify new constructs as durable or transitional.
+
+**Deferred work.** Introducing a shared `CalendarEntry` read/detail contract, independently usable new-model occurrence/`CalendarEntry` creation, recomposing completed-unplanned logging from general operations, and logging an existing new-model `CalendarEntry` — sequenced in the canonical contract's "Current next architectural sequence". Persistence-technology evaluation remains after the canonical model is sufficiently defined (does not change decision §16: Firestore remains the active datastore now).
+
+**Relationship to existing decisions.** Extends and does not override §17 (one calendar-originated TrainingLog per occurrence), §18 (standalone flow is transitional), §19 (UI mitigation vs atomic enforcement), and §16 (Firestore-for-now with a tripwire). Existing verified commits remain valid and are not reverted.
