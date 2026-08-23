@@ -9,18 +9,22 @@
  * `../domain/calendar/trainingLogTimingResolution`): a log exactly
  * associated with a `new_model_calendar_entry` aggregate (already loaded via
  * `useCalendarEntries`, no new Firestore query pattern) uses that aggregate
- * occurrence's exact timing; every other log (legacy calendar-originated or
- * standalone) falls back to the ambiguity-preserving
- * `buildTrainingLogHistoryItem` compatibility read adapter. `LogTrainingSheet`
- * remains the single place business rules for logging a completed session
- * are enforced — this page only wires its `onSubmit` to
- * `useEventLogs().addLog`.
+ * occurrence's exact timing; a log exactly associated with a legacy
+ * `self_posted_calendar_session` resolves its exact adapted-session timing
+ * from one cached legacy week document per fighter+ISO-week (loaded via the
+ * TRANSITIONAL `legacySessionAssociationService.loadLegacyWeekDocument`,
+ * selected via the pure `resolveLegacySessionTimingFromWeekData`) — several
+ * logs in the same week share one `getDoc`; every other log (standalone)
+ * falls back to the ambiguity-preserving `buildTrainingLogHistoryItem`
+ * compatibility read adapter. `LogTrainingSheet` remains the single place
+ * business rules for logging a completed session are enforced — this page
+ * only wires its `onSubmit` to `useEventLogs().addLog`.
  *
  * Deliberately independent of the old weekly calendar/session model and
  * `meta/notes` — this view is built only from `CompletedSelfPostedTrainingLog`
  * records via `useEventLogs`/`buildTrainingLogHistoryItem`.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { useEventLogs } from '../hooks/useEventLogs';
@@ -28,6 +32,8 @@ import { useCalendarEntries } from '../hooks/useCalendarEntries';
 import { LogTrainingSheet } from '../components/LogTrainingSheet';
 import { TrainingLogSummary } from '../components/TrainingLogSummary';
 import { resolveTrainingLogHistoryItem, type AssociatedOccurrenceTiming } from '../domain/calendar/trainingLogTimingResolution';
+import { legacyWeekNumberForOccurrenceDateISO, resolveLegacySessionTimingFromWeekData } from '../domain/calendar/legacySessionAssociation';
+import { loadLegacyWeekDocument } from '../services/legacySessionAssociationService';
 import type { CompletedSelfPostedTrainingInput } from '../domain/calendar/selfPostedTraining';
 
 export interface TrainingLogPageProps {
@@ -57,17 +63,80 @@ export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, o
   const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border';
   const subtle = isDark ? 'text-slate-400' : 'text-ds-text-subtle';
 
+  // Exact adapted-session timing for a `self_posted_calendar_session`-origin
+  // log, derived from one cached legacy week document per fighter+ISO-week —
+  // this page (unlike App.tsx's open SessionModal) has no legacy session
+  // already in memory. Cache/dedup key is `fighterKey|weekNumber`, NOT
+  // per-session, so several logs in the same week share one `getDoc` (one
+  // fighter + one ISO week is the Firestore document boundary). `null` cache
+  // value means "looked up, week doesn't exist" (never re-guessed); absent
+  // key means "not yet looked up". `requestedWeekKeysRef` (not the cache
+  // state) gates issuing a new request, so an in-flight or already-resolved
+  // week is never re-fetched merely because `logs` got a new array reference
+  // (e.g. a same-fighter refresh) — only fighter identity or unmount may
+  // discard a pending result: `currentFighterKeyRef` always reflects the
+  // latest `fighterKey` prop, and each request remembers which fighter it
+  // was issued for, so a request started for fighter A that resolves after
+  // switching to fighter B is silently ignored (never applied under B's
+  // view); `isMountedRef` similarly guards against updating state after this
+  // page has unmounted.
+  const [legacyWeekCache, setLegacyWeekCache] = useState<Record<string, Record<string, unknown> | null>>({});
+  const requestedWeekKeysRef = useRef<Set<string>>(new Set());
+  const currentFighterKeyRef = useRef(fighterKey);
+  currentFighterKeyRef.current = fighterKey;
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    for (const record of logs) {
+      const origin = record.origin;
+      if (!origin || origin.type !== 'self_posted_calendar_session') continue;
+      const weekNumber = legacyWeekNumberForOccurrenceDateISO(origin.occurrenceDateISO);
+      if (weekNumber === null) continue;
+      const weekKey = `${fighterKey}|${weekNumber}`;
+      if (requestedWeekKeysRef.current.has(weekKey)) continue;
+      requestedWeekKeysRef.current.add(weekKey);
+      const requestFighterKey = fighterKey;
+      loadLegacyWeekDocument(fighterKey, weekNumber)
+        .then((weekData) => {
+          if (!isMountedRef.current || currentFighterKeyRef.current !== requestFighterKey) return;
+          setLegacyWeekCache((prev) => ({ ...prev, [weekKey]: weekData }));
+        })
+        .catch(() => {
+          if (!isMountedRef.current || currentFighterKeyRef.current !== requestFighterKey) return;
+          setLegacyWeekCache((prev) => ({ ...prev, [weekKey]: null }));
+        });
+    }
+  }, [logs, fighterKey]);
+
   // Exact aggregate-occurrence timing for a `new_model_calendar_entry`-origin
-  // log — `null` for legacy calendar-originated and standalone logs, which
-  // fall back to the compatibility reader inside `resolveTrainingLogHistoryItem`.
+  // log, or exact adapted-session timing for a `self_posted_calendar_session`-
+  // origin log (selected from the already-loaded week document above via the
+  // pure `resolveLegacySessionTimingFromWeekData`) — `null` for standalone
+  // logs and for legacy logs whose week is not yet (or never) resolved,
+  // which fall back to the compatibility reader inside
+  // `resolveTrainingLogHistoryItem`.
   function associatedOccurrenceTimingFor(record: (typeof logs)[number]): AssociatedOccurrenceTiming | null {
     const origin = record.origin;
-    if (!origin || origin.type !== 'new_model_calendar_entry') return null;
-    const aggregate = calendarEntries.find(
-      (a) => a.id === origin.aggregateId && a.occurrence.id === origin.occurrenceId,
-    );
-    if (!aggregate) return null;
-    return { startDateTime: aggregate.occurrence.startDateTime, endDateTime: aggregate.occurrence.endDateTime };
+    if (!origin) return null;
+    if (origin.type === 'new_model_calendar_entry') {
+      const aggregate = calendarEntries.find(
+        (a) => a.id === origin.aggregateId && a.occurrence.id === origin.occurrenceId,
+      );
+      if (!aggregate) return null;
+      return { startDateTime: aggregate.occurrence.startDateTime, endDateTime: aggregate.occurrence.endDateTime };
+    }
+    if (origin.type === 'self_posted_calendar_session') {
+      const weekNumber = legacyWeekNumberForOccurrenceDateISO(origin.occurrenceDateISO);
+      if (weekNumber === null) return null;
+      const weekData = legacyWeekCache[`${fighterKey}|${weekNumber}`];
+      if (weekData === undefined) return null;
+      return resolveLegacySessionTimingFromWeekData(weekData, origin.occurrenceDateISO, origin.sessionId);
+    }
+    return null;
   }
 
   const handleAddLog = async (input: CompletedSelfPostedTrainingInput) => {

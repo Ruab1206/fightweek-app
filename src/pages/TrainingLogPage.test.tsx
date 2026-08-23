@@ -15,6 +15,7 @@ import { useEventLogs } from '../hooks/useEventLogs';
 import type { UseEventLogsResult } from '../hooks/useEventLogs';
 import { useCalendarEntries } from '../hooks/useCalendarEntries';
 import type { UseCalendarEntriesResult } from '../hooks/useCalendarEntries';
+import { loadLegacyWeekDocument } from '../services/legacySessionAssociationService';
 import type { CompletedSelfPostedTrainingLog, NewModelCalendarAggregate } from '../domain/calendar/types';
 
 vi.mock('../hooks/useCalendarEntries', () => ({
@@ -22,6 +23,12 @@ vi.mock('../hooks/useCalendarEntries', () => ({
 }));
 
 const mockedUseCalendarEntries = vi.mocked(useCalendarEntries);
+
+vi.mock('../services/legacySessionAssociationService', () => ({
+  loadLegacyWeekDocument: vi.fn(),
+}));
+
+const mockedLoadLegacyWeekDocument = vi.mocked(loadLegacyWeekDocument);
 
 vi.mock('../hooks/useEventLogs', () => ({
   useEventLogs: vi.fn(),
@@ -114,6 +121,8 @@ beforeEach(() => {
   mockedUseEventLogs.mockReset();
   mockedUseCalendarEntries.mockReset();
   mockedUseCalendarEntries.mockReturnValue(mockCalendarEntriesResult());
+  mockedLoadLegacyWeekDocument.mockReset();
+  mockedLoadLegacyWeekDocument.mockResolvedValue(null);
 });
 
 describe('TrainingLogPage — loading fighter logs', () => {
@@ -208,6 +217,255 @@ describe('TrainingLogPage — chronological history', () => {
     render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
 
     expect(screen.getByText(/Varighed ikke tilgængelig/)).toBeTruthy();
+  });
+
+  it('resolves the exact adapted legacy-session duration for a self_posted_calendar_session-origin log, even when its own snapshot end is ambiguous', async () => {
+    const record = {
+      ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }),
+      origin: { type: 'self_posted_calendar_session' as const, sessionId: 'sess-1', occurrenceDateISO: '2026-07-30' },
+    };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [record] }));
+    mockedLoadLegacyWeekDocument.mockResolvedValueOnce({
+      Torsdag: [{ id: 'sess-1', name: 'MMA Sparring', start: '17:00', end: '18:30' }],
+    });
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    await waitFor(() => expect(screen.getByText(/90 min/)).toBeTruthy());
+    expect(screen.queryByText(/Varighed ikke tilgængelig/)).toBeNull();
+  });
+
+  it('falls back to the compatibility reader when the legacy week has no session with a matching exact id (never guesses)', async () => {
+    const record = {
+      ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }),
+      origin: { type: 'self_posted_calendar_session' as const, sessionId: 'sess-MISSING', occurrenceDateISO: '2026-07-30' },
+    };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [record] }));
+    mockedLoadLegacyWeekDocument.mockResolvedValueOnce({
+      Torsdag: [{ id: 'sess-1', name: 'MMA Sparring', start: '17:00', end: '18:30' }],
+    });
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    await waitFor(() => expect(mockedLoadLegacyWeekDocument).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/Varighed ikke tilgængelig/)).toBeTruthy();
+  });
+
+  it('does not match a session on a different day of the same week, even with the same id (occurrenceDateISO disambiguates, never fuzzy)', async () => {
+    const record = {
+      ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }),
+      origin: { type: 'self_posted_calendar_session' as const, sessionId: 'sess-1', occurrenceDateISO: '2026-07-30' }, // Torsdag
+    };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [record] }));
+    mockedLoadLegacyWeekDocument.mockResolvedValueOnce({
+      Fredag: [{ id: 'sess-1', name: 'MMA Sparring', start: '17:00', end: '18:30' }],
+    });
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    await waitFor(() => expect(mockedLoadLegacyWeekDocument).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/Varighed ikke tilgængelig/)).toBeTruthy();
+  });
+
+  it('falls back without guessing when the legacy week read rejects', async () => {
+    mockedLoadLegacyWeekDocument.mockRejectedValueOnce(new Error('network error'));
+    const record = {
+      ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }),
+      origin: { type: 'self_posted_calendar_session' as const, sessionId: 'sess-1', occurrenceDateISO: '2026-07-30' },
+    };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [record] }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    await waitFor(() => expect(mockedLoadLegacyWeekDocument).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/Varighed ikke tilgængelig/)).toBeTruthy();
+  });
+
+  it('performs no Firestore read for a malformed occurrenceDateISO', () => {
+    const record = {
+      ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }),
+      origin: { type: 'self_posted_calendar_session' as const, sessionId: 'sess-1', occurrenceDateISO: 'not-a-date' },
+    };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [record] }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    expect(mockedLoadLegacyWeekDocument).not.toHaveBeenCalled();
+    expect(screen.getByText(/Varighed ikke tilgængelig/)).toBeTruthy();
+  });
+
+  it('never calls the legacy week loader for a standalone log (no origin)', () => {
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [fakeLog()] }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    expect(mockedLoadLegacyWeekDocument).not.toHaveBeenCalled();
+  });
+
+  it('never calls the legacy week loader for a new_model_calendar_entry-origin log', () => {
+    const record = {
+      ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }),
+      origin: { type: 'new_model_calendar_entry' as const, aggregateId: 'agg-1', occurrenceId: 'occ-1' },
+    };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [record] }));
+    mockedUseCalendarEntries.mockReturnValue(mockCalendarEntriesResult({ entries: [makeAggregate()] }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    expect(mockedLoadLegacyWeekDocument).not.toHaveBeenCalled();
+  });
+});
+
+describe('TrainingLogPage — legacy week read efficiency', () => {
+  it('reuses one week-document read for two different legacy sessions in the same fighter/week', async () => {
+    const first = {
+      ...fakeLog({ title: 'MMA Sparring', startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }),
+      origin: { type: 'self_posted_calendar_session' as const, sessionId: 'sess-1', occurrenceDateISO: '2026-07-30' }, // Torsdag
+    };
+    const second = {
+      ...fakeLog({ title: 'Grappling', startDateTime: '2026-07-27T09:00:00', endDateTime: '2026-07-27T08:30:00.000Z' }),
+      id: 'record-2',
+      origin: { type: 'self_posted_calendar_session' as const, sessionId: 'sess-2', occurrenceDateISO: '2026-07-27' }, // Mandag, same ISO week
+    };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [first, second] }));
+    mockedLoadLegacyWeekDocument.mockResolvedValueOnce({
+      Torsdag: [{ id: 'sess-1', name: 'MMA Sparring', start: '17:00', end: '18:30' }],
+      Mandag: [{ id: 'sess-2', name: 'Grappling', start: '09:00', end: '10:00' }],
+    });
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    await waitFor(() => expect(screen.getByText(/90 min/)).toBeTruthy());
+    expect(screen.getByText(/60 min/)).toBeTruthy();
+    expect(mockedLoadLegacyWeekDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('issues separate reads for legacy sessions in different weeks', async () => {
+    const first = {
+      ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }),
+      origin: { type: 'self_posted_calendar_session' as const, sessionId: 'sess-1', occurrenceDateISO: '2026-07-30' },
+    };
+    const second = {
+      ...fakeLog({ startDateTime: '2026-08-13T09:00:00', endDateTime: '2026-08-13T08:30:00.000Z' }),
+      id: 'record-2',
+      origin: { type: 'self_posted_calendar_session' as const, sessionId: 'sess-2', occurrenceDateISO: '2026-08-13' }, // two weeks later
+    };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [first, second] }));
+    mockedLoadLegacyWeekDocument.mockResolvedValue(null);
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    await waitFor(() => expect(mockedLoadLegacyWeekDocument).toHaveBeenCalledTimes(2));
+    const weekNumbers = mockedLoadLegacyWeekDocument.mock.calls.map((call) => call[1]);
+    expect(new Set(weekNumbers).size).toBe(2);
+  });
+
+  it('does not issue a duplicate week read while the first request for that week is still pending, even across a rerender', async () => {
+    let resolvePending: (value: Record<string, unknown> | null) => void = () => {};
+    mockedLoadLegacyWeekDocument.mockImplementationOnce(() => new Promise((resolve) => { resolvePending = resolve; }));
+
+    const origin = { type: 'self_posted_calendar_session' as const, sessionId: 'sess-1', occurrenceDateISO: '2026-07-30' };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({
+      logs: [{ ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }), origin }],
+    }));
+    const { rerender } = render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    // Force a second effect pass with a NEW logs array (same content) before the first request resolves.
+    mockedUseEventLogs.mockReturnValue(mockHookResult({
+      logs: [{ ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }), origin }],
+    }));
+    rerender(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    resolvePending({ Torsdag: [{ id: 'sess-1', name: 'MMA Sparring', start: '17:00', end: '18:30' }] });
+
+    await waitFor(() => expect(screen.getByText(/90 min/)).toBeTruthy());
+    expect(mockedLoadLegacyWeekDocument).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('TrainingLogPage — fighter-switch and unmount isolation', () => {
+  it('ignores a pending fighter-A week request after switching to fighter B (no cross-fighter leak)', async () => {
+    let resolveFighterA: (value: Record<string, unknown> | null) => void = () => {};
+    mockedLoadLegacyWeekDocument.mockImplementationOnce(() => new Promise((resolve) => { resolveFighterA = resolve; }));
+
+    const originA = { type: 'self_posted_calendar_session' as const, sessionId: 'sess-A', occurrenceDateISO: '2026-07-30' };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({
+      logs: [{ ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }), origin: originA }],
+    }));
+    const { rerender } = render(<TrainingLogPage fighterKey="fighterA@example.com" canCreateLog />);
+
+    // Switch to fighter B before fighter A's request resolves.
+    const originB = { type: 'self_posted_calendar_session' as const, sessionId: 'sess-B', occurrenceDateISO: '2026-07-30' };
+    mockedLoadLegacyWeekDocument.mockResolvedValueOnce({
+      Torsdag: [{ id: 'sess-B', name: 'Fighter B session', start: '08:00', end: '09:00' }],
+    });
+    mockedUseEventLogs.mockReturnValue(mockHookResult({
+      logs: [{ ...fakeLog({ title: 'Fighter B session', startDateTime: '2026-07-30T08:00:00', endDateTime: '2026-07-30T07:30:00.000Z' }), id: 'record-b', origin: originB }],
+    }));
+    rerender(<TrainingLogPage fighterKey="fighterB@example.com" canCreateLog />);
+
+    await waitFor(() => expect(screen.getByText(/60 min/)).toBeTruthy());
+
+    // Now resolve fighter A's stale pending request — it must never surface in fighter B's view.
+    resolveFighterA({ Torsdag: [{ id: 'sess-A', name: 'MMA Sparring', start: '17:00', end: '18:30' }] });
+    await Promise.resolve();
+
+    expect(screen.queryByText(/90 min/)).toBeNull();
+    expect(screen.getByText(/60 min/)).toBeTruthy();
+  });
+
+  it('an already-mounted fighter B instance resolves from its own data, not a stale fighter A cache', async () => {
+    mockedLoadLegacyWeekDocument.mockResolvedValueOnce({
+      Torsdag: [{ id: 'sess-A', name: 'Fighter A session', start: '17:00', end: '18:30' }],
+    });
+    mockedUseEventLogs.mockReturnValue(mockHookResult({
+      logs: [{
+        ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }),
+        origin: { type: 'self_posted_calendar_session' as const, sessionId: 'sess-A', occurrenceDateISO: '2026-07-30' },
+      }],
+    }));
+    const { unmount } = render(<TrainingLogPage fighterKey="fighterA@example.com" canCreateLog />);
+    await waitFor(() => expect(screen.getByText(/90 min/)).toBeTruthy());
+    unmount();
+
+    mockedLoadLegacyWeekDocument.mockResolvedValueOnce({
+      Torsdag: [{ id: 'sess-B', name: 'Fighter B session', start: '08:00', end: '09:00' }],
+    });
+    mockedUseEventLogs.mockReturnValue(mockHookResult({
+      logs: [{
+        ...fakeLog({ startDateTime: '2026-07-30T08:00:00', endDateTime: '2026-07-30T07:30:00.000Z' }),
+        id: 'record-b',
+        origin: { type: 'self_posted_calendar_session' as const, sessionId: 'sess-B', occurrenceDateISO: '2026-07-30' },
+      }],
+    }));
+    render(<TrainingLogPage fighterKey="fighterB@example.com" canCreateLog />);
+
+    await waitFor(() => expect(screen.getByText(/60 min/)).toBeTruthy());
+    expect(mockedLoadLegacyWeekDocument).toHaveBeenCalledWith('fighterB@example.com', expect.any(Number));
+  });
+
+  it('a pending week request completing after unmount causes no state update', async () => {
+    let resolvePending: (value: Record<string, unknown> | null) => void = () => {};
+    let pending: Promise<Record<string, unknown> | null>;
+    mockedLoadLegacyWeekDocument.mockImplementationOnce(() => {
+      pending = new Promise((resolve) => { resolvePending = resolve; });
+      return pending;
+    });
+    const origin = { type: 'self_posted_calendar_session' as const, sessionId: 'sess-1', occurrenceDateISO: '2026-07-30' };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({
+      logs: [{ ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }), origin }],
+    }));
+
+    const { unmount } = render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+    unmount();
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    resolvePending({ Torsdag: [{ id: 'sess-1', name: 'MMA Sparring', start: '17:00', end: '18:30' }] });
+    await pending!;
+    await Promise.resolve();
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
   });
 });
 
