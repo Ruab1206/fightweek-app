@@ -13,7 +13,15 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import TrainingLogPage from './TrainingLogPage';
 import { useEventLogs } from '../hooks/useEventLogs';
 import type { UseEventLogsResult } from '../hooks/useEventLogs';
-import type { CompletedSelfPostedTrainingLog } from '../domain/calendar/types';
+import { useCalendarEntries } from '../hooks/useCalendarEntries';
+import type { UseCalendarEntriesResult } from '../hooks/useCalendarEntries';
+import type { CompletedSelfPostedTrainingLog, NewModelCalendarAggregate } from '../domain/calendar/types';
+
+vi.mock('../hooks/useCalendarEntries', () => ({
+  useCalendarEntries: vi.fn(),
+}));
+
+const mockedUseCalendarEntries = vi.mocked(useCalendarEntries);
 
 vi.mock('../hooks/useEventLogs', () => ({
   useEventLogs: vi.fn(),
@@ -69,8 +77,43 @@ function mockHookResult(overrides: Partial<UseEventLogsResult> = {}): UseEventLo
   };
 }
 
+function mockCalendarEntriesResult(overrides: Partial<UseCalendarEntriesResult> = {}): UseCalendarEntriesResult {
+  return {
+    entries: [],
+    issues: [],
+    status: 'loaded',
+    error: null,
+    refresh: vi.fn(),
+    ...overrides,
+  };
+}
+
+function makeAggregate(overrides: Partial<NewModelCalendarAggregate> = {}): NewModelCalendarAggregate {
+  return {
+    id: 'agg-1',
+    userId: 'fighter@example.com',
+    occurrence: {
+      id: 'occ-1',
+      seriesId: null,
+      type: 'self_posted_training',
+      title: 'MMA Sparring',
+      startDateTime: '2026-07-30T10:00:00',
+      endDateTime: '2026-07-30T11:30:00',
+      status: 'completed',
+    },
+    calendarEntry: { id: 'cal-1', occurrenceId: 'occ-1', status: 'completed' },
+    createdAt: '2026-07-30T11:35:00.000Z',
+    updatedAt: '2026-07-30T11:35:00.000Z',
+    schemaVersion: 1,
+    logRecordId: 'record-1',
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   mockedUseEventLogs.mockReset();
+  mockedUseCalendarEntries.mockReset();
+  mockedUseCalendarEntries.mockReturnValue(mockCalendarEntriesResult());
 });
 
 describe('TrainingLogPage — loading fighter logs', () => {
@@ -136,6 +179,35 @@ describe('TrainingLogPage — chronological history', () => {
     expect(screen.getByText(/Varighed ikke tilgængelig/)).toBeTruthy();
     expect(screen.getByText('MMA Sparring')).toBeTruthy();
     expect(screen.getByText('Klub A')).toBeTruthy();
+  });
+
+  it('uses the exact associated aggregate-occurrence duration for a new-model log, even when its own snapshot end is ambiguous', () => {
+    const record = {
+      ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }),
+      origin: { type: 'new_model_calendar_entry' as const, aggregateId: 'agg-1', occurrenceId: 'occ-1' },
+    };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [record] }));
+    mockedUseCalendarEntries.mockReturnValue(mockCalendarEntriesResult({
+      entries: [makeAggregate({ occurrence: { ...makeAggregate().occurrence, startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T18:30:00' } })],
+    }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    expect(screen.getByText(/90 min/)).toBeTruthy();
+    expect(screen.queryByText(/Varighed ikke tilgængelig/)).toBeNull();
+  });
+
+  it('falls back to the compatibility reader when no matching aggregate is loaded for a new-model-origin log', () => {
+    const record = {
+      ...fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' }),
+      origin: { type: 'new_model_calendar_entry' as const, aggregateId: 'agg-OTHER', occurrenceId: 'occ-OTHER' },
+    };
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [record] }));
+    mockedUseCalendarEntries.mockReturnValue(mockCalendarEntriesResult({ entries: [makeAggregate()] }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    expect(screen.getByText(/Varighed ikke tilgængelig/)).toBeTruthy();
   });
 });
 

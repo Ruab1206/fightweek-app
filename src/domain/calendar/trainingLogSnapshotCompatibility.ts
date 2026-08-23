@@ -79,6 +79,23 @@ function wallClockDiffMinutes(start: LocalDateTimeComponents, end: LocalDateTime
   return Math.round((endMs - startMs) / 60000);
 }
 
+/**
+ * Timezone-independent exact duration (minutes) between two persisted
+ * datetime strings, or `null` when either is not an offset-free local
+ * wall-clock string or the result would be negative. Shared with the
+ * read-side occurrence-timing resolver so it reuses this exact classifier/
+ * arithmetic rather than duplicating it.
+ */
+export function computeExactLocalDurationMinutes(start: string, end: string): number | null {
+  if (classifyTrainingLogDateTimeFormat(start) !== 'local') return null;
+  if (classifyTrainingLogDateTimeFormat(end) !== 'local') return null;
+  const startComponents = parseLocalComponents(start);
+  const endComponents = parseLocalComponents(end);
+  if (!startComponents || !endComponents) return null;
+  const durationMinutes = wallClockDiffMinutes(startComponents, endComponents);
+  return durationMinutes < 0 ? null : durationMinutes;
+}
+
 // ──────────────────────────────────────────────
 // Compatibility adapter
 // ──────────────────────────────────────────────

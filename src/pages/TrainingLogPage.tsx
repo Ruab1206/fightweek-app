@@ -4,9 +4,14 @@
  *
  * Loads/persists through `useEventLogs` only (no direct Firestore/service
  * calls here) and renders rows in the order the hook already returns them
- * (service sorts descending by actual training time), through the
- * ambiguity-preserving `buildTrainingLogHistoryItem` compatibility read
- * adapter (see `./trainingLogSnapshotCompatibility`). `LogTrainingSheet`
+ * (service sorts descending by actual training time), through the shared
+ * `resolveTrainingLogHistoryItem` timing resolver (see
+ * `../domain/calendar/trainingLogTimingResolution`): a log exactly
+ * associated with a `new_model_calendar_entry` aggregate (already loaded via
+ * `useCalendarEntries`, no new Firestore query pattern) uses that aggregate
+ * occurrence's exact timing; every other log (legacy calendar-originated or
+ * standalone) falls back to the ambiguity-preserving
+ * `buildTrainingLogHistoryItem` compatibility read adapter. `LogTrainingSheet`
  * remains the single place business rules for logging a completed session
  * are enforced — this page only wires its `onSubmit` to
  * `useEventLogs().addLog`.
@@ -19,9 +24,10 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme';
 import { useEventLogs } from '../hooks/useEventLogs';
+import { useCalendarEntries } from '../hooks/useCalendarEntries';
 import { LogTrainingSheet } from '../components/LogTrainingSheet';
 import { TrainingLogSummary } from '../components/TrainingLogSummary';
-import { buildTrainingLogHistoryItem } from '../domain/calendar/trainingLogSnapshotCompatibility';
+import { resolveTrainingLogHistoryItem, type AssociatedOccurrenceTiming } from '../domain/calendar/trainingLogTimingResolution';
 import type { CompletedSelfPostedTrainingInput } from '../domain/calendar/selfPostedTraining';
 
 export interface TrainingLogPageProps {
@@ -44,11 +50,25 @@ export interface TrainingLogPageProps {
 export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, onError, onUnplannedTrainingCreated }: TrainingLogPageProps) {
   const { isDark } = useTheme();
   const { logs, loading, error, addUnplannedTraining, resetUnplannedAttempt, refresh } = useEventLogs(fighterKey);
+  const { entries: calendarEntries } = useCalendarEntries(fighterKey);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const bg = isDark ? 'bg-slate-950 text-slate-200' : 'bg-surface-subtle text-ds-text';
   const card = isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border';
   const subtle = isDark ? 'text-slate-400' : 'text-ds-text-subtle';
+
+  // Exact aggregate-occurrence timing for a `new_model_calendar_entry`-origin
+  // log — `null` for legacy calendar-originated and standalone logs, which
+  // fall back to the compatibility reader inside `resolveTrainingLogHistoryItem`.
+  function associatedOccurrenceTimingFor(record: (typeof logs)[number]): AssociatedOccurrenceTiming | null {
+    const origin = record.origin;
+    if (!origin || origin.type !== 'new_model_calendar_entry') return null;
+    const aggregate = calendarEntries.find(
+      (a) => a.id === origin.aggregateId && a.occurrence.id === origin.occurrenceId,
+    );
+    if (!aggregate) return null;
+    return { startDateTime: aggregate.occurrence.startDateTime, endDateTime: aggregate.occurrence.endDateTime };
+  }
 
   const handleAddLog = async (input: CompletedSelfPostedTrainingInput) => {
     try {
@@ -115,7 +135,7 @@ export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, o
         {!loading && !error && logs.length > 0 && (
           <ul className="space-y-3">
             {logs.map((record) => {
-              const item = buildTrainingLogHistoryItem(record);
+              const item = resolveTrainingLogHistoryItem(record, associatedOccurrenceTimingFor(record));
               return (
                 <li key={item.id} className={`rounded-2xl border p-4 ${card}`}>
                   <TrainingLogSummary item={item} isDark={isDark} />

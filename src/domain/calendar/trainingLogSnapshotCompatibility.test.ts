@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   classifyTrainingLogDateTimeFormat,
   buildTrainingLogHistoryItem,
+  computeExactLocalDurationMinutes,
 } from './trainingLogSnapshotCompatibility';
 import type { CompletedSelfPostedTrainingLog } from './types';
 
@@ -371,5 +372,43 @@ describe('buildTrainingLogHistoryItem — shape and compatibility', () => {
     // No external lookup is possible in this pure unit test — a passing call
     // with only `record` proves the adapter is self-contained.
     expect(() => buildTrainingLogHistoryItem(record)).not.toThrow();
+  });
+});
+
+// ──────────────────────────────────────────────
+// computeExactLocalDurationMinutes
+// ──────────────────────────────────────────────
+
+describe('computeExactLocalDurationMinutes', () => {
+  it('computes exact minutes for two offset-free local values', () => {
+    expect(computeExactLocalDurationMinutes('2026-07-30T17:00:00', '2026-07-30T18:30:00')).toBe(90);
+  });
+
+  it('supports midnight crossing', () => {
+    expect(computeExactLocalDurationMinutes('2026-07-30T23:30:00', '2026-07-31T00:15:00')).toBe(45);
+  });
+
+  it('is timezone-independent', () => {
+    for (const tz of TIMEZONES) {
+      vi.stubEnv('TZ', tz);
+      expect(computeExactLocalDurationMinutes('2026-07-30T17:00:00', '2026-07-30T18:30:00')).toBe(90);
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('returns null when end is a UTC-Z/offset instant', () => {
+    expect(computeExactLocalDurationMinutes('2026-07-30T17:00:00', '2026-07-30T16:30:00.000Z')).toBeNull();
+  });
+
+  it('returns null when start is a UTC-Z/offset instant', () => {
+    expect(computeExactLocalDurationMinutes('2026-07-30T16:30:00.000Z', '2026-07-30T18:30:00')).toBeNull();
+  });
+
+  it('returns null for a malformed value', () => {
+    expect(computeExactLocalDurationMinutes('not-a-date', '2026-07-30T18:30:00')).toBeNull();
+  });
+
+  it('returns null when end is before start (negative duration)', () => {
+    expect(computeExactLocalDurationMinutes('2026-07-30T18:30:00', '2026-07-30T17:00:00')).toBeNull();
   });
 });

@@ -75,6 +75,7 @@ import {
 } from './domain/calendar/adapters';
 import type { CompletedSelfPostedTrainingInput } from './domain/calendar/selfPostedTraining';
 import { buildTrainingLogHistoryItem } from './domain/calendar/trainingLogSnapshotCompatibility';
+import { resolveTrainingLogHistoryItem } from './domain/calendar/trainingLogTimingResolution';
 import { selectLogsForCalendarOccurrence, selectLogsForNewModelCalendarEntry, classifyOccurrenceLogAssociation } from './domain/calendar/logAssociation';
 import type { TrainingHistoryItem } from './domain/calendar/types';
 import type { TrainingLogAssociationView } from './components/SessionModal';
@@ -405,15 +406,32 @@ const App = () => {
     [eventLogsStatus, associatedTrainingLogMatches],
   );
 
+  // Exact adapted-session timing for the selected occurrence — the settled
+  // product rule that the associated occurrence is authoritative for start,
+  // end, and duration (over the log's own, possibly ambiguous, snapshot).
+  // Same date/start/end fields `sessionToOccurrenceAndEntry` would derive,
+  // computed directly since no CalendarEntry/userId context is needed here.
+  const selectedSessionAdaptedOccurrenceTiming = useMemo(() => {
+    if (!selectedSessionOccurrenceIdentity || !editingSession) return null;
+    const dateISO = selectedSessionOccurrenceIdentity.occurrenceDateISO;
+    return {
+      startDateTime: toDateTime(dateISO, (editingSession as any).start),
+      endDateTime: toDateTime(dateISO, (editingSession as any).end),
+    };
+  }, [selectedSessionOccurrenceIdentity, editingSession]);
+
   // Presentation-boundary mapping: only the log(s) actually carried by the
   // classification are converted to `TrainingHistoryItem`, for `SessionModal`/
-  // `TrainingLogSummary`/`TrainingLogDetailSheet` display.
+  // `TrainingLogSummary`/`TrainingLogDetailSheet` display. The 'one' state
+  // prefers the exact adapted-session timing above; 'conflict' intentionally
+  // keeps the plain compatibility reader — a data-integrity conflict must not
+  // have timing derived on its behalf.
   const trainingLogAssociationView = useMemo<TrainingLogAssociationView>(() => {
     const classification = trainingLogAssociationClassification;
-    if (classification.kind === 'one') return { kind: 'one', log: buildTrainingLogHistoryItem(classification.log) };
+    if (classification.kind === 'one') return { kind: 'one', log: resolveTrainingLogHistoryItem(classification.log, selectedSessionAdaptedOccurrenceTiming) };
     if (classification.kind === 'conflict') return { kind: 'conflict', logs: classification.logs.map(buildTrainingLogHistoryItem) };
     return classification;
-  }, [trainingLogAssociationClassification]);
+  }, [trainingLogAssociationClassification, selectedSessionAdaptedOccurrenceTiming]);
 
   // Checkpoint B — exact new-model association + classification for the
   // currently opened projected `calendar_entry` (if any). Reuses the SAME
@@ -428,6 +446,19 @@ const App = () => {
     () => classifyOccurrenceLogAssociation(eventLogsStatus, projectedEntryMatches),
     [eventLogsStatus, projectedEntryMatches],
   );
+
+  // Exact aggregate-occurrence timing for the currently opened projected
+  // entry \u2014 the associated `NewModelCalendarAggregate` is already loaded via
+  // `calendarEntries` (no additional Firestore query). Matched by both
+  // `aggregateId` and `occurrenceId`, mirroring `selectLogsForNewModelCalendarEntry`.
+  const projectedEntryAggregateOccurrenceTiming = useMemo(() => {
+    if (!openProjectedEntry) return null;
+    const aggregate = calendarEntries.find(
+      (a) => a.id === openProjectedEntry.aggregateId && a.occurrence.id === openProjectedEntry.occurrenceId,
+    );
+    if (!aggregate) return null;
+    return { startDateTime: aggregate.occurrence.startDateTime, endDateTime: aggregate.occurrence.endDateTime };
+  }, [calendarEntries, openProjectedEntry]);
 
   // Intercept a projected `calendar_entry` click BEFORE any legacy session
   // handler — never opens SessionModal, never enters legacy edit/save/delete.
@@ -1394,7 +1425,7 @@ const App = () => {
           every other state uses the small dedicated read-only status sheet. */}
       {openProjectedEntry && projectedEntryClassification.kind === 'one' && (
         <TrainingLogDetailSheet
-          item={buildTrainingLogHistoryItem(projectedEntryClassification.log)}
+          item={resolveTrainingLogHistoryItem(projectedEntryClassification.log, projectedEntryAggregateOccurrenceTiming)}
           onClose={() => setOpenProjectedEntry(null)}
         />
       )}
