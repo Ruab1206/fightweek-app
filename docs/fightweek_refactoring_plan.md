@@ -232,7 +232,16 @@ A read-only architecture investigation (against committed HEAD `cea8a3e`) confir
 
 **Canonical contract:** the normative domain concepts, application operations, invariants, transitional-state register, and slice gate now live in [/docs/self_posted_lifecycle_and_invariants.md](./self_posted_lifecycle_and_invariants.md). This plan tracks status against that contract; it does not restate it.
 
-**Next required architecture checkpoint:** approve the canonical contract, evaluate current code against it, then introduce a shared `CalendarEntry` read/detail contract (presentation convergence) followed by independently usable new-model occurrence/`CalendarEntry` creation — see the canonical contract's "Current next architectural sequence".
+**Next required architecture checkpoint (updated 2026-08-23 — decision §22):** a first application of the committed architecture gate to a proposed combined correction returned "reject or split the slice." The clarified sequence is:
+
+1. **Pure canonical operation extraction first** — `CreateSelfPostedOccurrence`, `AddOccurrenceToFighterCalendar`, `LogOccurrence`, with the existing completed-unplanned coordinator recomposed from them. Behaviour-preserving; no persistence, rule, or UI change; does **not** make I2 true in persisted behaviour.
+2. Shared `CalendarEntry` read/detail contract (presentation convergence) — follows step 1, so it cannot mask the still-fused application boundary.
+3. Persisted I2 correction (independently persistable self-posted `EventOccurrence`/`CalendarEntry` support) — separately gated, later.
+4. **No new `CalendarEntry` source may proceed** until step 3 is approved and implemented (I18 unchanged).
+
+**Extraction status (updated 2026-08-23 — decision §23):** step 1 above is **partially implemented**. `CreateSelfPostedOccurrence` (narrow occurrence input) and `AddOccurrenceToFighterCalendar` are canonical pure operations; the aggregate is assembled through one authoritative envelope assembler. The TrainingLog is still built by a TRANSITIONAL current-snapshot adapter because the persisted aggregate and TrainingLog snapshots currently **diverge** (occurrence `endDateTime` representation, `occurrence.hasLogs`, embedded `calendarEntry.userId`). Both forms are preserved and pinned by parity tests; **snapshot normalization (final occurrence-oriented `LogOccurrence`) is a separate gate (step 3a)** — see decision §23 and the canonical contract Section E/I. No migration is decided.
+
+See the canonical contract's "Current next architectural sequence" (Section I) for the full sequence.
 
 ### Next planning focus
 

@@ -271,3 +271,41 @@ UI mitigation (loading/error/none/one/conflict classification and visible creati
 **Deferred work.** Introducing a shared `CalendarEntry` read/detail contract, independently usable new-model occurrence/`CalendarEntry` creation, recomposing completed-unplanned logging from general operations, and logging an existing new-model `CalendarEntry` — sequenced in the canonical contract's "Current next architectural sequence". Persistence-technology evaluation remains after the canonical model is sufficiently defined (does not change decision §16: Firestore remains the active datastore now).
 
 **Relationship to existing decisions.** Extends and does not override §17 (one calendar-originated TrainingLog per occurrence), §18 (standalone flow is transitional), §19 (UI mitigation vs atomic enforcement), and §16 (Firestore-for-now with a tripwire). Existing verified commits remain valid and are not reverted.
+
+## 22. Pure canonical operation extraction precedes presentation convergence
+
+**Decision.** Pure canonical operation extraction (`CreateSelfPostedOccurrence`, `AddOccurrenceToFighterCalendar`, `LogOccurrence`) is sequenced **before** the shared `CalendarEntry` read/detail contract in `/docs/self_posted_lifecycle_and_invariants.md` Section I.
+
+**Rationale.** A first application of the committed architecture gate to a proposed combined correction returned "reject or split the slice." Presentation convergence, if implemented first, risks masking the still-fused application boundary (the new-model `CalendarEntry` remains obligatorily paired with `TrainingLog`) behind a unified read view before the underlying operations are actually separated. Establishing the reusable, independently testable lifecycle operations first keeps the correction honest about what is and is not yet fixed.
+
+**Consequences.**
+- No persistence, Firestore-rule, or UI behaviour changes occur in the extraction slice.
+- Persisted `CalendarEntry` independence from `TrainingLog` remains a known transitional gap after this slice (I2 improves only at the domain/application-builder level).
+- Presentation convergence (the shared read/detail contract) follows operation extraction, not the reverse.
+- No new `CalendarEntry` source may proceed until persisted I2 separation is approved and implemented (I18 unchanged).
+
+**Limitation.** This decision does not itself make persisted `CalendarEntry` independent of `TrainingLog`; Firestore rules and the `calendarEntries`/`eventLogs` bilateral pairing are unchanged by it.
+
+**Next gates.** (1) shared `CalendarEntry` read/detail contract, (2) independently persistable self-posted `EventOccurrence`/`CalendarEntry` support (where persisted I2 is corrected).
+
+**Relationship to existing decisions.** Refines the sequencing recorded in decision §21's "Deferred work" and the canonical contract's Section I; does not override §21 or any earlier decision.
+
+## 23. Completed-unplanned aggregate and TrainingLog snapshots currently diverge (TRANSITIONAL)
+
+**Decision.** During pure canonical operation extraction it was discovered that, for one completed-unplanned save, the persisted `NewModelCalendarAggregate` and the persisted `TrainingLog` represent occurrence/calendar context **differently**, and this slice deliberately **preserves both forms** rather than silently normalizing them. Normalization is a separately gated architecture decision (Section I step 3a of the canonical contract).
+
+**The divergence (factual).**
+- Occurrence `endDateTime`: the aggregate uses a local-safe datetime; the TrainingLog snapshot uses the existing `buildLogContext` representation, including the current UTC/ISO form for a duration-derived end.
+- `occurrence.hasLogs`: present on the TrainingLog snapshot, absent on the aggregate occurrence.
+- Embedded `calendarEntry.userId`: present on the aggregate's CalendarEntry, omitted on the TrainingLog's embedded CalendarEntry.
+
+**Rationale.** Making the TrainingLog consume the aggregate's canonical occurrence/CalendarEntry would change the persisted `eventLogs` shape (out of scope for a behaviour-preserving slice) and the aggregate cannot adopt the log's UTC end form (the calendar projection's strict local-datetime parser rejects it, which would drop the calendar card). The canonical operations therefore feed the aggregate, while the TrainingLog uses a clearly-named TRANSITIONAL current-snapshot adapter (`buildTransitionalSelfPostedTrainingLog`).
+
+**Consequences.**
+- Current aggregate and TrainingLog persisted output are unchanged; the divergence is pinned by explicit parity tests.
+- One semantic occurrence record does not yet feed both persisted snapshots.
+- This is a documented transitional gap, **not data corruption**.
+
+**Deferred work (separately gated).** Snapshot normalization must decide the canonical datetime representation, `hasLogs` ownership, embedded-CalendarEntry snapshot fields, backward compatibility for existing logs, and whether schema versioning/read adapters are required. No migration decision is made here. No new `CalendarEntry` source may proceed as a consequence of this documentation.
+
+**Relationship to existing decisions.** Refines decision §22 and the canonical contract's Section E/Section I; does not override §21 or §22.

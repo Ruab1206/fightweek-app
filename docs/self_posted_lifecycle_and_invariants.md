@@ -162,6 +162,8 @@ The following is the current known transitional state, stated factually. None of
 - Current Firestore rules atomically pair the envelope and the `TrainingLog` for this use case (bilateral create). This enforces integrity for the completed-unplanned transaction only.
 - This pairing does **not** define the general `CalendarEntry` lifecycle. Under this envelope, `CalendarEntry` cannot yet exist without a `TrainingLog` — the invariant it cannot yet satisfy is **I2/I18**.
 - The projected `calendar_entry` card is a **TRANSITIONAL** read-model discriminator, not a durable domain type.
+- **Occurrence/CalendarEntry snapshot divergence (TRANSITIONAL).** For one completed-unplanned save, the persisted aggregate and the persisted `TrainingLog` represent occurrence/calendar context *differently*: (A) `occurrence.endDateTime` — the aggregate uses a local-safe datetime; the TrainingLog snapshot uses the existing `buildLogContext` representation, including the current UTC/ISO form for a duration-derived end. (B) `occurrence.hasLogs` — present (`true`) on the TrainingLog snapshot, absent on the aggregate occurrence. (C) embedded `calendarEntry.userId` — present on the aggregate's CalendarEntry, omitted on the TrainingLog's embedded CalendarEntry. This slice **preserves both forms** to avoid an implicit persisted-shape change; the pure canonical operations feed the aggregate, while the TrainingLog uses a clearly-named TRANSITIONAL current-snapshot builder. One semantic occurrence record does **not** yet feed both persisted snapshots. This is a documented gap, **not data corruption**.
+- **Snapshot normalization is separately gated.** A later architecture gate must decide the canonical datetime representation, `hasLogs` ownership, embedded-CalendarEntry snapshot fields, backward compatibility for existing logs, and whether schema versioning or read adapters are required. No migration decision is made here. No new `CalendarEntry` source may proceed as a consequence of documenting this gap.
 - Legacy and new-model persistence coexist during the strangler. This coexistence is expected.
 - No migration or rollback is currently required.
 - Existing verified checkpoints (e.g. `503e207`, Checkpoint B → `598e488`, `cea8a3e`) remain valid evidence and MUST NOT be reverted merely because their implementation is transitional.
@@ -225,9 +227,11 @@ Intended sequence, documented but not implemented here. It MAY be changed only t
 
 1. Approve this lifecycle and invariant contract.
 2. Evaluate current code against it.
-3. Introduce a shared `CalendarEntry` read/detail contract (presentation convergence).
-4. Introduce independently usable new-model self-posted occurrence and `CalendarEntry` creation.
-5. Compose completed-unplanned logging from the general operations.
-6. Enable logging an existing new-model `CalendarEntry`.
-7. Only then consider a new `CalendarEntry` source.
-8. Evaluate target persistence technology after the canonical model is sufficiently defined.
+3. Extract independently usable pure canonical operations (`CreateSelfPostedOccurrence`, `AddOccurrenceToFighterCalendar`, `LogOccurrence`) and recompose current completed-unplanned behaviour from them. This step is behaviour-preserving: it establishes domain/application operation boundaries only. It does **not** make I2 true in persisted behaviour — persistence and Firestore-rule correction (step 5) remain separately gated and are not performed here. **Partially implemented:** `CreateSelfPostedOccurrence` (narrow occurrence input) and `AddOccurrenceToFighterCalendar` are canonical pure operations and feed the aggregate through one authoritative envelope assembler; the TrainingLog is still produced by a TRANSITIONAL current-snapshot adapter (`buildTransitionalSelfPostedTrainingLog`) because the persisted TrainingLog snapshot currently diverges from the aggregate (Section E). The final occurrence-oriented `LogOccurrence` is deferred behind the snapshot-normalization gate (step 3a).
+   - **3a (separately gated). Snapshot normalization.** Decide the canonical datetime representation, `hasLogs` ownership, embedded-CalendarEntry snapshot fields, and backward compatibility for existing logs (and whether schema versioning/read adapters are required); then make the final occurrence-oriented `LogOccurrence` consume one approved canonical occurrence/CalendarEntry snapshot. No migration decision is made until this gate.
+4. Introduce a shared `CalendarEntry` read/detail contract (presentation convergence). This follows the operation extraction in step 3, so presentation convergence does not conceal an application boundary that is still fused.
+5. Introduce independently persistable self-posted `EventOccurrence` and `CalendarEntry` support (the step where persisted I2 is corrected).
+6. Recompose completed-unplanned persistence from the canonical operations, retaining atomic user-visible save behaviour.
+7. Enable logging an existing new-model `CalendarEntry`.
+8. **No new `CalendarEntry` source may proceed until persisted I2 separation (step 5) is approved and implemented** (I18 remains in force throughout steps 3–4).
+9. Evaluate target persistence technology after the canonical model is sufficiently defined.

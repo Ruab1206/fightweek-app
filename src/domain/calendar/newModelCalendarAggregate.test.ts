@@ -7,9 +7,15 @@ import { describe, it, expect } from 'vitest';
 import {
   mintUnplannedTrainingCreationIds,
   buildNewModelCalendarAggregate,
+  assembleNewModelCalendarAggregate,
   projectNewModelCalendarAggregate,
   type UnplannedTrainingCreationIds,
 } from './newModelCalendarAggregate';
+import {
+  createSelfPostedOccurrence,
+  addOccurrenceToFighterCalendar,
+  toSelfPostedOccurrenceInput,
+} from './selfPostedOperations';
 import type { CompletedSelfPostedTrainingInput } from './selfPostedTraining';
 import type { NewModelCalendarAggregate } from './types';
 
@@ -240,6 +246,54 @@ describe('buildNewModelCalendarAggregate', () => {
         deterministicDeps(),
       ),
     ).toThrow(/validation failed/);
+  });
+});
+
+// ──────────────────────────────────────────────
+// One authoritative envelope assembler — the wrapper delegates to it, and
+// there is no second independent envelope implementation.
+// ──────────────────────────────────────────────
+
+describe('assembleNewModelCalendarAggregate (authoritative envelope assembler)', () => {
+  it('buildNewModelCalendarAggregate output equals the manually composed operations + assembler', () => {
+    const ids = makeIds();
+    const input = makeInput();
+
+    const viaWrapper = buildNewModelCalendarAggregate(input, ids, deterministicDeps());
+
+    const occurrence = createSelfPostedOccurrence(toSelfPostedOccurrenceInput(input), ids.occurrenceId);
+    const calendarEntry = addOccurrenceToFighterCalendar(occurrence, ids.calendarEntryId, 'completed', input.userId);
+    const viaAssembler = assembleNewModelCalendarAggregate({
+      aggregateId: ids.aggregateId,
+      userId: input.userId ?? '',
+      occurrence,
+      calendarEntry,
+      logRecordId: ids.logRecordId,
+      createdAt: FIXED_NOW_ISO,
+      updatedAt: FIXED_NOW_ISO,
+    });
+
+    // Byte-identical: the wrapper is not an independent envelope implementation.
+    expect(viaWrapper).toEqual(viaAssembler);
+  });
+
+  it('assembler returns the exact NewModelCalendarAggregate shape with schemaVersion 1', () => {
+    const occurrence = createSelfPostedOccurrence(toSelfPostedOccurrenceInput(makeInput()), 'occ_1');
+    const calendarEntry = addOccurrenceToFighterCalendar(occurrence, 'ce_1', 'completed', 'fighter@example.com');
+    const aggregate = assembleNewModelCalendarAggregate({
+      aggregateId: 'agg_1',
+      userId: 'fighter@example.com',
+      occurrence,
+      calendarEntry,
+      logRecordId: 'log_1',
+      createdAt: FIXED_NOW_ISO,
+      updatedAt: FIXED_NOW_ISO,
+    });
+    expect(aggregate.schemaVersion).toBe(1);
+    expect(aggregate.id).toBe('agg_1');
+    expect(aggregate.logRecordId).toBe('log_1');
+    expect(aggregate.occurrence).toBe(occurrence); // embeds the already-built record
+    expect(aggregate.calendarEntry).toBe(calendarEntry);
   });
 });
 

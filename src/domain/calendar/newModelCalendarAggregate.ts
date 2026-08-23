@@ -14,7 +14,11 @@ import {
   validateCompletedSelfPostedTrainingInput,
   type CompletedSelfPostedTrainingInput,
 } from './selfPostedTraining';
-import { toDateTime } from './adapters';
+import {
+  createSelfPostedOccurrence,
+  addOccurrenceToFighterCalendar,
+  toSelfPostedOccurrenceInput,
+} from './selfPostedOperations';
 import { getISOWeekForDate } from '../../utils/dateUtils';
 import { DAYS } from '../../config/constants';
 import type {
@@ -70,32 +74,57 @@ function defaultNowISO(): string {
   return new Date().toISOString();
 }
 
+// ──────────────────────────────────────────────
+// Authoritative envelope assembler (TRANSITIONAL persistence assembly)
+// ──────────────────────────────────────────────
+
+/** Inputs to the one authoritative `NewModelCalendarAggregate` assembler. */
+export interface AssembleNewModelCalendarAggregateParams {
+  aggregateId: string;
+  userId: string;
+  occurrence: EventOccurrence;
+  calendarEntry: CalendarEntry;
+  logRecordId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /**
- * Local-safe: add `minutes` to a local "YYYY-MM-DDTHH:mm:ss" datetime string
- * (no timezone suffix) and return the result in the SAME local convention.
- * Deliberately does not round-trip through `toISOString()` (which would
- * convert to UTC and could silently shift the calendar date), so the
- * resulting `endDateTime` stays safe for direct local date/time extraction
- * by the projection below.
+ * The single authoritative function that defines the persisted
+ * `NewModelCalendarAggregate` envelope shape (TRANSITIONAL persistence
+ * assembly — see the contract's Section E). Assembles the envelope from
+ * already-built canonical `EventOccurrence` and `CalendarEntry` records; it
+ * builds neither, so there is exactly one place the envelope shape lives.
+ * `schemaVersion` is fixed at 1 (unchanged; not a new field).
  */
-function addMinutesLocal(dateTime: string, minutes: number): string {
-  const d = new Date(dateTime);
-  d.setMinutes(d.getMinutes() + minutes);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+export function assembleNewModelCalendarAggregate(
+  params: AssembleNewModelCalendarAggregateParams,
+): NewModelCalendarAggregate {
+  return {
+    id: params.aggregateId,
+    userId: params.userId,
+    occurrence: params.occurrence,
+    calendarEntry: params.calendarEntry,
+    createdAt: params.createdAt,
+    updatedAt: params.updatedAt,
+    schemaVersion: 1,
+    logRecordId: params.logRecordId,
+  };
 }
 
 /**
  * Build a `NewModelCalendarAggregate` for one unplanned completed-training
  * action. Pure — no Firebase, no React, no mutation of `input`/`ids`.
  *
- * Reuses `validateCompletedSelfPostedTrainingInput` (the same rule that
- * protects the existing standalone/calendar-originated flows) and throws on
- * failure — including a future completed-training timestamp — rather than
- * building an invalid aggregate.
+ * Backward-compatible wrapper retained for existing callers/tests: composes
+ * the canonical `createSelfPostedOccurrence` + `addOccurrenceToFighterCalendar`
+ * operations and the one authoritative `assembleNewModelCalendarAggregate`,
+ * so it is NOT an independent envelope/occurrence implementation and cannot
+ * drift from the coordinator. Output is byte-identical to before.
  *
- * Does NOT set `source`/legacy-session identity/Participation/recurrence —
- * out of scope for Checkpoint A.
+ * Reuses `validateCompletedSelfPostedTrainingInput` and throws on failure —
+ * including a future completed-training timestamp — rather than building an
+ * invalid aggregate.
  */
 export function buildNewModelCalendarAggregate(
   input: CompletedSelfPostedTrainingInput,
@@ -111,44 +140,19 @@ export function buildNewModelCalendarAggregate(
 
   const nowISO = deps.nowISO ?? defaultNowISO;
   const now = nowISO();
-  const userId = input.userId ?? '';
 
-  const startDateTime = toDateTime(input.dateISO, input.start);
-  const endDateTime =
-    input.end !== undefined
-      ? toDateTime(input.dateISO, input.end)
-      : addMinutesLocal(startDateTime, input.durationMinutes ?? 0);
+  const occurrence = createSelfPostedOccurrence(toSelfPostedOccurrenceInput(input), ids.occurrenceId);
+  const calendarEntry = addOccurrenceToFighterCalendar(occurrence, ids.calendarEntryId, 'completed', input.userId);
 
-  const occurrence: EventOccurrence = {
-    id: ids.occurrenceId,
-    seriesId: null,
-    type: 'self_posted_training',
-    title: input.title,
-    startDateTime,
-    endDateTime,
-    status: 'completed',
-  };
-  // Firestore-safe: omit rather than assign undefined for absent optional fields.
-  if (input.discipline !== undefined) occurrence.discipline = input.discipline;
-  if (input.location !== undefined) occurrence.location = input.location;
-
-  const calendarEntry: CalendarEntry = {
-    id: ids.calendarEntryId,
-    occurrenceId: ids.occurrenceId,
-    status: 'completed',
-  };
-  if (input.userId !== undefined) calendarEntry.userId = input.userId;
-
-  return {
-    id: ids.aggregateId,
-    userId,
+  return assembleNewModelCalendarAggregate({
+    aggregateId: ids.aggregateId,
+    userId: input.userId ?? '',
     occurrence,
     calendarEntry,
+    logRecordId: ids.logRecordId,
     createdAt: now,
     updatedAt: now,
-    schemaVersion: 1,
-    logRecordId: ids.logRecordId,
-  };
+  });
 }
 
 // ──────────────────────────────────────────────
