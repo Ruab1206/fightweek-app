@@ -277,6 +277,18 @@ export interface CompletedSelfPostedTrainingLog {
   updatedAt: string;
 }
 
+/**
+ * Duration/end certainty for a rendered `TrainingHistoryItem`, produced by
+ * the TrainingLog compatibility read adapter (see
+ * `./trainingLogSnapshotCompatibility.ts`). Absent on an item means it was
+ * NOT produced by that adapter (e.g. a direct `logToHistoryItem` caller) —
+ * treat duration/end as exact, matching prior behaviour unchanged.
+ * `'ambiguous'` means the persisted end cannot be mapped back to a local
+ * historical end/duration without unavailable writer-timezone information
+ * (see `/docs/fightweek_decisions.md` §24) — this is not data corruption.
+ */
+export type TrainingLogDurationCertainty = 'exact' | 'ambiguous' | 'unavailable';
+
 /** A render-ready row for the chronological training history view. */
 export interface TrainingHistoryItem {
   id: string;
@@ -284,8 +296,11 @@ export interface TrainingHistoryItem {
   type: EventType;
   discipline?: string;
   startDateTime: string;
-  endDateTime: string;
-  durationMinutes: number;
+  /** Present only when `durationCertainty` is `'exact'` (or the item predates the compatibility adapter). */
+  endDateTime?: string;
+  /** Present only when `durationCertainty` is `'exact'` (or the item predates the compatibility adapter). */
+  durationMinutes?: number;
+  durationCertainty?: TrainingLogDurationCertainty;
   location?: string;
   notes: string;
   intensity?: number;

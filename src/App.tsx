@@ -74,7 +74,7 @@ import {
   toDateTime,
 } from './domain/calendar/adapters';
 import type { CompletedSelfPostedTrainingInput } from './domain/calendar/selfPostedTraining';
-import { logToHistoryItem } from './domain/calendar/selfPostedTraining';
+import { buildTrainingLogHistoryItem } from './domain/calendar/trainingLogSnapshotCompatibility';
 import { selectLogsForCalendarOccurrence, selectLogsForNewModelCalendarEntry, classifyOccurrenceLogAssociation } from './domain/calendar/logAssociation';
 import type { TrainingHistoryItem } from './domain/calendar/types';
 import type { TrainingLogAssociationView } from './components/SessionModal';
@@ -410,8 +410,8 @@ const App = () => {
   // `TrainingLogSummary`/`TrainingLogDetailSheet` display.
   const trainingLogAssociationView = useMemo<TrainingLogAssociationView>(() => {
     const classification = trainingLogAssociationClassification;
-    if (classification.kind === 'one') return { kind: 'one', log: logToHistoryItem(classification.log) };
-    if (classification.kind === 'conflict') return { kind: 'conflict', logs: classification.logs.map(logToHistoryItem) };
+    if (classification.kind === 'one') return { kind: 'one', log: buildTrainingLogHistoryItem(classification.log) };
+    if (classification.kind === 'conflict') return { kind: 'conflict', logs: classification.logs.map(buildTrainingLogHistoryItem) };
     return classification;
   }, [trainingLogAssociationClassification]);
 
@@ -1394,7 +1394,7 @@ const App = () => {
           every other state uses the small dedicated read-only status sheet. */}
       {openProjectedEntry && projectedEntryClassification.kind === 'one' && (
         <TrainingLogDetailSheet
-          item={logToHistoryItem(projectedEntryClassification.log)}
+          item={buildTrainingLogHistoryItem(projectedEntryClassification.log)}
           onClose={() => setOpenProjectedEntry(null)}
         />
       )}
@@ -1406,7 +1406,7 @@ const App = () => {
             : projectedEntryClassification.kind === 'none' ? 'none'
             : 'loading'
           }
-          logs={projectedEntryClassification.kind === 'conflict' ? projectedEntryClassification.logs.map(logToHistoryItem) : undefined}
+          logs={projectedEntryClassification.kind === 'conflict' ? projectedEntryClassification.logs.map(buildTrainingLogHistoryItem) : undefined}
           onClose={() => setOpenProjectedEntry(null)}
         />
       )}

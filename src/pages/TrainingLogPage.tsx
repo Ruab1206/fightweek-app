@@ -3,15 +3,17 @@
  * self-posted training logs (Phase 3 active slice, Step 4.3).
  *
  * Loads/persists through `useEventLogs` only (no direct Firestore/service
- * calls here) and renders `logToHistoryItem` rows in the order the hook
- * already returns them (service sorts descending by actual training time).
- * `LogTrainingSheet` remains the single place business rules for logging a
- * completed session are enforced — this page only wires its `onSubmit` to
+ * calls here) and renders rows in the order the hook already returns them
+ * (service sorts descending by actual training time), through the
+ * ambiguity-preserving `buildTrainingLogHistoryItem` compatibility read
+ * adapter (see `./trainingLogSnapshotCompatibility`). `LogTrainingSheet`
+ * remains the single place business rules for logging a completed session
+ * are enforced — this page only wires its `onSubmit` to
  * `useEventLogs().addLog`.
  *
  * Deliberately independent of the old weekly calendar/session model and
  * `meta/notes` — this view is built only from `CompletedSelfPostedTrainingLog`
- * records via `useEventLogs`/`logToHistoryItem`.
+ * records via `useEventLogs`/`buildTrainingLogHistoryItem`.
  */
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
@@ -19,7 +21,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useEventLogs } from '../hooks/useEventLogs';
 import { LogTrainingSheet } from '../components/LogTrainingSheet';
 import { TrainingLogSummary } from '../components/TrainingLogSummary';
-import { logToHistoryItem } from '../domain/calendar/selfPostedTraining';
+import { buildTrainingLogHistoryItem } from '../domain/calendar/trainingLogSnapshotCompatibility';
 import type { CompletedSelfPostedTrainingInput } from '../domain/calendar/selfPostedTraining';
 
 export interface TrainingLogPageProps {
@@ -113,7 +115,7 @@ export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, o
         {!loading && !error && logs.length > 0 && (
           <ul className="space-y-3">
             {logs.map((record) => {
-              const item = logToHistoryItem(record);
+              const item = buildTrainingLogHistoryItem(record);
               return (
                 <li key={item.id} className={`rounded-2xl border p-4 ${card}`}>
                   <TrainingLogSummary item={item} isDark={isDark} />

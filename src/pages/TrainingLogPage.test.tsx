@@ -127,6 +127,16 @@ describe('TrainingLogPage — chronological history', () => {
     expect(screen.getByText(/Intensitet: 4\/5/)).toBeTruthy();
     expect(screen.getByText('Felt strong')).toBeTruthy();
   });
+
+  it('shows the neutral duration-unavailable fallback (not a fabricated duration) for a legacy UTC-Z duration-derived end', () => {
+    const ambiguous = fakeLog({ startDateTime: '2026-07-30T17:00:00', endDateTime: '2026-07-30T16:30:00.000Z' });
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [ambiguous] }));
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+
+    expect(screen.getByText(/Varighed ikke tilgængelig/)).toBeTruthy();
+    expect(screen.getByText('MMA Sparring')).toBeTruthy();
+    expect(screen.getByText('Klub A')).toBeTruthy();
+  });
 });
 
 describe('TrainingLogPage — owner can log completed training', () => {

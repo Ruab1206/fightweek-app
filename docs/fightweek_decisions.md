@@ -309,3 +309,21 @@ UI mitigation (loading/error/none/one/conflict classification and visible creati
 **Deferred work (separately gated).** Snapshot normalization must decide the canonical datetime representation, `hasLogs` ownership, embedded-CalendarEntry snapshot fields, backward compatibility for existing logs, and whether schema versioning/read adapters are required. No migration decision is made here. No new `CalendarEntry` source may proceed as a consequence of this documentation.
 
 **Relationship to existing decisions.** Refines decision §22 and the canonical contract's Section E/Section I; does not override §21 or §22.
+
+## 24. TrainingLog legacy duration-derived end is not deterministically recoverable; read adapter preserves ambiguity
+
+**Decision.** A read-only recoverability investigation established that a duration-derived legacy `TrainingLog` end (persisted as a UTC-Z or offset-bearing instant) **cannot be reconstructed deterministically** to an original local end time or duration: no writer timezone, IANA zone, offset, or independent duration was ever persisted, and reconstruction was proven reader-runtime-timezone-dependent and DST-fragile across UTC, Europe/Copenhagen, and America/New York. Accordingly, the compatibility read adapter **preserves this ambiguity** rather than inventing a writer timezone or converting via the current runtime timezone.
+
+**Established facts.**
+- Offset-free local `startDateTime` is a deterministic wall-clock value.
+- An offset-free local explicit `endDateTime` is likewise deterministic; duration between two local values is timezone-independent wall-clock arithmetic.
+- A UTC-Z/offset-bearing legacy end is ambiguous for historical local end and duration — it is not deterministically recoverable.
+- No Europe/Copenhagen (or any other) writer-timezone assumption is introduced.
+- Interpretation is based on the persisted datetime's own format and, for future writes, explicit version metadata — **never** on `origin`/provenance (I11).
+- Existing records are not classified as corrupted; persisted bytes are unchanged; no migration or write normalization is approved by this decision.
+
+**Consequences.**
+- The future canonical write format (local wall-clock only, and whether an explicit persisted snapshot/schema version is introduced) is a **separately gated** decision (3a-write).
+- The read-side compatibility adapter (3a-read) is safe to implement now: deterministic where recoverability is proven, honestly ambiguous otherwise.
+
+**Relationship to existing decisions.** Refines decision §23 (which first documented the aggregate/TrainingLog snapshot divergence) with the recoverability finding; does not override §21, §22, or §23.

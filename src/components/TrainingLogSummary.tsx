@@ -28,6 +28,16 @@ export interface TrainingLogSummaryProps {
   isDark: boolean;
 }
 
+/** Neutral fallback shown instead of a fabricated or runtime-timezone-dependent duration (see `/docs/fightweek_decisions.md` §24). */
+const DURATION_UNAVAILABLE_TEXT = 'Varighed ikke tilgængelig';
+
+function formatTrainingLogDuration(item: TrainingHistoryItem): string {
+  if (typeof item.durationMinutes === 'number' && (item.durationCertainty === undefined || item.durationCertainty === 'exact')) {
+    return `${item.durationMinutes} min`;
+  }
+  return DURATION_UNAVAILABLE_TEXT;
+}
+
 export function TrainingLogSummary({ item, isDark }: TrainingLogSummaryProps) {
   const subtle = isDark ? 'text-slate-400' : 'text-ds-text-subtle';
 
@@ -40,7 +50,7 @@ export function TrainingLogSummary({ item, isDark }: TrainingLogSummaryProps) {
         )}
       </div>
       <p className={`text-xs mt-1 capitalize ${subtle}`}>
-        {formatTrainingLogDate(item.startDateTime)} · {formatTrainingLogTime(item.startDateTime)} · {item.durationMinutes} min
+        {formatTrainingLogDate(item.startDateTime)} · {formatTrainingLogTime(item.startDateTime)} · {formatTrainingLogDuration(item)}
       </p>
       {item.location && <p className={`text-xs mt-1 ${subtle}`}>{item.location}</p>}
       {item.intensity != null && <p className={`text-xs mt-1 ${subtle}`}>Intensitet: {item.intensity}/5</p>}
