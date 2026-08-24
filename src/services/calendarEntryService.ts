@@ -29,7 +29,14 @@ export interface CalendarEntriesLoadResult {
   issues: CalendarEntryLoadIssue[];
 }
 
-/** Minimum structural shape check — deliberately loose (no deep occurrence/calendarEntry field validation beyond presence). */
+/** Minimum structural shape check — deliberately loose (no deep occurrence/calendarEntry field validation beyond presence).
+ *  `logRecordId` is a TRANSITIONAL, now-optional persistence concern (see
+ *  `NewModelCalendarAggregate.logRecordId`): absent is valid; when present it
+ *  must still be a string (unchanged field-quality contract — no non-empty
+ *  requirement was ever enforced). This read-model tolerance does not yet
+ *  establish persisted CalendarEntry independence (I2) on its own — no writer
+ *  or Firestore rule currently produces a record without it.
+ */
 function isStructurallyValid(data: unknown): data is NewModelCalendarAggregate {
   if (!data || typeof data !== 'object') return false;
   const d = data as Record<string, unknown>;
@@ -42,7 +49,7 @@ function isStructurallyValid(data: unknown): data is NewModelCalendarAggregate {
     typeof d.calendarEntry === 'object' &&
     typeof d.createdAt === 'string' &&
     typeof d.updatedAt === 'string' &&
-    typeof d.logRecordId === 'string'
+    (d.logRecordId === undefined || typeof d.logRecordId === 'string')
   );
 }
 
