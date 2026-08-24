@@ -29,7 +29,7 @@
  * normally, no re-throw). Otherwise the original error is rethrown. This
  * verification read never runs after a normal successful commit.
  */
-import { doc, getDoc, writeBatch, type DocumentReference } from 'firebase/firestore';
+import { doc, getDoc, setDoc, writeBatch, type DocumentReference } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ROOT_COLLECTION } from '../config/constants';
 import type { NewModelCalendarAggregate, CompletedSelfPostedTrainingLog, EventOccurrence } from '../domain/calendar/types';
@@ -64,6 +64,32 @@ export async function persistUnplannedTrainingAtomically(
     if (alreadyPersisted) return;
     throw err;
   }
+}
+
+/**
+ * Persist an already-assembled, LOG-LESS `NewModelCalendarAggregate` as one
+ * document at `{ROOT_COLLECTION}/{fighterKey}/calendarEntries/{aggregate.id}`
+ * (persisted CalendarEntry independence, I2). Consumes an already-built
+ * aggregate — constructs no `EventOccurrence`, `CalendarEntry`, or
+ * `TrainingLog`, writes no `eventLogs`, and is UI-/event-type-neutral (any
+ * event type can reuse it). Rejects an aggregate carrying `logRecordId` so the
+ * independent path can never write a paired aggregate.
+ */
+export async function persistIndependentCalendarEntry(
+  fighterKey: string,
+  aggregate: NewModelCalendarAggregate,
+): Promise<void> {
+  if (!fighterKey) throw new Error('persistIndependentCalendarEntry: fighterKey is required');
+  if (!aggregate?.id) throw new Error('persistIndependentCalendarEntry: aggregate.id is required');
+  if (aggregate.logRecordId !== undefined) {
+    throw new Error('persistIndependentCalendarEntry: aggregate must not carry logRecordId (use the paired path)');
+  }
+  if (aggregate.userId !== fighterKey) {
+    throw new Error('persistIndependentCalendarEntry: aggregate.userId must match fighterKey');
+  }
+
+  const aggregateRef = doc(db, ROOT_COLLECTION, fighterKey, CALENDAR_ENTRIES_SUBCOLLECTION, aggregate.id);
+  await setDoc(aggregateRef, aggregate);
 }
 
 function occurrenceContentMatches(a: EventOccurrence, b: EventOccurrence): boolean {

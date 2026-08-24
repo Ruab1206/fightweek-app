@@ -7,17 +7,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockBatchSet = vi.fn();
 const mockBatchCommit = vi.fn();
 const mockGetDoc = vi.fn();
+const mockSetDoc = vi.fn();
 const mockDoc = vi.fn((..._args: unknown[]) => ({ __ref: _args.join('/') }));
 const mockWriteBatch = vi.fn(() => ({ set: mockBatchSet, commit: mockBatchCommit }));
 
 vi.mock('firebase/firestore', () => ({
   doc: (...args: unknown[]) => mockDoc(...args),
   getDoc: (...args: unknown[]) => mockGetDoc(...args),
+  setDoc: (...args: unknown[]) => mockSetDoc(...args),
   writeBatch: (...args: unknown[]) => mockWriteBatch(...args),
 }));
 vi.mock('../config/firebase', () => ({ db: {} }));
 
-import { persistUnplannedTrainingAtomically } from './unplannedTrainingService';
+import { persistUnplannedTrainingAtomically, persistIndependentCalendarEntry } from './unplannedTrainingService';
+import {
+  createSelfPostedOccurrence,
+  addOccurrenceToFighterCalendar,
+} from '../domain/calendar/selfPostedOperations';
+import { assembleNewModelCalendarAggregate } from '../domain/calendar/newModelCalendarAggregate';
 import type { NewModelCalendarAggregate, CompletedSelfPostedTrainingLog } from '../domain/calendar/types';
 
 function makeAggregate(overrides: Partial<NewModelCalendarAggregate> = {}): NewModelCalendarAggregate {
@@ -179,5 +186,108 @@ describe('persistUnplannedTrainingAtomically', () => {
     await persistUnplannedTrainingAtomically('fighter@example.com', aggregate, logRecord);
     expect(aggregate).toEqual(aggSnapshot);
     expect(logRecord).toEqual(logSnapshot);
+  });
+});
+
+// ──────────────────────────────────────────────
+// Independent CalendarEntry persistence (persisted I2): persist an
+// already-assembled, LOG-LESS aggregate to calendarEntries only — no eventLogs,
+// no batch, no domain construction. Aggregates are built via the canonical
+// operations, not reconstructed here.
+// ──────────────────────────────────────────────
+
+/** Build a log-less aggregate from the canonical operations (no reconstruction here). */
+function makeIndependentAggregateViaCanonicalOps(userId = 'fighter@example.com'): NewModelCalendarAggregate {
+  const occurrence = createSelfPostedOccurrence(
+    { title: 'Solo run', discipline: 'Fysisk træning', dateISO: '2026-08-14', start: '18:00', end: '19:00' },
+    'occ1',
+  );
+  const calendarEntry = addOccurrenceToFighterCalendar(occurrence, 'entry1', 'completed', userId);
+  return assembleNewModelCalendarAggregate({
+    aggregateId: 'agg1',
+    userId,
+    occurrence,
+    calendarEntry,
+    createdAt: '2026-08-14T19:05:00.000Z',
+    updatedAt: '2026-08-14T19:05:00.000Z',
+  });
+}
+
+describe('persistIndependentCalendarEntry', () => {
+  it('writes exactly one calendarEntries document (single setDoc, no batch, no eventLogs)', async () => {
+    mockSetDoc.mockResolvedValueOnce(undefined);
+    await persistIndependentCalendarEntry('fighter@example.com', makeIndependentAggregateViaCanonicalOps());
+    expect(mockSetDoc).toHaveBeenCalledTimes(1);
+    expect(mockWriteBatch).not.toHaveBeenCalled();
+    expect(mockBatchSet).not.toHaveBeenCalled();
+    // The doc ref was built for the calendarEntries subcollection, never eventLogs.
+    const refArgs = mockDoc.mock.calls[mockDoc.mock.calls.length - 1].join('/');
+    expect(refArgs).toContain('calendarEntries');
+    expect(refArgs).not.toContain('eventLogs');
+  });
+
+  it('the written aggregate has no logRecordId', async () => {
+    mockSetDoc.mockResolvedValueOnce(undefined);
+    const aggregate = makeIndependentAggregateViaCanonicalOps();
+    await persistIndependentCalendarEntry('fighter@example.com', aggregate);
+    const written = mockSetDoc.mock.calls[0][1] as NewModelCalendarAggregate;
+    expect('logRecordId' in written).toBe(false);
+  });
+
+  it('the document path uses the supplied fighterKey and aggregate id', async () => {
+    mockSetDoc.mockResolvedValueOnce(undefined);
+    await persistIndependentCalendarEntry('fighter@example.com', makeIndependentAggregateViaCanonicalOps());
+    const refArgs = mockDoc.mock.calls[mockDoc.mock.calls.length - 1].join('/');
+    expect(refArgs).toContain('fighter@example.com');
+    expect(refArgs).toContain('calendarEntries/agg1');
+  });
+
+  it('persists the EXACT already-built aggregate (same occurrence and CalendarEntry references, not reconstructed)', async () => {
+    mockSetDoc.mockResolvedValueOnce(undefined);
+    const aggregate = makeIndependentAggregateViaCanonicalOps();
+    await persistIndependentCalendarEntry('fighter@example.com', aggregate);
+    const written = mockSetDoc.mock.calls[0][1] as NewModelCalendarAggregate;
+    expect(written).toBe(aggregate);
+    expect(written.occurrence).toBe(aggregate.occurrence);
+    expect(written.calendarEntry).toBe(aggregate.calendarEntry);
+  });
+
+  it('does not mutate the input aggregate', async () => {
+    mockSetDoc.mockResolvedValueOnce(undefined);
+    const aggregate = makeIndependentAggregateViaCanonicalOps();
+    const snapshot = JSON.parse(JSON.stringify(aggregate));
+    await persistIndependentCalendarEntry('fighter@example.com', aggregate);
+    expect(aggregate).toEqual(snapshot);
+  });
+
+  it('requires fighterKey', async () => {
+    await expect(
+      persistIndependentCalendarEntry('', makeIndependentAggregateViaCanonicalOps()),
+    ).rejects.toThrow(/fighterKey is required/);
+    expect(mockSetDoc).not.toHaveBeenCalled();
+  });
+
+  it('requires aggregate.id', async () => {
+    const agg = makeIndependentAggregateViaCanonicalOps();
+    await expect(
+      persistIndependentCalendarEntry('fighter@example.com', { ...agg, id: '' }),
+    ).rejects.toThrow(/aggregate.id is required/);
+    expect(mockSetDoc).not.toHaveBeenCalled();
+  });
+
+  it('rejects an aggregate whose userId does not match the fighterKey (fail-fast owner check)', async () => {
+    const agg = makeIndependentAggregateViaCanonicalOps('someone-else@example.com');
+    await expect(
+      persistIndependentCalendarEntry('fighter@example.com', agg),
+    ).rejects.toThrow(/userId must match fighterKey/);
+    expect(mockSetDoc).not.toHaveBeenCalled();
+  });
+
+  it('rejects an aggregate carrying logRecordId (cannot use the independent path)', async () => {
+    const agg = { ...makeIndependentAggregateViaCanonicalOps(), logRecordId: 'log1' };
+    await expect(
+      persistIndependentCalendarEntry('fighter@example.com', agg),
+    ).rejects.toThrow(/must not carry logRecordId/);
+    expect(mockSetDoc).not.toHaveBeenCalled();
   });
 });
