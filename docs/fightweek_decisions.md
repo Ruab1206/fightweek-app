@@ -1,6 +1,6 @@
 # Fightweek Decisions
 
-_Last updated: 2026-08-23_
+_Last updated: 2026-08-24_
 
 This document captures current product and architecture decisions for the Fightweek scheduling, participation and logging domain.
 
@@ -327,3 +327,20 @@ UI mitigation (loading/error/none/one/conflict classification and visible creati
 - The read-side compatibility adapter (3a-read) is safe to implement now: deterministic where recoverability is proven, honestly ambiguous otherwise.
 
 **Relationship to existing decisions.** Refines decision §23 (which first documented the aggregate/TrainingLog snapshot divergence) with the recoverability finding; does not override §21, §22, or §23.
+
+## 25. Future-write occurrence-timing convergence (3a-write, timing dimension only)
+
+**Decision.** For newly created new-model unplanned-training writes, the paired `TrainingLog`'s historical occurrence snapshot now consumes the **same constructed `EventOccurrence`** that feeds the calendar aggregate. There is one occurrence construction path (`createSelfPostedOccurrence`); the coordinator passes that occurrence to the transitional log builder, which forms the log's occurrence snapshot directly from it (adding only the TrainingLog-snapshot `hasLogs` marker) instead of independently recomputing an end time from form input/duration. This opens and closes the **timing dimension only** of the previously gated 3a-write step, consistent with decision §24's established direction ("local wall-clock only").
+
+**Scope (deliberately narrow).**
+- Converges Section E divergence **item A** (occurrence `endDateTime` representation) for **future writes only**: a duration-derived end is now the local-safe wall-clock value shared with the aggregate, not a UTC-`Z` instant.
+- Section E divergence **items B and C remain untouched and gated**: the TrainingLog snapshot keeps `hasLogs: true` and its embedded `calendarEntry` still omits `userId`. `hasLogs` ownership, embedded-CalendarEntry snapshot fields, and any persisted snapshot/schema version are **not** decided here.
+- No migration, no change to existing persisted logs, no read-adapter change, no Firestore-rule change, no persisted `CalendarEntry` shape change. The bilateral atomic persistence composition is unchanged. Standalone and calendar-originated flows are unchanged (they do not inject an occurrence and still rebuild via `buildLogContext`).
+
+**Rationale.** §24 already established that a duration-derived UTC-`Z` end is not deterministically recoverable to a local end/duration, and named local wall-clock as the future direction. Sourcing the log's occurrence timing from the one already-constructed canonical occurrence removes the parallel calculation at its root (the values are identical by construction, not by coincidence) without entering the still-gated `hasLogs`/embedded-CalendarEntry/versioning sub-decisions.
+
+**Consequences.**
+- One semantic occurrence record now feeds both persisted snapshots for the **timing** dimension; the aggregate and TrainingLog can no longer drift on occurrence start/end for a new write.
+- The remaining Section E divergences (B/C) and the persisted-schema-version question stay in the separately gated 3a-write remainder.
+
+**Relationship to existing decisions.** Advances the 3a-write step named in §23/§24 and the canonical contract Section E/I for the timing dimension only; does not override §21, §22, §23, or §24, and does not lift the I18 new-`CalendarEntry`-source gate.

@@ -154,10 +154,13 @@ describe('buildUnplannedTrainingRecords', () => {
 });
 
 // ──────────────────────────────────────────────
-// Direct current-shape parity — pins the exact persisted semantic output,
-// including the deliberately DIVERGENT aggregate vs TrainingLog snapshots
-// (contract Section E). This must FAIL if any persisted field silently
-// changes. Duration-only input (as the real "Log træning" form produces).
+// Direct current-shape parity — pins the exact persisted semantic output.
+// Future-write TIMING is now CONVERGED (decision §25): the TrainingLog
+// occurrence snapshot consumes the SAME constructed EventOccurrence timing as
+// the aggregate. The hasLogs and embedded calendarEntry.userId dimensions
+// remain deliberately DIVERGENT (contract Section E items B/C — out of scope).
+// This must FAIL if any persisted field silently changes. Duration-only input
+// (as the real "Log træning" form produces).
 // ──────────────────────────────────────────────
 
 describe('buildUnplannedTrainingRecords — current-shape parity (duration-only, real-flow)', () => {
@@ -212,21 +215,22 @@ describe('buildUnplannedTrainingRecords — current-shape parity (duration-only,
     expect('hasLogs' in aggregate.occurrence).toBe(false);
   });
 
-  it('TrainingLog: retains its current divergent snapshot (UTC end, hasLogs, CalendarEntry WITHOUT userId)', () => {
-    const { logRecord } = buildUnplannedTrainingRecords(durationInput(), fixedIds(), parityDeps());
-    // Expected UTC end computed the same way the current builder does — TZ-independent.
-    const expectedLogEnd = new Date(new Date('2026-07-30T17:00:00').getTime() + 90 * 60000).toISOString();
+  it('TrainingLog: local-safe converged end (== aggregate), hasLogs, CalendarEntry WITHOUT userId', () => {
+    const { aggregate, logRecord } = buildUnplannedTrainingRecords(durationInput(), fixedIds(), parityDeps());
 
     expect(logRecord.id).toBe('log_1');
     expect(logRecord.occurrence.id).toBe('occ_1');
     expect(logRecord.occurrence.startDateTime).toBe('2026-07-30T17:00:00');
-    expect(logRecord.occurrence.endDateTime).toBe(expectedLogEnd); // UTC/ISO — divergent from aggregate
-    expect(logRecord.occurrence.hasLogs).toBe(true); // divergent from aggregate
+    // Converged (decision §25): local-safe end sourced from the same occurrence
+    // the aggregate uses — NOT an independently recomputed UTC/ISO instant.
+    expect(logRecord.occurrence.endDateTime).toBe('2026-07-30T18:30:00');
+    expect(logRecord.occurrence.endDateTime).toBe(aggregate.occurrence.endDateTime);
+    expect(logRecord.occurrence.hasLogs).toBe(true); // still divergent (Section E item B)
     expect(logRecord.occurrence.discipline).toBe('Fysisk træning');
     expect(logRecord.occurrence.location).toBe('Park');
 
     expect(logRecord.calendarEntry).toEqual({ id: 'ce_1', occurrenceId: 'occ_1', status: 'completed' });
-    expect('userId' in logRecord.calendarEntry).toBe(false); // divergent from aggregate
+    expect('userId' in logRecord.calendarEntry).toBe(false); // still divergent (Section E item C)
 
     expect(logRecord.log.intensity).toBe(3);
     expect(logRecord.log.notes).toBe('Tempo intervals');
@@ -236,15 +240,47 @@ describe('buildUnplannedTrainingRecords — current-shape parity (duration-only,
     expect(logRecord.updatedAt).toBe(NOW);
   });
 
-  it('proves the divergence explicitly: aggregate end is local, log end is UTC, and they differ', () => {
+  it('proves timing convergence: aggregate and log ends are the SAME local-safe value (neither UTC-Z)', () => {
     const { aggregate, logRecord } = buildUnplannedTrainingRecords(durationInput(), fixedIds(), parityDeps());
     expect(aggregate.occurrence.endDateTime.endsWith('Z')).toBe(false);
-    expect(logRecord.occurrence.endDateTime.endsWith('Z')).toBe(true);
-    expect(aggregate.occurrence.endDateTime).not.toBe(logRecord.occurrence.endDateTime);
+    expect(logRecord.occurrence.endDateTime.endsWith('Z')).toBe(false);
+    expect(logRecord.occurrence.endDateTime).toBe(aggregate.occurrence.endDateTime);
+    expect(logRecord.occurrence.startDateTime).toBe(aggregate.occurrence.startDateTime);
+    // Excluded dimensions remain transitionally divergent (contract Section E).
     expect('hasLogs' in aggregate.occurrence).toBe(false);
     expect(logRecord.occurrence.hasLogs).toBe(true);
     expect('userId' in aggregate.calendarEntry).toBe(true);
     expect('userId' in logRecord.calendarEntry).toBe(false);
+  });
+
+  it('regression: duration-derived log end is the local-safe value, NOT the previous UTC-derived instant', () => {
+    const { logRecord } = buildUnplannedTrainingRecords(durationInput(), fixedIds(), parityDeps());
+    // The previous UTC round-trip form (would have been produced by buildLogContext).
+    const previousUtcEnd = new Date(new Date('2026-07-30T17:00:00').getTime() + 90 * 60000).toISOString();
+    expect(logRecord.occurrence.endDateTime).not.toBe(previousUtcEnd);
+    expect(logRecord.occurrence.endDateTime).toBe('2026-07-30T18:30:00');
+  });
+
+  it('midnight crossing: duration end rolls the local date on BOTH records identically', () => {
+    const { aggregate, logRecord } = buildUnplannedTrainingRecords(
+      { ...durationInput(), start: '23:30', durationMinutes: 90 },
+      fixedIds(),
+      parityDeps(),
+    );
+    expect(aggregate.occurrence.endDateTime).toBe('2026-07-31T01:00:00');
+    expect(logRecord.occurrence.endDateTime).toBe('2026-07-31T01:00:00');
+    expect(logRecord.occurrence.endDateTime).toBe(aggregate.occurrence.endDateTime);
+  });
+
+  it('explicit end: preserved identically on both records', () => {
+    const { aggregate, logRecord } = buildUnplannedTrainingRecords(
+      { ...durationInput(), start: '17:00', end: '18:45', durationMinutes: undefined },
+      fixedIds(),
+      parityDeps(),
+    );
+    expect(aggregate.occurrence.endDateTime).toBe('2026-07-30T18:45:00');
+    expect(logRecord.occurrence.endDateTime).toBe('2026-07-30T18:45:00');
+    expect(logRecord.occurrence.endDateTime).toBe(aggregate.occurrence.endDateTime);
   });
 
   it('omits undefined optional fields on both records (no location supplied)', () => {

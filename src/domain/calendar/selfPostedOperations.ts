@@ -146,27 +146,30 @@ export function addOccurrenceToFighterCalendar(
 
 /**
  * buildTransitionalSelfPostedTrainingLog — TRANSITIONAL current-snapshot
- * compatibility adapter. It is NOT yet the final canonical
- * occurrence-oriented `LogOccurrence` operation.
+ * compatibility adapter AND the calendar-related TrainingLog entry point. It
+ * is NOT yet the final canonical occurrence-oriented `LogOccurrence`.
  *
- * - It delegates to the existing `buildCompletedSelfPostedTrainingLog`
- *   snapshot builder, which reconstructs the TrainingLog's own historical
- *   occurrence snapshot and embedded CalendarEntry from the form input.
- * - Kept for byte compatibility: the persisted `eventLogs` snapshot currently
- *   diverges from the aggregate's canonical occurrence/CalendarEntry (see
- *   `/docs/self_posted_lifecycle_and_invariants.md` Section E — occurrence
- *   `endDateTime` representation, `hasLogs`, and embedded
- *   `calendarEntry.userId`). Consuming the canonical occurrence/CalendarEntry
- *   here would change the persisted TrainingLog shape and is out of scope for
- *   this slice.
- * - Replacement direction: consume an approved canonical occurrence and
- *   CalendarEntry snapshot after the snapshot-normalization slice.
+ * - The constructed `occurrence` is a REQUIRED parameter: a calendar-related
+ *   write structurally cannot build a TrainingLog without the already
+ *   constructed `EventOccurrence`, so it can never fall back to a separately
+ *   reconstructed timing path (`buildLogContext`). The TrainingLog occurrence
+ *   snapshot is formed DIRECTLY from that occurrence (one construction path
+ *   shared with the aggregate — decision §25, contract Section E item A). The
+ *   `deps` type `Omit`s `occurrence` so it cannot be routed/omitted there.
+ * - Standalone/legacy logs keep using `buildCompletedSelfPostedTrainingLog`
+ *   directly (no occurrence) — they remain independent of the calendar domain.
+ * - Still TRANSITIONAL: the persisted `eventLogs` snapshot continues to
+ *   diverge from the aggregate on `hasLogs` and embedded
+ *   `calendarEntry.userId` (contract Section E items B/C — separately gated).
+ * - Replacement direction: a final occurrence-oriented `LogOccurrence` that
+ *   also converges `hasLogs`/embedded-CalendarEntry once that gate is decided.
  * - Retirement condition: existing and future TrainingLogs use one approved
  *   canonical snapshot representation.
  */
 export function buildTransitionalSelfPostedTrainingLog(
   input: CompletedSelfPostedTrainingInput,
-  deps: CompletedSelfPostedTrainingDeps = {},
+  occurrence: EventOccurrence,
+  deps: Omit<CompletedSelfPostedTrainingDeps, 'occurrence'> = {},
 ): CompletedSelfPostedTrainingLog {
-  return buildCompletedSelfPostedTrainingLog(input, deps);
+  return buildCompletedSelfPostedTrainingLog(input, { ...deps, occurrence });
 }

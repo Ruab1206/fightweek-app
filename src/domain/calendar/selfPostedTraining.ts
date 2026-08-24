@@ -90,6 +90,22 @@ export interface CompletedSelfPostedTrainingDeps {
     calendarEntryId: string;
     recordId: string;
   };
+  /**
+   * Optional already-constructed canonical `EventOccurrence` (future-write
+   * timing convergence — see `/docs/fightweek_decisions.md` §25 and the
+   * canonical contract Section E item A). When supplied, the TrainingLog's
+   * historical occurrence snapshot is formed DIRECTLY from this occurrence —
+   * the builder adds only the TrainingLog-snapshot `hasLogs: true` marker and
+   * performs NO independent end-time calculation from form input/duration — so
+   * the TrainingLog and the calendar aggregate consume ONE occurrence
+   * construction path. The input occurrence is never mutated. Omit for the
+   * standalone and calendar-originated flows: behaviour is then unchanged
+   * (occurrence rebuilt from form input via `buildLogContext`, exactly as
+   * before). Only the occurrence `endDateTime` representation converges here;
+   * `hasLogs` ownership and the embedded `calendarEntry.userId` remain a
+   * separately gated divergence (contract Section E items B/C).
+   */
+  occurrence?: EventOccurrence;
 }
 
 /**
@@ -270,13 +286,20 @@ export function buildCompletedSelfPostedTrainingLog(
   const generateId = deps.generateId ?? defaultId;
   const nowISO = deps.nowISO ?? defaultNowISO;
 
-  const occurrenceId = deps.ids?.occurrenceId ?? generateId();
+  const occurrenceId = deps.occurrence?.id ?? deps.ids?.occurrenceId ?? generateId();
   const calendarEntryId = deps.ids?.calendarEntryId ?? generateId();
   const logId = generateId();
   const recordId = deps.ids?.recordId ?? generateId();
   const now = nowISO();
 
-  const occurrence = buildLogContext(input, occurrenceId);
+  // Future-write timing convergence (decision §25): when the caller has already
+  // constructed the canonical occurrence, use it verbatim (adding only the
+  // TrainingLog-snapshot `hasLogs` marker, without mutating the input) rather
+  // than recomputing occurrence timing from form input. Otherwise rebuild from
+  // form input, exactly as the standalone/calendar-originated flows always have.
+  const occurrence: EventOccurrence = deps.occurrence
+    ? { ...deps.occurrence, hasLogs: true }
+    : buildLogContext(input, occurrenceId);
 
   const calendarEntry: CalendarEntry = {
     id: calendarEntryId,

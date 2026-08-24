@@ -6,6 +6,7 @@ import {
   validateCompletedSelfPostedTrainingInput,
   type CompletedSelfPostedTrainingInput,
 } from './selfPostedTraining';
+import type { EventOccurrence } from './types';
 
 // ──────────────────────────────────────────────
 // Fixtures
@@ -147,6 +148,67 @@ describe('buildCompletedSelfPostedTrainingLog', () => {
     expect(record.calendarEntry.occurrenceId).toBe('occ_shared');
     expect(record.log.occurrenceId).toBe('occ_shared');
     expect(record.log.calendarEntryId).toBe('entry_shared');
+  });
+});
+
+// ──────────────────────────────────────────────
+// buildCompletedSelfPostedTrainingLog — injected occurrence (future-write
+// timing convergence, decision §25). When deps.occurrence is supplied, the
+// occurrence snapshot is formed DIRECTLY from it (adding only hasLogs), with
+// NO recompute of timing from form input. When omitted, behaviour is
+// unchanged (occurrence rebuilt from form input via buildLogContext) — the
+// standalone/calendar-originated flows must stay byte-identical.
+// ──────────────────────────────────────────────
+
+describe('buildCompletedSelfPostedTrainingLog — injected occurrence', () => {
+  const injected: EventOccurrence = {
+    id: 'occ_shared',
+    seriesId: null,
+    type: 'self_posted_training',
+    title: 'Solo Run',
+    startDateTime: '2026-07-30T23:30:00',
+    endDateTime: '2026-07-31T01:00:00', // local-safe, crosses midnight
+    status: 'completed',
+    discipline: 'Fysisk træning',
+  };
+
+  it('forms the occurrence snapshot directly from the injected occurrence, adding only hasLogs', () => {
+    const record = buildCompletedSelfPostedTrainingLog(
+      makeInput({ start: '23:30', end: undefined, durationMinutes: 90 }),
+      {
+        nowISO: () => '2026-07-30T20:00:00.000Z',
+        occurrence: injected,
+        ids: { occurrenceId: 'occ_shared', calendarEntryId: 'entry_shared', recordId: 'record_shared' },
+      },
+    );
+    expect(record.occurrence.startDateTime).toBe('2026-07-30T23:30:00');
+    expect(record.occurrence.endDateTime).toBe('2026-07-31T01:00:00');
+    expect(record.occurrence.endDateTime.endsWith('Z')).toBe(false);
+    expect(record.occurrence.hasLogs).toBe(true);
+    expect(record.log.actualStartDateTime).toBe('2026-07-30T23:30:00');
+    expect(record.log.actualEndDateTime).toBe('2026-07-31T01:00:00');
+  });
+
+  it('does not mutate the injected occurrence', () => {
+    const snapshot = JSON.parse(JSON.stringify(injected));
+    buildCompletedSelfPostedTrainingLog(makeInput({ end: undefined, durationMinutes: 90 }), {
+      nowISO: () => '2026-07-30T20:00:00.000Z',
+      occurrence: injected,
+      ids: { occurrenceId: 'occ_shared', calendarEntryId: 'entry_shared', recordId: 'record_shared' },
+    });
+    expect(injected).toEqual(snapshot);
+    expect('hasLogs' in injected).toBe(false);
+  });
+
+  it('without an injected occurrence, still rebuilds from form input via buildLogContext (standalone unchanged)', () => {
+    const record = buildCompletedSelfPostedTrainingLog(
+      makeInput({ start: '17:00', end: undefined, durationMinutes: 45 }),
+      deterministicDeps(),
+    );
+    // Duration-derived UTC/ISO form from buildLogContext — the pre-existing standalone behaviour.
+    const expectedUtcEnd = new Date(new Date('2026-07-30T17:00:00').getTime() + 45 * 60000).toISOString();
+    expect(record.occurrence.endDateTime).toBe(expectedUtcEnd);
+    expect(record.occurrence.hasLogs).toBe(true);
   });
 });
 

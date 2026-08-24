@@ -55,11 +55,11 @@ export interface UnplannedTrainingRecords {
  * originated/legacy creation).
  *
  * The aggregate uses the CANONICAL occurrence + CalendarEntry; the TrainingLog
- * still uses the TRANSITIONAL current-snapshot builder, which reconstructs its
- * own (currently divergent) occurrence/CalendarEntry snapshot for byte
- * compatibility (see the contract's Section E). One semantic occurrence
- * record does NOT yet feed both persisted snapshots — that is a separately
- * gated normalization step.
+ * still uses the TRANSITIONAL current-snapshot builder, but that builder is now
+ * fed the SAME constructed occurrence, so the log's occurrence timing converges
+ * with the aggregate (one occurrence construction path — decision §25). The
+ * TrainingLog snapshot still diverges on `hasLogs` and embedded
+ * `calendarEntry.userId` (contract Section E items B/C — separately gated).
  *
  * Throws on invalid input, including a future completed-training timestamp —
  * building neither record rather than an inconsistent pair.
@@ -101,9 +101,11 @@ export function buildUnplannedTrainingRecords(
     },
   };
 
-  // TRANSITIONAL: rebuilds the log's own (currently divergent) snapshot — see
-  // buildTransitionalSelfPostedTrainingLog. Not yet the canonical LogOccurrence.
-  const logRecord = buildTransitionalSelfPostedTrainingLog(logInput, {
+  // TRANSITIONAL: reuses the log's own snapshot builder, but now fed the
+  // already-constructed canonical occurrence so the log's occurrence timing is
+  // the SAME construction as the aggregate (decision §25). Still divergent on
+  // hasLogs / embedded calendarEntry.userId (contract Section E items B/C).
+  const logRecord = buildTransitionalSelfPostedTrainingLog(logInput, occurrence, {
     nowISO: deps.nowISO,
     ids: {
       occurrenceId: ids.occurrenceId,

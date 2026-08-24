@@ -198,39 +198,44 @@ describe('buildTransitionalSelfPostedTrainingLog (TRANSITIONAL current-snapshot 
     ids: { occurrenceId: 'occ_1', calendarEntryId: 'ce_1', recordId: 'log_1' },
   });
 
+  // The calendar-related entry point REQUIRES the constructed occurrence — a
+  // TrainingLog for a calendar write cannot be built from form input alone.
+  const occurrenceFor = (form: CompletedSelfPostedTrainingInput = makeFormInput()) =>
+    createSelfPostedOccurrence(toSelfPostedOccurrenceInput(form), 'occ_1');
+
   it('creates a self-contained TrainingLog from form input', () => {
-    const record = buildTransitionalSelfPostedTrainingLog(makeFormInput(), deterministicDeps());
+    const record = buildTransitionalSelfPostedTrainingLog(makeFormInput(), occurrenceFor(), deterministicDeps());
     expect(record.occurrence.title).toBe('MMA Sparring');
     expect(record.log).toBeDefined();
     expect(record.calendarEntry).toBeDefined();
   });
 
   it('uses the supplied stable record id', () => {
-    const record = buildTransitionalSelfPostedTrainingLog(makeFormInput(), deterministicDeps());
+    const record = buildTransitionalSelfPostedTrainingLog(makeFormInput(), occurrenceFor(), deterministicDeps());
     expect(record.id).toBe('log_1');
   });
 
   it('snapshot remains readable independently of any live occurrence/calendar lookup', () => {
-    const record = buildTransitionalSelfPostedTrainingLog(makeFormInput(), deterministicDeps());
+    const record = buildTransitionalSelfPostedTrainingLog(makeFormInput(), occurrenceFor(), deterministicDeps());
     expect(record.occurrence.startDateTime).toBeDefined();
     expect(record.occurrence.endDateTime).toBeDefined();
     expect(record.occurrence.title).toBeDefined();
   });
 
   it('does not derive CalendarEntry identity from the record id — uses the supplied calendarEntryId', () => {
-    const record = buildTransitionalSelfPostedTrainingLog(makeFormInput(), deterministicDeps());
+    const record = buildTransitionalSelfPostedTrainingLog(makeFormInput(), occurrenceFor(), deterministicDeps());
     expect(record.calendarEntry.id).toBe('ce_1');
     expect(record.calendarEntry.id).not.toBe(record.id);
   });
 
   it('does not create Participation', () => {
-    const record = buildTransitionalSelfPostedTrainingLog(makeFormInput(), deterministicDeps());
+    const record = buildTransitionalSelfPostedTrainingLog(makeFormInput(), occurrenceFor(), deterministicDeps());
     expect('participation' in record).toBe(false);
   });
 
-  it('retains the current divergent snapshot: log.occurrence sets hasLogs and log.calendarEntry omits userId', () => {
-    const record = buildTransitionalSelfPostedTrainingLog(makeFormInput(), deterministicDeps());
-    // Documented TRANSITIONAL divergence vs the aggregate (contract Section E).
+  it('retains the excluded divergent dimensions: log.occurrence sets hasLogs and log.calendarEntry omits userId', () => {
+    const record = buildTransitionalSelfPostedTrainingLog(makeFormInput(), occurrenceFor(), deterministicDeps());
+    // Documented TRANSITIONAL divergence vs the aggregate (contract Section E items B/C) — out of scope.
     expect(record.occurrence.hasLogs).toBe(true);
     expect('userId' in record.calendarEntry).toBe(false);
   });
@@ -238,7 +243,53 @@ describe('buildTransitionalSelfPostedTrainingLog (TRANSITIONAL current-snapshot 
   it('does not mutate the input', () => {
     const input = makeFormInput();
     const snapshot = JSON.parse(JSON.stringify(input));
-    buildTransitionalSelfPostedTrainingLog(input, deterministicDeps());
+    buildTransitionalSelfPostedTrainingLog(input, occurrenceFor(), deterministicDeps());
     expect(input).toEqual(snapshot);
+  });
+
+  // Future-write timing convergence (decision §25): the required occurrence is
+  // used DIRECTLY (adding only hasLogs), performing NO independent end-time
+  // calculation from form input/duration.
+  describe('with the required constructed occurrence (timing convergence)', () => {
+    const durationForm = (): CompletedSelfPostedTrainingInput => ({
+      title: 'Solo Run',
+      discipline: 'Fysisk træning',
+      dateISO: '2026-07-30',
+      start: '23:30',
+      durationMinutes: 90,
+      userId: 'fighter@example.com',
+    });
+
+    it("uses the occurrence's start/end verbatim (local-safe), not a recomputed UTC end", () => {
+      const occurrence = createSelfPostedOccurrence(
+        { title: 'Solo Run', discipline: 'Fysisk træning', dateISO: '2026-07-30', start: '23:30', durationMinutes: 90 },
+        'occ_1',
+      );
+      const record = buildTransitionalSelfPostedTrainingLog(durationForm(), occurrence, {
+        nowISO: () => '2026-07-30T20:00:00.000Z',
+        ids: { occurrenceId: 'occ_1', calendarEntryId: 'ce_1', recordId: 'log_1' },
+      });
+      expect(record.occurrence.startDateTime).toBe(occurrence.startDateTime);
+      expect(record.occurrence.endDateTime).toBe(occurrence.endDateTime);
+      expect(record.occurrence.endDateTime).toBe('2026-07-31T01:00:00'); // crosses local midnight
+      expect(record.occurrence.endDateTime.endsWith('Z')).toBe(false);
+      expect(record.log.actualStartDateTime).toBe(occurrence.startDateTime);
+      expect(record.log.actualEndDateTime).toBe(occurrence.endDateTime);
+    });
+
+    it('adds hasLogs to the snapshot without mutating the injected occurrence', () => {
+      const occurrence = createSelfPostedOccurrence(
+        { title: 'Solo Run', discipline: 'Fysisk træning', dateISO: '2026-07-30', start: '17:00', durationMinutes: 60 },
+        'occ_1',
+      );
+      const snapshot = JSON.parse(JSON.stringify(occurrence));
+      const record = buildTransitionalSelfPostedTrainingLog(durationForm(), occurrence, {
+        nowISO: () => '2026-07-30T20:00:00.000Z',
+        ids: { occurrenceId: 'occ_1', calendarEntryId: 'ce_1', recordId: 'log_1' },
+      });
+      expect(record.occurrence.hasLogs).toBe(true);
+      expect(occurrence).toEqual(snapshot); // input occurrence untouched
+      expect('hasLogs' in occurrence).toBe(false);
+    });
   });
 });
