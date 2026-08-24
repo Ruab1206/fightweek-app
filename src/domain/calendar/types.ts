@@ -333,12 +333,16 @@ export interface NewModelCalendarAggregate {
   schemaVersion: 1;
   /**
    * The paired `CompletedSelfPostedTrainingLog.id` created atomically with
-   * this aggregate (Checkpoint B). Required, immutable — equals
-   * `UnplannedTrainingCreationIds.logRecordId`. Enables bilateral Firestore
-   * pair-integrity validation; it is a co-persistence identity reference,
-   * not a general one-log-per-occurrence uniqueness mechanism.
+   * this aggregate (Checkpoint B), when one exists. Enables bilateral
+   * Firestore pair-integrity validation for that use case; it is a
+   * co-persistence identity reference, not a general one-log-per-occurrence
+   * uniqueness mechanism. Optional — persisted CalendarEntry independence
+   * (I2) requires that an aggregate be constructible without a paired
+   * TrainingLog; existing paired writes are unaffected and continue to
+   * supply it (see `/docs/self_posted_lifecycle_and_invariants.md` Section E,
+   * `/docs/fightweek_decisions.md` §17/§18/§19/§21/§22/§23).
    */
-  logRecordId: string;
+  logRecordId?: string;
 }
 
 /**

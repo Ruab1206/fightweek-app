@@ -84,7 +84,8 @@ export interface AssembleNewModelCalendarAggregateParams {
   userId: string;
   occurrence: EventOccurrence;
   calendarEntry: CalendarEntry;
-  logRecordId: string;
+  /** Optional — see `NewModelCalendarAggregate.logRecordId` (persisted CalendarEntry independence, I2). */
+  logRecordId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -100,7 +101,7 @@ export interface AssembleNewModelCalendarAggregateParams {
 export function assembleNewModelCalendarAggregate(
   params: AssembleNewModelCalendarAggregateParams,
 ): NewModelCalendarAggregate {
-  return {
+  const aggregate: NewModelCalendarAggregate = {
     id: params.aggregateId,
     userId: params.userId,
     occurrence: params.occurrence,
@@ -108,8 +109,10 @@ export function assembleNewModelCalendarAggregate(
     createdAt: params.createdAt,
     updatedAt: params.updatedAt,
     schemaVersion: 1,
-    logRecordId: params.logRecordId,
   };
+  // Firestore-safe: omit rather than assign undefined for an absent optional field.
+  if (params.logRecordId !== undefined) aggregate.logRecordId = params.logRecordId;
+  return aggregate;
 }
 
 /**

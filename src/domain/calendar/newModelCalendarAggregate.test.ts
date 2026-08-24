@@ -295,6 +295,47 @@ describe('assembleNewModelCalendarAggregate (authoritative envelope assembler)',
     expect(aggregate.occurrence).toBe(occurrence); // embeds the already-built record
     expect(aggregate.calendarEntry).toBe(calendarEntry);
   });
+
+  // Persisted CalendarEntry independence — smallest reversible slice (I2, type
+  // contract level only). `logRecordId` is now OPTIONAL: existing paired
+  // callers are unaffected; the assembler can also omit it entirely.
+  it('paired construction still emits logRecordId unchanged (existing behaviour)', () => {
+    const ids = makeIds();
+    const input = makeInput();
+    const aggregate = buildNewModelCalendarAggregate(input, ids, deterministicDeps());
+    expect(aggregate.logRecordId).toBe(ids.logRecordId);
+  });
+
+  it('supports omitting logRecordId entirely — Firestore-safe (no undefined field), not merely absent from the type', () => {
+    const occurrence = createSelfPostedOccurrence(toSelfPostedOccurrenceInput(makeInput()), 'occ_1');
+    const calendarEntry = addOccurrenceToFighterCalendar(occurrence, 'ce_1', 'completed', 'fighter@example.com');
+    const aggregate = assembleNewModelCalendarAggregate({
+      aggregateId: 'agg_1',
+      userId: 'fighter@example.com',
+      occurrence,
+      calendarEntry,
+      createdAt: FIXED_NOW_ISO,
+      updatedAt: FIXED_NOW_ISO,
+    });
+    expect('logRecordId' in aggregate).toBe(false);
+    expect(aggregate.schemaVersion).toBe(1);
+  });
+
+  it('does not mutate its input params object', () => {
+    const occurrence = createSelfPostedOccurrence(toSelfPostedOccurrenceInput(makeInput()), 'occ_1');
+    const calendarEntry = addOccurrenceToFighterCalendar(occurrence, 'ce_1', 'completed', 'fighter@example.com');
+    const params = {
+      aggregateId: 'agg_1',
+      userId: 'fighter@example.com',
+      occurrence,
+      calendarEntry,
+      createdAt: FIXED_NOW_ISO,
+      updatedAt: FIXED_NOW_ISO,
+    };
+    const snapshot = JSON.parse(JSON.stringify(params));
+    assembleNewModelCalendarAggregate(params);
+    expect(params).toEqual(snapshot);
+  });
 });
 
 // ──────────────────────────────────────────────
