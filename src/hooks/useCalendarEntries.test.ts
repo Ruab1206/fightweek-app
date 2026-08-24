@@ -96,6 +96,22 @@ describe('useCalendarEntries', () => {
     expect(result.current.entries.map((e) => e.id)).toEqual(['b1']);
   });
 
+  it('ignores a pending response after unmount (no state update after unmount)', async () => {
+    let resolvePending!: (v: { entries: NewModelCalendarAggregate[]; issues: [] }) => void;
+    mockedList.mockImplementationOnce(() => new Promise((resolve) => { resolvePending = resolve; }));
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { unmount } = renderHook(() => useCalendarEntries('fighter@example.com'));
+    unmount();
+
+    await act(async () => {
+      resolvePending({ entries: [makeAggregate('late')], issues: [] });
+    });
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
   it('refresh() re-issues the read', async () => {
     mockedList.mockResolvedValueOnce({ entries: [], issues: [] });
     const { result } = renderHook(() => useCalendarEntries('fighter@example.com'));

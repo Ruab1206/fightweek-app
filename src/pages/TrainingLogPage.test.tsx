@@ -587,6 +587,91 @@ describe('TrainingLogPage — owner can log completed training', () => {
   });
 });
 
+describe('TrainingLogPage — post-save calendar-entry refresh', () => {
+  function fillAndSubmit() {
+    fireEvent.click(screen.getByRole('button', { name: /log træning/i }));
+    fireEvent.change(screen.getByLabelText(/Titel/i), { target: { value: 'MMA Sparring' } });
+    fireEvent.change(screen.getByLabelText(/Dato/i), { target: { value: '2020-01-01' } });
+    fireEvent.change(screen.getByLabelText(/Starttidspunkt/i), { target: { value: '10:00' } });
+    fireEvent.change(screen.getByLabelText(/Varighed/i), { target: { value: '60' } });
+    fireEvent.change(screen.getByLabelText(/Disciplin/i), { target: { value: 'MMA' } });
+    fireEvent.click(screen.getByRole('button', { name: /gem træning/i }));
+  }
+
+  it("refreshes this page's own calendar entries after a successful save, so the new log shows its exact duration without navigating to the calendar", async () => {
+    const newAggregate = makeAggregate({
+      id: 'agg1',
+      occurrence: { ...makeAggregate().occurrence, id: 'occ1', startDateTime: '2020-01-01T10:00:00', endDateTime: '2020-01-01T11:00:00' },
+    });
+    const record = {
+      ...fakeLog({ title: 'MMA Sparring', startDateTime: '2020-01-01T10:00:00', endDateTime: '2020-01-01T09:30:00.000Z' }),
+      id: 'record-new',
+      origin: { type: 'new_model_calendar_entry' as const, aggregateId: 'agg1', occurrenceId: 'occ1' },
+    };
+    const addUnplannedTraining = vi.fn().mockResolvedValue({ aggregateId: 'agg1', occurrenceId: 'occ1', calendarEntryId: 'entry1', logRecordId: 'record-new' });
+    const refreshCalendarEntries = vi.fn().mockImplementation(async () => {
+      mockedUseCalendarEntries.mockReturnValue(mockCalendarEntriesResult({ entries: [newAggregate], refresh: refreshCalendarEntries }));
+    });
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ addUnplannedTraining, logs: [record] }));
+    mockedUseCalendarEntries.mockReturnValue(mockCalendarEntriesResult({ entries: [], refresh: refreshCalendarEntries }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+    // Before save: no matching aggregate loaded yet, so the fallback shows.
+    expect(screen.getByText(/Varighed ikke tilgængelig/)).toBeTruthy();
+
+    fillAndSubmit();
+
+    await waitFor(() => expect(refreshCalendarEntries).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByText(/60 min/)).toBeTruthy();
+    expect(screen.queryByText(/Varighed ikke tilgængelig/)).toBeNull();
+  });
+
+  it('calls refreshCalendarEntries exactly once for one successful save (no uncontrolled repeated reads)', async () => {
+    const addUnplannedTraining = vi.fn().mockResolvedValue({ aggregateId: 'agg1', occurrenceId: 'occ1', calendarEntryId: 'entry1', logRecordId: 'log-1' });
+    const refreshCalendarEntries = vi.fn().mockResolvedValue(undefined);
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ addUnplannedTraining }));
+    mockedUseCalendarEntries.mockReturnValue(mockCalendarEntriesResult({ refresh: refreshCalendarEntries }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog />);
+    fillAndSubmit();
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(refreshCalendarEntries).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call refreshCalendarEntries when addUnplannedTraining rejects (a failed save must not refresh or invent state)', async () => {
+    const addUnplannedTraining = vi.fn().mockRejectedValue(new Error('Kunne ikke gemme'));
+    const refreshCalendarEntries = vi.fn().mockResolvedValue(undefined);
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ addUnplannedTraining }));
+    mockedUseCalendarEntries.mockReturnValue(mockCalendarEntriesResult({ refresh: refreshCalendarEntries }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog onError={vi.fn()} />);
+    fillAndSubmit();
+
+    await waitFor(() => expect(addUnplannedTraining).toHaveBeenCalledTimes(1));
+    expect(refreshCalendarEntries).not.toHaveBeenCalled();
+  });
+
+  it('awaits the calendar-entries refresh before reporting success (onSuccess only fires once the refresh has resolved)', async () => {
+    const addUnplannedTraining = vi.fn().mockResolvedValue({ aggregateId: 'agg1', occurrenceId: 'occ1', calendarEntryId: 'entry1', logRecordId: 'log-1' });
+    let resolveRefresh: () => void = () => {};
+    const refreshCalendarEntries = vi.fn().mockImplementation(() => new Promise<void>((resolve) => { resolveRefresh = resolve; }));
+    const onSuccess = vi.fn();
+    mockedUseEventLogs.mockReturnValue(mockHookResult({ addUnplannedTraining }));
+    mockedUseCalendarEntries.mockReturnValue(mockCalendarEntriesResult({ refresh: refreshCalendarEntries }));
+
+    render(<TrainingLogPage fighterKey="fighter@example.com" canCreateLog onSuccess={onSuccess} />);
+    fillAndSubmit();
+
+    await waitFor(() => expect(refreshCalendarEntries).toHaveBeenCalledTimes(1));
+    expect(onSuccess).not.toHaveBeenCalled();
+
+    resolveRefresh();
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+  });
+});
+
 describe('TrainingLogPage — administrator viewing another fighter read-only', () => {
   it('hides the "Log træning" action and never renders LogTrainingSheet when canCreateLog is false', () => {
     mockedUseEventLogs.mockReturnValue(mockHookResult({ logs: [fakeLog()] }));

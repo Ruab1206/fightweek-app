@@ -56,7 +56,7 @@ export interface TrainingLogPageProps {
 export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, onError, onUnplannedTrainingCreated }: TrainingLogPageProps) {
   const { isDark } = useTheme();
   const { logs, loading, error, addUnplannedTraining, resetUnplannedAttempt, refresh } = useEventLogs(fighterKey);
-  const { entries: calendarEntries } = useCalendarEntries(fighterKey);
+  const { entries: calendarEntries, refresh: refreshCalendarEntries } = useCalendarEntries(fighterKey);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const bg = isDark ? 'bg-slate-950 text-slate-200' : 'bg-surface-subtle text-ds-text';
@@ -142,6 +142,11 @@ export default function TrainingLogPage({ fighterKey, canCreateLog, onSuccess, o
   const handleAddLog = async (input: CompletedSelfPostedTrainingInput) => {
     try {
       const ids = await addUnplannedTraining(input);
+      // addUnplannedTraining only returns ids, not the persisted aggregate —
+      // this page's own useCalendarEntries instance (separate from any
+      // parent's) must refresh itself so the new log's associated occurrence
+      // is resolvable immediately, without navigating away and back.
+      await refreshCalendarEntries();
       onSuccess?.('Træning logget.');
       onUnplannedTrainingCreated?.();
       return ids.logRecordId;
