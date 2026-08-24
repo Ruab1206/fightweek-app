@@ -582,6 +582,77 @@ describe('Checkpoint B — bilateral pair-integrity invariant (co-persistence, n
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Independent CalendarEntry create — persisted CalendarEntry independence (I2).
+// An aggregate WITHOUT `logRecordId` may be created alone (no paired log),
+// owner-scoped and identity-validated, WITHOUT getAfter(eventLogs). The paired
+// path (logRecordId present) is unchanged. Discriminator = logRecordId presence.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Independent CalendarEntry create (no paired TrainingLog — logRecordId absent)', () => {
+  function makeIndependentAggregate(overrides: Record<string, unknown> = {}) {
+    const agg = makeAggregate(overrides) as Record<string, unknown>;
+    delete agg.logRecordId; // independent CalendarEntry: no paired-log reference
+    return agg;
+  }
+
+  it('owner can create an aggregate WITHOUT logRecordId, alone (no paired log required)', async () => {
+    await assertSucceeds(setDoc(doc(as(OWNER), AGG_PATH(OWNER, 'agg1')), makeIndependentAggregate()));
+  });
+
+  it('fails when userId does not match the path owner', async () => {
+    await assertFails(
+      setDoc(doc(as(OWNER), AGG_PATH(OWNER, 'agg1')), makeIndependentAggregate({ userId: 'someone-else@x' })),
+    );
+  });
+
+  it('fails when the aggregate id does not match the document path', async () => {
+    await assertFails(
+      setDoc(doc(as(OWNER), AGG_PATH(OWNER, 'agg_WRONG_DOC_ID')), makeIndependentAggregate({ id: 'agg1' })),
+    );
+  });
+
+  it('unauthenticated cannot create an independent aggregate', async () => {
+    await assertFails(setDoc(doc(as(null), AGG_PATH(OWNER, 'agg1')), makeIndependentAggregate()));
+  });
+
+  it("another fighter cannot create an independent aggregate in the owner's path", async () => {
+    await assertFails(setDoc(doc(as('other@x'), AGG_PATH(OWNER, 'agg1')), makeIndependentAggregate()));
+  });
+
+  it('coach cannot create an independent aggregate', async () => {
+    await assertFails(setDoc(doc(as('coach@x'), AGG_PATH(OWNER, 'agg1')), makeIndependentAggregate()));
+  });
+
+  it('an aggregate carrying logRecordId cannot use the independent path: created alone it still fails (routes to paired)', async () => {
+    // logRecordId present => independent branch does not apply; paired branch needs a matching log in-commit.
+    await assertFails(setDoc(doc(as(OWNER), AGG_PATH(OWNER, 'agg1')), makeAggregate()));
+  });
+
+  it('paired create is unchanged: consistent aggregate (with logRecordId) + matching log together still succeeds', async () => {
+    const db = as(OWNER);
+    const batch = writeBatch(db);
+    batch.set(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate());
+    batch.set(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog());
+    await assertSucceeds(batch.commit());
+  });
+
+  it('paired validation is unchanged: broken cross-reference (occurrence id mismatch) still fails', async () => {
+    const db = as(OWNER);
+    const batch = writeBatch(db);
+    batch.set(doc(db, AGG_PATH(OWNER, 'agg1')), makeAggregate({ occurrence: { ...makeAggregate().occurrence, id: 'occ_DIFFERENT' } }));
+    batch.set(doc(db, LOG_PATH(OWNER, 'nmlog1')), makeNewModelLog());
+    await assertFails(batch.commit());
+  });
+
+  it('independent create does not grant update or delete (no edit lifecycle yet)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), AGG_PATH(OWNER, 'agg1')), makeIndependentAggregate());
+    });
+    await assertFails(updateDoc(doc(as(OWNER), AGG_PATH(OWNER, 'agg1')), { 'occurrence.title': 'Changed' }));
+    await assertFails(deleteDoc(doc(as(OWNER), AGG_PATH(OWNER, 'agg1'))));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Checkpoint B — paired new-model TrainingLogs are create-once and read-only
 // in this slice: editing/deleting is not implemented, and allowing it would
 // risk corrupting the bilaterally validated pair identity or orphaning the

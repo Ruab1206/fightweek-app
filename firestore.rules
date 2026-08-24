@@ -143,10 +143,13 @@ service cloud.firestore {
     //
     // Owner create + read; administrator read-only. No update, no delete —
     // no edit/delete lifecycle exists yet for this slice (least privilege).
-    // Create requires the matching `eventLogs` document to exist, in the SAME
-    // atomic commit, with identity fields that agree (bilateral with the
-    // eventLogs gate above). Coach/other team members/unauthenticated denied
-    // (no matching allow; not covered by any broader wildcard).
+    // Two create paths, discriminated by `logRecordId` presence: when present,
+    // the matching `eventLogs` document must exist in the SAME atomic commit
+    // with agreeing identity fields (bilateral, Checkpoint B); when ABSENT, an
+    // independent CalendarEntry is created owner-scoped with identity/ownership
+    // validation only (persisted CalendarEntry independence, I2) — no paired
+    // log required. Coach/other team members/unauthenticated denied (no
+    // matching allow; not covered by any broader wildcard).
     function aggregatePairsWithLog(userKey, aggregateId, aggData) {
       let log = getAfter(/databases/$(database)/documents/artifacts/production/users/$(userKey)/eventLogs/$(aggData.logRecordId)).data;
       return aggData.id == aggregateId
@@ -164,9 +167,21 @@ service cloud.firestore {
         && request.auth.token.email == userKey;
       allow read: if isAdmin();
 
+      // Paired create (Checkpoint B): a `logRecordId` claims a co-persisted
+      // TrainingLog, so the full bilateral pair-integrity check applies.
       allow create: if isAuthenticated()
         && request.auth.token.email == userKey
+        && ('logRecordId' in request.resource.data)
         && aggregatePairsWithLog(userKey, aggregateId, request.resource.data);
+
+      // Independent create (persisted CalendarEntry independence, I2): no
+      // `logRecordId` => no paired TrainingLog is claimed, so owner-scoped
+      // identity validation only — no getAfter(eventLogs), no pairing.
+      allow create: if isAuthenticated()
+        && request.auth.token.email == userKey
+        && !('logRecordId' in request.resource.data)
+        && request.resource.data.id == aggregateId
+        && request.resource.data.userId == userKey;
     }
 
     // ─── Public catalogue & gyms ───
