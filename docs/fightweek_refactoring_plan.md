@@ -259,6 +259,16 @@ Following the timing-convergence slice above, five further slices established in
 
 **Next sequencing (unchanged direction, decision §26):** (1) approved production application/UI wiring from `CalendarEntry` (reusing `addTrainingLogForExistingCalendarEntry`); (2) read-side duplicate-mitigation using association state (mirroring the existing none/one/conflict classification) before any create action is exposed; (3) manual TST verification; (4) separately gated completed-unplanned recomposition and its PO atomicity/UX decision; (5) only then is `logRecordId`/bilateral-pairing retirement considered.
 
+### Shared calendar detail contract checkpoint (2026-08-25 — decision §27)
+
+The shared `CalendarItemDetail`/`CalendarItemCapabilities` read/detail contract named as step 2 of the architecture checkpoint above now exists, with two proof source adapters: legacy self-posted training (`81bf1a5`) and events (`1d98454`).
+
+**Complete:** the pure contract types; the legacy self-posted adapter; the event adapter. The event adapter deliberately excludes the event's native signup status (`interested`/`signed-up`/`declined`) from the shared contract — those values target distinct future concepts (`CalendarEntry`, `Favorite`) that remain unimplemented, and `declined` has no approved durable target (decision §27). Current event signup persistence and `useEventMerge` calendar-visibility behaviour are unchanged.
+
+**Not complete:** no presentation component consumes the contract yet; no event `CalendarEntry` persistence; no `Favorite` implementation; source-neutrality is proven only at the pure contract/adapter level, not in presentation.
+
+**Next architecture-level priority:** one presentation consumer of the shared contract, preserving existing functionality exactly, before evaluating any calendar UI component (see the FullCalendar spike gate below).
+
 ### Next planning focus
 
 - Optionally perform physical mobile-device verification when proportionate.
@@ -281,7 +291,7 @@ Following the timing-convergence slice above, five further slices established in
 
 ## Future Spike: Calendar UI / FullCalendar Evaluation
 
-A calendar UI spike remains planned. **FullCalendar** is the first candidate to evaluate. This is a **future spike, not the active next task** — it comes after the discovery work for the next slice and after more `CalendarEntry`/`EventLog` flows have been proven.
+A calendar UI spike remains planned. **FullCalendar** is the first candidate to evaluate. This is a **future spike, not the active next task** — it comes after the discovery work for the next slice and after more `CalendarEntry`/`EventLog` flows have been proven. It also remains gated until the shared `CalendarItemDetail`/`CalendarItemCapabilities` contract (see the checkpoint above) has at least one non-self-posted presentation consumer, so the component boundary can consume the contract without redefining domain meaning.
 
 The UI library must not drive the domain model. The spike evaluates whether a calendar component can render and interact with the cleaned-up `CalendarEntry`/`EventOccurrence` model, and helps decide whether to replace or reduce the current custom calendar UI.
 

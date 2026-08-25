@@ -1,6 +1,6 @@
 # Fightweek Domain Model
 
-_Last updated: 2026-07-19_
+_Last updated: 2026-08-25_
 
 This document explains the core Fightweek scheduling, participation and logging concepts in plain language.
 
@@ -189,6 +189,8 @@ Interested means:
 
 These should remain separate concepts.
 
+> Note: the current event-native `interested` signup status is intended to converge toward `Favorite`, not toward this general "Interested" response concept (decision §27).
+
 ### CalendarEntry vs Participation
 
 CalendarEntry means:
@@ -273,7 +275,7 @@ Approximate mapping:
 - Current generated class session -> EventOccurrence + CalendarEntry
 - Current `FightweekEvent` -> EventOccurrence
 - Current weekly schedule session -> CalendarEntry mixed with EventOccurrence
-- Current event signup -> EventOccurrenceParticipation
+- Current event signup (`interested`/`signed-up`/`declined`) -> transitional source-native status; future target splits into `CalendarEntry` (`signed-up`) and `Favorite` (`interested`), not `EventOccurrenceParticipation`; `declined` has no approved durable target (decision §27)
 - Current invitation invitee -> EventOccurrenceParticipation or EventSeriesParticipation
 - Current activity note -> early/simple EventLog
 - Current absence session -> EventOccurrence of type `absence` + CalendarEntry

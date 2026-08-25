@@ -4,7 +4,7 @@ _The architectural direction for FightWeek. This document is the bridge between 
 
 _Read at planning. Update at review._
 
-_Last updated: 2026-07-20_
+_Last updated: 2026-08-25_
 
 ---
 
@@ -401,7 +401,7 @@ The table maps current Firestore paths to target domain concepts. It documents d
 | `users/{userId}/templates/standard` | Personal planning defaults (planning layer) | ✅ Live |
 | `users/{userId}/meta/notes` (activity notes) | Early/simple `EventLog` | ✅ Live |
 | Absence sessions in weekly plan | `EventOccurrence` of type `absence` + `CalendarEntry` | ✅ Live |
-| Event signups | `EventOccurrenceParticipation` | ✅ Live |
+| Event signups (`interested`/`signed-up`/`declined`) | Transitional source-native status — future target splits into `CalendarEntry` inclusion (`signed-up`) and `Favorite` (`interested`); `declined` has no approved durable target (decision §27) | 🚧 Transitional |
 | Invitation invitees | `EventOccurrenceParticipation` or `EventSeriesParticipation` | ✅ Live |
 | `public/data/gyms/{id}` | Organization of type `gym` | ✅ Live |
 | Favorites | `Favorite` | 📐 Target |
