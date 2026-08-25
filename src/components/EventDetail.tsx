@@ -1,5 +1,14 @@
 /**
  * EventDetail — full-screen detail overlay for a single event.
+ *
+ * First non-self-posted presentation consumer of the shared
+ * CalendarItemDetail/CalendarItemCapabilities read contract (see
+ * eventDetailAdapter.ts and
+ * /docs/self_posted_lifecycle_and_invariants.md Section I step 4). Common
+ * detail/capability fields cross the shared contract boundary below; native
+ * signup, discipline, registration deadline, address/contact info, and
+ * date/time formatting stay sourced from `event` directly — the contract is
+ * additive here, not a replacement for `FightweekEvent`.
  */
 import { ArrowLeft, MapPin, Clock, ExternalLink, CalendarDays, Pencil, Trash2 } from 'lucide-react';
 import { FIGHTERS } from '../config/constants';
@@ -7,8 +16,7 @@ import { googleMapsUrl } from '../config/constants';
 import type { FightweekEvent, EventSignupStatus } from '../types/event';
 import { TypeBadge, formatDateRange, formatDateDa, isEventPast, daysUntil, SIGNUP_OPTIONS } from './eventHelpers';
 import { NotesEditor } from './NotesEditor';
-import { eventNoteKey } from '../hooks/useActivityNotes';
-import { isEventCancelled } from '../hooks/eventDelete';
+import { mapEventToCalendarItemDetail } from '../domain/calendar/eventDetailAdapter';
 
 export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onClose, onEdit, onDelete, getNote, saveNote }: {
   event: FightweekEvent;
@@ -25,6 +33,8 @@ export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onC
   const myStatus = event.signups?.[fighterName] || null;
   const deadlineDays = event.registrationDeadline ? daysUntil(event.registrationDeadline) : null;
   const past = isEventPast(event);
+  const { detail, capabilities } = mapEventToCalendarItemDetail(event, { isAdmin });
+  const isCancelled = detail.availability.status === 'cancelled';
 
   return (
     <div className={`fixed inset-0 z-50 flex flex-col ${isDark ? 'bg-slate-950' : 'bg-surface-subtle'}`}>
@@ -33,24 +43,28 @@ export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onC
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1 min-w-0">
-          <h2 className={`font-bold text-sm truncate ${isDark ? 'text-white' : 'text-ds-text'}`}>{event.title}</h2>
+          <h2 className={`font-bold text-sm truncate ${isDark ? 'text-white' : 'text-ds-text'}`}>{detail.title}</h2>
           <div className="flex items-center gap-2">
-            <TypeBadge type={event.type} isDark={isDark} />
-            {isEventCancelled(event) && (
+            <TypeBadge type={detail.eventType!} isDark={isDark} />
+            {isCancelled && (
               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${isDark ? 'bg-red-950/40 text-red-400' : 'bg-red-100 text-red-600'}`}>
                 Aflyst
               </span>
             )}
           </div>
         </div>
-        {isAdmin && (
+        {(capabilities.editable || capabilities.deletable) && (
           <div className="flex items-center gap-1 shrink-0">
-            <button onClick={onEdit} className={`p-2 rounded-lg ${isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-ds-text-subtle hover:text-ds-text hover:bg-surface-hover'}`}>
-              <Pencil className="w-4 h-4" />
-            </button>
-            <button onClick={onDelete} className="p-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-900/20">
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {capabilities.editable && (
+              <button onClick={onEdit} className={`p-2 rounded-lg ${isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-ds-text-subtle hover:text-ds-text hover:bg-surface-hover'}`}>
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
+            {capabilities.deletable && (
+              <button onClick={onDelete} className="p-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-900/20">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -69,11 +83,11 @@ export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onC
           )}
         </div>
 
-        {(event.location || event.address) && (
+        {(detail.location || event.address) && (
           <div className={`rounded-xl border p-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border'}`}>
             <div className="flex items-center gap-2">
               <MapPin className={`w-4 h-4 shrink-0 ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`} />
-              <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-ds-text'}`}>{event.location || event.address}</span>
+              <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-ds-text'}`}>{detail.location || event.address}</span>
             </div>
             {event.address && (
               <a href={googleMapsUrl(event.address)} target="_blank" rel="noopener noreferrer"
@@ -84,17 +98,17 @@ export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onC
           </div>
         )}
 
-        {event.description && (
+        {detail.description && (
           <div className={`rounded-xl border p-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border'}`}>
-            <p className={`text-sm whitespace-pre-line ${isDark ? 'text-slate-300' : 'text-ds-text-subtle'}`}>{event.description}</p>
+            <p className={`text-sm whitespace-pre-line ${isDark ? 'text-slate-300' : 'text-ds-text-subtle'}`}>{detail.description}</p>
           </div>
         )}
 
         <div className={`rounded-xl border p-3 space-y-2 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border'}`}>
-          {event.organiser && (
+          {detail.organiser && (
             <div className="flex justify-between text-sm">
               <span className={isDark ? 'text-slate-400' : 'text-ds-text-subtle'}>Arrangør</span>
-              <span className={`font-medium ${isDark ? 'text-white' : 'text-ds-text'}`}>{event.organiser}</span>
+              <span className={`font-medium ${isDark ? 'text-white' : 'text-ds-text'}`}>{detail.organiser}</span>
             </div>
           )}
           {event.discipline && (
@@ -103,10 +117,10 @@ export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onC
               <span className={`font-medium ${isDark ? 'text-white' : 'text-ds-text'}`}>{event.discipline}</span>
             </div>
           )}
-          {event.cost && (
+          {detail.cost && (
             <div className="flex justify-between text-sm">
               <span className={isDark ? 'text-slate-400' : 'text-ds-text-subtle'}>Pris</span>
-              <span className={`font-medium ${isDark ? 'text-white' : 'text-ds-text'}`}>{event.cost}</span>
+              <span className={`font-medium ${isDark ? 'text-white' : 'text-ds-text'}`}>{detail.cost}</span>
             </div>
           )}
           {event.registrationDeadline && (
@@ -120,8 +134,8 @@ export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onC
               </span>
             </div>
           )}
-          {event.url && (
-            <a href={event.url} target="_blank" rel="noopener noreferrer"
+          {detail.url && (
+            <a href={detail.url} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-sm text-blue-500 hover:text-blue-400 font-medium pt-1">
               <ExternalLink className="w-3.5 h-3.5" /> Læs mere
             </a>
@@ -190,7 +204,7 @@ export function EventDetail({ event, isDark, fighterName, isAdmin, onSignup, onC
         <div className={`rounded-xl border p-3 ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-surface-border'}`}>
           <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Mine noter</p>
           <NotesEditor
-            noteKey={eventNoteKey(event.id)}
+            noteKey={capabilities.noteState.noteKey!}
             getNote={getNote}
             saveNote={saveNote}
             isDark={isDark}
