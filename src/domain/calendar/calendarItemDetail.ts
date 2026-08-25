@@ -18,6 +18,7 @@
  * behaviour for it.
  */
 import type { OccurrenceLogAssociation } from './logAssociation';
+import type { EventType } from '../../types/event';
 
 export type CalendarSource =
   | 'self_posted_legacy'
@@ -54,6 +55,14 @@ export interface CalendarItemDetail {
   location?: string;
   description?: string;
   category?: string;
+  /** Present only for `source: 'event'` — the event's own type (tournament/seminar/social/other), distinct from `category`/discipline. */
+  eventType?: EventType;
+  /** Present only for `source: 'event'`, where supplied. */
+  organiser?: string;
+  /** Present only for `source: 'event'`, where supplied. */
+  url?: string;
+  /** Present only for `source: 'event'`, where supplied. */
+  cost?: string;
   recurrenceContext?: {
     isRecurring: boolean;
     intervalWeeks?: number;
