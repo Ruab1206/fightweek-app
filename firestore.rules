@@ -86,15 +86,21 @@ service cloud.firestore {
     // added here (e.g. an allow read gated on a `sharedWith` field) — not now.
     //
     // ─── Checkpoint B: bilateral new-model pair-integrity gate ───
-    // A log create is split from update/delete so that ONLY the create path
-    // for a log declaring `origin.type == 'new_model_calendar_entry'` (the
-    // Checkpoint B atomic calendar-aggregate + TrainingLog pair) requires the
-    // matching `calendarEntries` document to exist, in the SAME atomic
-    // commit, with identity fields that agree. Standalone (no `origin`) and
-    // legacy `self_posted_calendar_session` creates are UNCHANGED — they hit
-    // the second `allow create` branch below, exactly as before. This is
-    // co-persistence PAIR INTEGRITY, not general one-log-per-occurrence
-    // uniqueness: it does not prevent a second log for the same occurrence.
+    // A log create is split into THREE branches, discriminated by
+    // `origin.type` and (for new-model origin) whether the referenced
+    // aggregate already exists as an independent entry:
+    //  1. Standalone (no `origin`) and legacy `self_posted_calendar_session`
+    //     creates — UNCHANGED, exactly as before.
+    //  2. `origin.type == 'new_model_calendar_entry'` created bilaterally: the
+    //     matching `calendarEntries` document must exist, in the SAME atomic
+    //     commit, with identity fields that agree (co-persistence PAIR
+    //     INTEGRITY, not general one-log-per-occurrence uniqueness — does
+    //     not prevent a second log for the same occurrence).
+    //  3. `origin.type == 'new_model_calendar_entry'` referencing an
+    //     ALREADY-PERSISTED independent entry (no `logRecordId`) — a
+    //     unidirectional log->entry reference (TrainingLog.origin ->
+    //     CalendarEntry); establishes referential integrity for this create,
+    //     not I8 uniqueness. CalendarEntry is never mutated.
     function hasNewModelOrigin(data) {
       return 'origin' in data && data.origin.type == 'new_model_calendar_entry';
     }
@@ -107,6 +113,26 @@ service cloud.firestore {
           && agg.calendarEntry.id == logData.calendarEntry.id
           && agg.userId == userKey
           && agg.logRecordId == logData.id
+          && logData.id == logId;
+    }
+
+    // ─── Log against an already-existing independent CalendarEntry ───
+    // Additive, unidirectional (TrainingLog.origin -> CalendarEntry): the
+    // referenced aggregate must already be PERSISTED (get, not getAfter — a
+    // same-commit brand-new aggregate is invisible here, so this can never
+    // overlap with the bilateral path above) and must be INDEPENDENT (no
+    // logRecordId). Mirrors every identity check `logPairsWithAggregate`
+    // performs except the aggregate->log back-reference, which an independent
+    // entry has no field for. This is referential integrity for this create,
+    // not one-log-per-occurrence uniqueness (I8 remains deferred, unchanged).
+    function logReferencesExistingIndependentEntry(userKey, logId, logData) {
+      let agg = get(/databases/$(database)/documents/artifacts/production/users/$(userKey)/calendarEntries/$(logData.origin.aggregateId)).data;
+      return agg.id == logData.origin.aggregateId
+          && agg.occurrence.id == logData.origin.occurrenceId
+          && agg.occurrence.id == logData.occurrence.id
+          && agg.calendarEntry.id == logData.calendarEntry.id
+          && agg.userId == userKey
+          && !('logRecordId' in agg)
           && logData.id == logId;
     }
 
@@ -123,6 +149,11 @@ service cloud.firestore {
         && request.auth.token.email == userKey
         && hasNewModelOrigin(request.resource.data)
         && logPairsWithAggregate(userKey, logId, request.resource.data);
+
+      allow create: if isAuthenticated()
+        && request.auth.token.email == userKey
+        && hasNewModelOrigin(request.resource.data)
+        && logReferencesExistingIndependentEntry(userKey, logId, request.resource.data);
 
       // Checkpoint B: a paired new-model TrainingLog is create-once and
       // read-only in this slice — editing/deleting it is not implemented,

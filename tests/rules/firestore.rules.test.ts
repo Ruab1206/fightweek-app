@@ -653,6 +653,175 @@ describe('Independent CalendarEntry create (no paired TrainingLog — logRecordI
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Log against an already-existing independent CalendarEntry (TrainingLog.origin
+// -> CalendarEntry, unidirectional). The referenced aggregate is PRE-EXISTING
+// (seeded before the log create, not in the same batch) and carries NO
+// `logRecordId` — a log-less independent entry. This is additive and disjoint
+// from the bilateral same-commit path: `get()` (not `getAfter()`) only ever
+// sees already-persisted state, so a brand-new same-batch aggregate is
+// invisible here and must route through the unchanged bilateral branch
+// instead. This establishes REFERENTIAL INTEGRITY for this new path, not
+// one-log-per-occurrence (I8) uniqueness — a second log referencing the same
+// entry is not prevented here (unchanged from the existing bilateral gate's
+// scope). CalendarEntry is never mutated; `logRecordId` is untouched.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Log against an already-existing independent CalendarEntry (new-model origin, no bilateral pair)', () => {
+  function makeIndependentAggregate(overrides: Record<string, unknown> = {}) {
+    const agg = makeAggregate(overrides) as Record<string, unknown>;
+    delete agg.logRecordId;
+    return agg;
+  }
+
+  function makeLogAgainstExistingEntry(overrides: Record<string, unknown> = {}) {
+    return makeNewModelLog({ id: 'logX', ...overrides });
+  }
+
+  beforeEach(async () => {
+    // Seed an ALREADY-PERSISTED independent aggregate (rules disabled), so the
+    // log create below is a single-document write, never a same-commit batch.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), AGG_PATH(OWNER, 'agg1')), makeIndependentAggregate());
+    });
+  });
+
+  it('owner can create a new-model-origin TrainingLog referencing the existing independent CalendarEntry', async () => {
+    await assertSucceeds(setDoc(doc(as(OWNER), LOG_PATH(OWNER, 'logX')), makeLogAgainstExistingEntry()));
+  });
+
+  it('fails when the referenced CalendarEntry does not exist (also proves no fallthrough to standalone/legacy validation, since origin.type is still new_model_calendar_entry)', async () => {
+    await assertFails(
+      setDoc(
+        doc(as(OWNER), LOG_PATH(OWNER, 'logX')),
+        makeLogAgainstExistingEntry({
+          origin: { type: 'new_model_calendar_entry', aggregateId: 'agg_DOES_NOT_EXIST', occurrenceId: 'occ1' },
+        }),
+      ),
+    );
+  });
+
+  it('fails when the referenced aggregate carries logRecordId (paired entries must use the bilateral path)', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), AGG_PATH(OWNER, 'agg_paired')), makeAggregate({ id: 'agg_paired', logRecordId: 'someLog' }));
+    });
+    await assertFails(
+      setDoc(
+        doc(as(OWNER), LOG_PATH(OWNER, 'logX')),
+        makeLogAgainstExistingEntry({
+          origin: { type: 'new_model_calendar_entry', aggregateId: 'agg_paired', occurrenceId: 'occ1' },
+        }),
+      ),
+    );
+  });
+
+  it('fails when the referenced aggregate document id differs from its own id field', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      // Seeded at doc id 'agg_WRONG_DOC_ID' but the persisted field still says 'agg1'.
+      await setDoc(doc(context.firestore(), AGG_PATH(OWNER, 'agg_WRONG_DOC_ID')), makeIndependentAggregate({ id: 'agg1' }));
+    });
+    await assertFails(
+      setDoc(
+        doc(as(OWNER), LOG_PATH(OWNER, 'logX')),
+        makeLogAgainstExistingEntry({
+          origin: { type: 'new_model_calendar_entry', aggregateId: 'agg_WRONG_DOC_ID', occurrenceId: 'occ1' },
+        }),
+      ),
+    );
+  });
+
+  it('fails when origin.occurrenceId does not match the referenced aggregate occurrence id', async () => {
+    await assertFails(
+      setDoc(
+        doc(as(OWNER), LOG_PATH(OWNER, 'logX')),
+        makeLogAgainstExistingEntry({
+          origin: { type: 'new_model_calendar_entry', aggregateId: 'agg1', occurrenceId: 'occ_DIFFERENT' },
+        }),
+      ),
+    );
+  });
+
+  it('fails when log.occurrence.id does not match the referenced aggregate occurrence id', async () => {
+    await assertFails(
+      setDoc(
+        doc(as(OWNER), LOG_PATH(OWNER, 'logX')),
+        makeLogAgainstExistingEntry({ occurrence: { ...makeNewModelLog().occurrence, id: 'occ_DIFFERENT' } }),
+      ),
+    );
+  });
+
+  it('fails when log.calendarEntry.id does not match the referenced aggregate calendarEntry id', async () => {
+    await assertFails(
+      setDoc(
+        doc(as(OWNER), LOG_PATH(OWNER, 'logX')),
+        makeLogAgainstExistingEntry({ calendarEntry: { ...makeNewModelLog().calendarEntry, id: 'entry_DIFFERENT' } }),
+      ),
+    );
+  });
+
+  it('fails when the log document id does not match the path logId', async () => {
+    await assertFails(setDoc(doc(as(OWNER), LOG_PATH(OWNER, 'logX')), makeLogAgainstExistingEntry({ id: 'logY' })));
+  });
+
+  it('fails when the referenced aggregate userId does not match the owner', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), AGG_PATH(OWNER, 'agg_wrong_owner')),
+        makeIndependentAggregate({ id: 'agg_wrong_owner', userId: 'someone-else@x' }),
+      );
+    });
+    await assertFails(
+      setDoc(
+        doc(as(OWNER), LOG_PATH(OWNER, 'logX')),
+        makeLogAgainstExistingEntry({
+          origin: { type: 'new_model_calendar_entry', aggregateId: 'agg_wrong_owner', occurrenceId: 'occ1' },
+        }),
+      ),
+    );
+  });
+
+  it('unauthenticated cannot create a log referencing an existing independent entry', async () => {
+    await assertFails(setDoc(doc(as(null), LOG_PATH(OWNER, 'logX')), makeLogAgainstExistingEntry()));
+  });
+
+  it("another fighter cannot create in the owner's eventLogs path", async () => {
+    await assertFails(setDoc(doc(as('other@x'), LOG_PATH(OWNER, 'logX')), makeLogAgainstExistingEntry()));
+  });
+
+  it('coach cannot create a log referencing an existing independent entry', async () => {
+    await assertFails(setDoc(doc(as('coach@x'), LOG_PATH(OWNER, 'logX')), makeLogAgainstExistingEntry()));
+  });
+
+  it('admin cannot create a log referencing an existing independent entry (read-only policy)', async () => {
+    await assertFails(setDoc(doc(as('admin@x'), LOG_PATH(OWNER, 'logX')), makeLogAgainstExistingEntry()));
+  });
+
+  it('fails with a malformed new_model_calendar_entry origin (missing aggregateId/occurrenceId)', async () => {
+    await assertFails(
+      setDoc(
+        doc(as(OWNER), LOG_PATH(OWNER, 'logX')),
+        makeLogAgainstExistingEntry({ origin: { type: 'new_model_calendar_entry' } }),
+      ),
+    );
+  });
+
+  it('a log created via this new branch is also create-once and read-only (existing immutability rule applies automatically)', async () => {
+    await setDoc(doc(as(OWNER), LOG_PATH(OWNER, 'logX')), makeLogAgainstExistingEntry());
+    await assertFails(updateDoc(doc(as(OWNER), LOG_PATH(OWNER, 'logX')), { 'log.notes': 'Changed' }));
+    await assertFails(deleteDoc(doc(as(OWNER), LOG_PATH(OWNER, 'logX'))));
+  });
+
+  // Not re-tested here (unchanged, already covered elsewhere in this file, and
+  // re-run by every `npm run test:rules` invocation):
+  //   - existing bilateral same-commit aggregate+log creation still succeeds
+  //     ("Checkpoint B — bilateral pair-integrity invariant" describe block)
+  //   - standalone (no origin) log creation is unaffected
+  //     ("standalone log create (no origin) is unaffected by the bilateral gate")
+  //   - legacy self_posted_calendar_session log creation is unaffected
+  //     ("legacy self_posted_calendar_session-origin log create is unaffected...")
+  //   - existing broken bilateral cross-references still fail
+  //     (multiple "fails when aggregate.* does not match..." tests above)
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Checkpoint B — paired new-model TrainingLogs are create-once and read-only
 // in this slice: editing/deleting is not implemented, and allowing it would
 // risk corrupting the bilaterally validated pair identity or orphaning the
