@@ -4,9 +4,9 @@ _This is the single normative source of truth for the self-posted-training stran
 
 _Read at planning for any change touching calendar, occurrence, participation, notes, TrainingLog, favorites, persistence, projection, or routing. Update at review, only through an explicit architecture decision recorded in `/docs/fightweek_decisions.md`._
 
-_Status: normative. Last updated: 2026-08-24._
+_Status: normative. Last updated: 2026-08-25._
 
-_Relationship to other docs: `/docs/target_architecture.md` remains the north-star vocabulary and points here for self-posted lifecycle normativity; `/docs/fightweek_decisions.md` records the durable decisions (this contract is consistent with decisions §17, §18, §19); `/docs/fightweek_refactoring_plan.md` tracks in-progress status against this contract._
+_Relationship to other docs: `/docs/target_architecture.md` remains the north-star vocabulary and points here for self-posted lifecycle normativity; `/docs/fightweek_decisions.md` records the durable decisions (this contract is consistent with decisions §17, §18, §19, §26); `/docs/fightweek_refactoring_plan.md` tracks in-progress status against this contract._
 
 ---
 
@@ -107,7 +107,7 @@ Application operations are conceptual contracts. All new or changed domain behav
 - **Output:** a `CalendarEntry`.
 - **Invariants used:** I2, I3, I7, I12.
 - **Independent of:** `TrainingLog`, `Participation`, `Note`.
-- **Scope:** future (not yet independently implemented).
+- **Scope:** implemented and independently persistable — the resulting `CalendarEntry` can be constructed and persisted without a `TrainingLog` (decision §26; commits `fedca70`–`cee40b0`). No production application/UI source creates one yet.
 
 ### LogOccurrence
 - **Purpose:** create a `TrainingLog` for an occurrence the fighter asserts happened.
@@ -115,7 +115,7 @@ Application operations are conceptual contracts. All new or changed domain behav
 - **Output:** a `TrainingLog` with a self-contained snapshot.
 - **Invariants used:** I8, I10, I11.
 - **Independent of:** `Participation`; MUST NOT define `CalendarEntry` identity.
-- **Scope:** current for legacy calendar-originated logging; future for logging an existing new-model `CalendarEntry`.
+- **Scope:** current for legacy calendar-originated logging; Firestore-rules-layer support for logging an existing new-model `CalendarEntry` is implemented (`b57fefb`, decision §26) — application composition and UI remain future.
 
 ### CreateCompletedUnplannedTraining
 - **Purpose:** the user-visible "Log træning" action for unplanned training that already happened.
@@ -157,10 +157,13 @@ The following is the current known transitional state, stated factually. None of
 
 - Legacy self-posted calendar sessions remain in `users/{fighterKey}/weeks/week_{n}` documents. **TRANSITIONAL.**
 - `NewModelCalendarAggregate` is a **TRANSITIONAL** persistence envelope for completed unplanned training only. It is not the general `CalendarEntry` target aggregate.
-- The envelope currently embeds an `EventOccurrence`, a `CalendarEntry`, and a `logRecordId`.
-- `logRecordId` is a co-persistence pairing reference for this use case. It is **not** a general one-log-per-occurrence uniqueness mechanism and MUST NOT be generalised as such.
-- Current Firestore rules atomically pair the envelope and the `TrainingLog` for this use case (bilateral create). This enforces integrity for the completed-unplanned transaction only.
-- This pairing does **not** define the general `CalendarEntry` lifecycle. Under this envelope, `CalendarEntry` cannot yet exist without a `TrainingLog` — the invariant it cannot yet satisfy is **I2/I18**.
+- The envelope currently embeds an `EventOccurrence`, a `CalendarEntry`, and an optional `logRecordId`.
+- `logRecordId` is a co-persistence pairing reference for the completed-unplanned use case. It is **not** a general one-log-per-occurrence uniqueness mechanism and MUST NOT be generalised as such. It remains **TRANSITIONAL** and load-bearing for that specific flow (decision §26).
+- Current Firestore rules atomically pair the envelope and the `TrainingLog` for the completed-unplanned use case (bilateral create) when `logRecordId` is present. This enforces integrity for that transaction only and remains unchanged and load-bearing.
+- **Independent CalendarEntry persistence is now achieved (decision §26), separately from the completed-unplanned use case above.** An aggregate MAY be constructed and persisted without a `logRecordId`: the type/assembler contract permits its absence, the read model tolerates absence, Firestore rules permit an owner-scoped independent create with no paired-log requirement, and a dedicated persistence operation (`persistIndependentCalendarEntry`) writes it. **This has no production application/UI caller yet** — the capability exists and is verified, but no user-visible source creates a log-less entry today. The completed-unplanned "Log træning" flow itself is unchanged and still creates the fused, paired envelope.
+- **A `TrainingLog` may reference an already-existing independent `CalendarEntry` (decision §26), at the Firestore-rules layer only.** An additive rule branch permits a new-model-origin `TrainingLog` create when it names an already-persisted, log-less aggregate via unidirectional provenance (`TrainingLog.origin -> CalendarEntry`) — the aggregate is never mutated and gains no back-reference. **No application composition or UI source exists yet** for this path; the existing `TrainingLog` builders and the existing single-document log writer (`addCompletedSelfPostedTrainingLog`) are expected to be reused unchanged when that composition is added.
+- **Rule-branch disjointness (a persistence-adapter safeguard, not a domain concept).** The independent-entry rule path reads the referenced aggregate with `get()`, which only ever sees already-committed state; the completed-unplanned bilateral path reads with `getAfter()`, which sees the proposed same-commit write. A brand-new, same-commit aggregate is therefore invisible to the independent-entry check and must satisfy the bilateral check instead; conversely, an aggregate's absence of `logRecordId` excludes it from ever satisfying the bilateral check. This keeps the two rule paths structurally disjoint without any special-cased flag.
+- This pairing does **not** define the general `CalendarEntry` lifecycle. For the completed-unplanned use case specifically, `CalendarEntry` still cannot be constructed without a `TrainingLog` in that fused flow — that is unchanged. It no longer describes `CalendarEntry` generally: independent persistence is now demonstrated in production code, so **I2 is satisfied at the type/read/rules/persistence layer**; **I18 remains gated** because no approved application operation or new source yet exercises that capability in production.
 - The projected `calendar_entry` card is a **TRANSITIONAL** read-model discriminator, not a durable domain type.
 - **Occurrence/CalendarEntry snapshot divergence (TRANSITIONAL).** For one completed-unplanned save, the persisted aggregate and the persisted `TrainingLog` represent occurrence/calendar context *differently*: (A) `occurrence.endDateTime` — **converged for future writes (decision §25):** the TrainingLog snapshot now consumes the same constructed `EventOccurrence` as the aggregate (one local-safe datetime, no independent UTC/ISO recompute). Existing persisted logs are unchanged and may still carry the legacy UTC/ISO duration-derived end. (B) `occurrence.hasLogs` — present (`true`) on the TrainingLog snapshot, absent on the aggregate occurrence. (C) embedded `calendarEntry.userId` — present on the aggregate's CalendarEntry, omitted on the TrainingLog's embedded CalendarEntry. Dimensions (B) and (C) **remain divergent and separately gated**; only the timing dimension (A) is converged. For new writes, one constructed occurrence now feeds both persisted snapshots' timing; `hasLogs` ownership and the embedded-CalendarEntry fields do not yet. This is a documented gap, **not data corruption**.
 - **Snapshot normalization is separately gated.** A later architecture gate must decide the canonical datetime representation, `hasLogs` ownership, embedded-CalendarEntry snapshot fields, backward compatibility for existing logs, and whether schema versioning or read adapters are required. The **future-write occurrence-timing dimension is now decided (decision §25)** — new writes share one constructed occurrence's timing. The remaining sub-decisions (`hasLogs` ownership, embedded-CalendarEntry fields, existing-log backward compatibility, schema versioning) stay gated. No migration decision is made here. No new `CalendarEntry` source may proceed as a consequence of documenting this gap.
@@ -168,8 +171,8 @@ The following is the current known transitional state, stated factually. None of
 - Legacy and new-model persistence coexist during the strangler. This coexistence is expected.
 - No migration or rollback is currently required.
 - Existing verified checkpoints (e.g. `503e207`, Checkpoint B → `598e488`, `cea8a3e`) remain valid evidence and MUST NOT be reverted merely because their implementation is transitional.
-- **Replacement direction:** deeper `CalendarEntry` lifecycle separation (I2, I18) is required before adding any additional `CalendarEntry` source.
-- **Retirement condition:** the envelope and its bespoke pairing MAY be retired once independently usable `CreateSelfPostedOccurrence` + `AddOccurrenceToFighterCalendar` + `LogOccurrence` operations exist and `CreateCompletedUnplannedTraining` is recomposed from them.
+- **Replacement direction:** `CalendarEntry` lifecycle separation is now demonstrated at the type/read/rules/persistence layer (decision §26); I18 remains gated for any additional `CalendarEntry` source until an approved application operation uses that capability and its persisted behaviour is manually verified.
+- **Retirement condition:** the envelope and its bespoke pairing MAY be retired once independently usable `CreateSelfPostedOccurrence` + `AddOccurrenceToFighterCalendar` + `LogOccurrence` operations exist and `CreateCompletedUnplannedTraining` is recomposed from them (see decision §26 for the full five-step retirement gate).
 
 ---
 
@@ -232,8 +235,8 @@ Intended sequence, documented but not implemented here. It MAY be changed only t
    - **3a-read (in progress — see decision §24). Ambiguity-preserving compatibility read adapter.** A pure, timezone-independent TrainingLog compatibility read model classifies each persisted snapshot's datetime format and renders start deterministically always; renders end/duration deterministically (`'exact'`) only when both start and end are offset-free local wall-clock strings; classifies a UTC-Z or offset-bearing legacy end as `'ambiguous'` (or `'unavailable'` for missing/invalid) rather than inventing a local end or a runtime-timezone-derived duration. Verified deterministic under multiple runtime timezones. No persisted change; not normalization of historical values.
    - **3a-write (separately gated, unchanged by 3a-read).** Decide the canonical **future-write** datetime representation, `hasLogs` ownership, embedded-CalendarEntry snapshot fields, backward compatibility for existing logs, and whether an explicit persisted schema/snapshot version is required; then make the final occurrence-oriented `LogOccurrence` emit one approved canonical snapshot. **The future-write occurrence-timing dimension is now decided (decision §25):** new-model unplanned writes share one constructed occurrence's timing between the aggregate and the TrainingLog snapshot (Section E item A converged). The remaining sub-decisions (`hasLogs` ownership, embedded-CalendarEntry fields, existing-log backward compatibility, schema versioning) stay gated. No migration decision is made until this gate. Legacy records are not required to satisfy information they never stored.
 4. Introduce a shared `CalendarEntry` read/detail contract (presentation convergence). This follows the operation extraction in step 3, so presentation convergence does not conceal an application boundary that is still fused.
-5. Introduce independently persistable self-posted `EventOccurrence` and `CalendarEntry` support (the step where persisted I2 is corrected).
-6. Recompose completed-unplanned persistence from the canonical operations, retaining atomic user-visible save behaviour.
-7. Enable logging an existing new-model `CalendarEntry`.
-8. **No new `CalendarEntry` source may proceed until persisted I2 separation (step 5) is approved and implemented** (I18 remains in force throughout steps 3–4).
+5. **Substantially implemented (decision §26).** Independently persistable self-posted `EventOccurrence`/`CalendarEntry` support now exists across the type/assembler contract, the read model, Firestore rules, and a dedicated persistence operation (`persistIndependentCalendarEntry`) — persisted I2 is corrected at this layer. No production application/UI source constructs an independent entry yet; that remains the next application-level slice.
+6. Recompose completed-unplanned persistence from the canonical operations, retaining atomic user-visible save behaviour. Not yet started; gated on an explicit PO atomicity/UX decision (decision §26).
+7. **Firestore-rules layer implemented (decision §26).** A `TrainingLog` may reference an already-existing independent `CalendarEntry` via unidirectional provenance at the security-rules layer. The application composition (reusing the existing `TrainingLog` builders and log writer) and any UI source remain not yet implemented.
+8. **No new `CalendarEntry` source may proceed.** Persisted I2 is now achieved at the type/read/rules/persistence layer (step 5, decision §26), but I18 remains gated separately: it requires an approved application operation to actually use the independent-write capability, with its persisted behaviour manually verified, before any new source may be added (steps 3–7 otherwise unchanged in scope).
 9. Evaluate target persistence technology after the canonical model is sufficiently defined.

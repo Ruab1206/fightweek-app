@@ -1,6 +1,6 @@
 # Fightweek Decisions
 
-_Last updated: 2026-08-24_
+_Last updated: 2026-08-25_
 
 This document captures current product and architecture decisions for the Fightweek scheduling, participation and logging domain.
 
@@ -344,3 +344,31 @@ UI mitigation (loading/error/none/one/conflict classification and visible creati
 - The remaining Section E divergences (B/C) and the persisted-schema-version question stay in the separately gated 3a-write remainder.
 
 **Relationship to existing decisions.** Advances the 3a-write step named in §23/§24 and the canonical contract Section E/I for the timing dimension only; does not override §21, §22, §23, or §24, and does not lift the I18 new-`CalendarEntry`-source gate.
+
+## 26. Product clarification: CalendarEntry primary, TrainingLog optional; independent CalendarEntry capability status consolidated
+
+**Decision.** Records a PO product clarification and consolidates, as one dated checkpoint, the current status of the persisted-CalendarEntry-independence work (`fedca70`, `3d7b833`, `b156edd`, `cee40b0`, `b57fefb`). Authorizes the corresponding Section D/E/I wording corrections in `/docs/self_posted_lifecycle_and_invariants.md`, which under the contract's own amendment rule may only change through a decision recorded here.
+
+**PO product clarification.** Calendar planning is a primary product capability; `CalendarEntry` has independent value regardless of whether training is ever logged. `TrainingLog` is optional and primarily a deeper reflection/history capability. The intended primary journey is goals → planning → `CalendarEntry` → completed training → optional `TrainingLog`. A user opens a planned `CalendarEntry` and optionally adds a `TrainingLog` from it. Logged/not-logged status must be visible, but visibility does not require `CalendarEntry` to own a durable reverse reference to `TrainingLog`.
+
+**Target durable association.** Unidirectional: `TrainingLog.origin -> CalendarEntry`. Logged/not-logged status is derived through provenance and read models (already how the existing association read models work), never through a `CalendarEntry`-owned reference.
+
+**Capability status achieved in production code at this checkpoint:**
+- Type/assembler contract: `logRecordId` is optional (`fedca70`).
+- Read model: `calendarEntryService` tolerates its absence (`3d7b833`).
+- Firestore rules: independent, log-less `CalendarEntry` create is permitted (`b156edd`).
+- Persistence: `persistIndependentCalendarEntry` writes an already-assembled, log-less aggregate (`cee40b0`) — no production application/UI caller wired.
+- Firestore rules: a `TrainingLog` may reference an already-existing independent `CalendarEntry` via unidirectional provenance (`b57fefb`) — **rules-layer only**; no application composition or UI source exists yet.
+
+**Remains transitional and load-bearing (not retired by this decision).** `logRecordId` and the bilateral same-commit pairing (`aggregatePairsWithLog`/`logPairsWithAggregate`) remain required for the existing completed-unplanned "Log træning" flow, unchanged. No migration of existing persisted records is approved or required.
+
+**Retirement gate (all required; none satisfied yet):**
+1. A thin application composition that logs against an existing independent `CalendarEntry`, reusing the existing `TrainingLog` builders and `addCompletedSelfPostedTrainingLog` — no new persistence service.
+2. Its own focused verification.
+3. Recomposition of completed-unplanned onto the independent operations.
+4. The separately gated PO atomicity/UX decision recomposition requires (an entry-without-log partial state becomes possible).
+5. Manual TST verification of the recomposed flow.
+
+**Unchanged by this decision.** I7/I8 enforcement remains deferred (§17/§19, UI-mitigation only). No new `CalendarEntry` source is approved — I18 remains gated until an approved application operation uses the independent-write capability and its persisted behaviour is manually verified (still outstanding).
+
+**Relationship to existing decisions.** Advances the direction set by §21–§25 and the canonical contract's Section I; does not override them. Corrects Section E of the canonical contract, which must stop stating, as a general claim, that `CalendarEntry` cannot persist without `TrainingLog` — that constraint now applies only to the still-fused completed-unplanned use case, not to the envelope/type/rules/persistence layer generally.

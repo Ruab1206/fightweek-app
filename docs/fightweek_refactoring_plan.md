@@ -2,7 +2,7 @@
 
 _Tracks the in-progress refactor toward the CalendarEntry/EventLog target model: what's done, what's active now, and what's explicitly deferred. Complements /docs/target_architecture.md (the stable north star) and /docs/fightweek_decisions.md (durable domain decisions) — this file is the living status/decision log for the refactor itself._
 
-_Last updated: 2026-08-24_
+_Last updated: 2026-08-25_
 
 ---
 
@@ -248,6 +248,16 @@ A read-only architecture investigation (against committed HEAD `cea8a3e`) confir
 **TrainingLogPage legacy-session parity fix (2026-08-23, same day follow-on):** TST verification showed `self_posted_calendar_session`-origin logs still showed the fallback specifically on `TrainingLogPage`, because that page had no way to obtain the legacy session behind a log's `origin` (unlike App.tsx's open `SessionModal`, where the session is already in memory). Closed with a TRANSITIONAL legacy read adapter, split into a Firestore-aware week loader (`legacySessionAssociationService.loadLegacyWeekDocument` — one `getDoc` per fighter+ISO-week, no session-matching knowledge) and a pure selector (`legacySessionAssociation.resolveLegacySessionTimingFromWeekData` — exact `sessionId` match on the day `occurrenceDateISO` implies; never fuzzy). `TrainingLogPage` caches/dedupes by `fighterKey|weekNumber` (not per-session), so several logs in the same fighter/week share one read; a request remembers which fighter it was issued for and is discarded if the fighter switches or the page unmounts before it resolves, so no cross-fighter or post-unmount state leak is possible. `TrainingLogPage` and App.tsx now produce identical duration for the same exact association, closing the parity gap the prior entry above left open. Why the adapter exists, the invariant it cannot yet satisfy, its replacement direction, and its retirement condition are stated in its own doc-comment (I17).
 
 See the canonical contract's "Current next architectural sequence" (Section I) for the full sequence.
+
+### Persisted CalendarEntry independence checkpoint (2026-08-24–25 — decision §26)
+
+Following the timing-convergence slice above, five further slices established independent `CalendarEntry` persistence and Firestore-rules-layer support for logging an existing independent entry. See decision §26 for the full PO clarification and retirement gate; this entry states only what is now complete versus not.
+
+**Complete:** timing convergence (`6d068e3`); `logRecordId` optional at the type/assembler contract (`fedca70`); `calendarEntryService` read tolerance for its absence (`3d7b833`); Firestore rules permitting independent, log-less `CalendarEntry` create (`b156edd`); a dedicated persistence operation, `persistIndependentCalendarEntry` (`cee40b0`); Firestore rules permitting a `TrainingLog` to reference an already-existing independent `CalendarEntry` via unidirectional provenance (`b57fefb`).
+
+**Not complete:** the application composition that logs against an existing independent `CalendarEntry` (reusing the existing `TrainingLog` builders and `addCompletedSelfPostedTrainingLog` — no new persistence service); any UI source for either independent-entry creation or logging one; recomposition of completed-unplanned onto these operations; `logRecordId`/bilateral-pairing retirement; I7/I8 hard (atomic) enforcement.
+
+**Next sequencing (unchanged direction, decision §26):** (1) thin application composition reusing the existing `TrainingLog` builder(s) and `addCompletedSelfPostedTrainingLog`; (2) its own focused verification; (3) separately gated UI integration; (4) completed-unplanned recomposition, gated on an explicit PO atomicity/UX decision (an entry-without-log partial state becomes possible); (5) manual TST verification of the recomposed flow; only then is `logRecordId`/bilateral-pairing retirement considered.
 
 ### Next planning focus
 

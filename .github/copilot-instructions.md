@@ -39,6 +39,10 @@ Before changing calendar, occurrence, participation, notes, TrainingLog/EventLog
 - Business rules must be identical across desktop, mobile, and SearchOverlay.
 - Stop and report a guardrail concern **before** implementation if the plan violates or cannot satisfy the contract. For a full pre-implementation review, use `/.github/prompts/fightweek-architecture-check.prompt.md`.
 
+## Architecture decisions: PO, architect, and builder roles
+
+Material domain/lifecycle architecture decisions combine three inputs: PO product/user-journey guidance, solution-architect lifecycle/invariant assessment, and builder repository evidence. The builder role is not purely implementation — for material domain or lifecycle analysis, state explicitly: the product assumptions visible in the repository; whether each appears durable, transitional, or accidental; whether repository evidence supports or contradicts current PO guidance; and whether a PO clarification could materially change the architecture. Do not decide product meaning yourself — surface the evidence so the PO and architect can decide.
+
 
 ## Core rules
 
