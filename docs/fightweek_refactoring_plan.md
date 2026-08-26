@@ -2,7 +2,7 @@
 
 _Tracks the in-progress refactor toward the CalendarEntry/EventLog target model: what's done, what's active now, and what's explicitly deferred. Complements /docs/target_architecture.md (the stable north star) and /docs/fightweek_decisions.md (durable domain decisions) — this file is the living status/decision log for the refactor itself._
 
-_Last updated: 2026-08-25_
+_Last updated: 2026-08-26_
 
 ---
 
@@ -263,11 +263,11 @@ Following the timing-convergence slice above, five further slices established in
 
 The shared `CalendarItemDetail`/`CalendarItemCapabilities` read/detail contract named as step 2 of the architecture checkpoint above now exists, with two proof source adapters: legacy self-posted training (`81bf1a5`) and events (`1d98454`).
 
-**Complete:** the pure contract types; the legacy self-posted adapter; the event adapter. The event adapter deliberately excludes the event's native signup status (`interested`/`signed-up`/`declined`) from the shared contract — those values target distinct future concepts (`CalendarEntry`, `Favorite`) that remain unimplemented, and `declined` has no approved durable target (decision §27). Current event signup persistence and `useEventMerge` calendar-visibility behaviour are unchanged.
+**Complete:** the pure contract types; the legacy self-posted adapter; the event adapter; **the first non-self-posted production presentation consumer, `EventDetail` (`dfcc985`)** — common detail/capability fields cross the shared boundary while native event signup and other source-specific event behaviour remain on the existing `FightweekEvent` path, unchanged. The event adapter deliberately excludes the event's native signup status (`interested`/`signed-up`/`declined`) from the shared contract — those values target distinct future concepts (`CalendarEntry`, `Favorite`) that remain unimplemented, and `declined` has no approved durable target (decision §27). Current event signup persistence and `useEventMerge` calendar-visibility behaviour are unchanged.
 
-**Not complete:** no presentation component consumes the contract yet; no event `CalendarEntry` persistence; no `Favorite` implementation; source-neutrality is proven only at the pure contract/adapter level, not in presentation.
+**Not complete:** shared presentation convergence across all calendar sources; legacy `SessionModal`/`SessionDetailSheet` consumption; catalogue-class presentation consumption; invitation presentation consumption; calendar grid/list consumption of the shared contract; canonical event `EventOccurrence`/`CalendarEntry` persistence; `Favorite` implementation; event-status compatibility or migration; general desktop/mobile/SearchOverlay convergence.
 
-**Next architecture-level priority:** one presentation consumer of the shared contract, preserving existing functionality exactly, before evaluating any calendar UI component (see the FullCalendar spike gate below).
+**Next architecture-level priority:** a bounded readiness assessment for full-calendar UI evaluation against the already-documented evaluation criteria (see below) — not vendor/library selection or integration, which remain separately gated.
 
 ### Next planning focus
 
@@ -291,7 +291,7 @@ The shared `CalendarItemDetail`/`CalendarItemCapabilities` read/detail contract 
 
 ## Future Spike: Calendar UI / FullCalendar Evaluation
 
-A calendar UI spike remains planned. **FullCalendar** is the first candidate to evaluate. This is a **future spike, not the active next task** — it comes after the discovery work for the next slice and after more `CalendarEntry`/`EventLog` flows have been proven. It also remains gated until the shared `CalendarItemDetail`/`CalendarItemCapabilities` contract (see the checkpoint above) has at least one non-self-posted presentation consumer, so the component boundary can consume the contract without redefining domain meaning.
+A calendar UI spike remains planned. **FullCalendar** is the first candidate to evaluate. This is a **future spike, not the active next task** — it comes after the discovery work for the next slice and after more `CalendarEntry`/`EventLog` flows have been proven. The required non-self-posted presentation proof now exists (`EventDetail`, `dfcc985` — see the checkpoint above), so a bounded readiness assessment against the questions below may now be considered before any vendor/library comparison or implementation. This does not select a component, approve integration, or mean the current contract is necessarily final — most detail surfaces (legacy self-posted, catalogue, invitations, calendar grid/list) still do not consume it.
 
 The UI library must not drive the domain model. The spike evaluates whether a calendar component can render and interact with the cleaned-up `CalendarEntry`/`EventOccurrence` model, and helps decide whether to replace or reduce the current custom calendar UI.
 
