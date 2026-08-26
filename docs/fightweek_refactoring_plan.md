@@ -269,6 +269,18 @@ The shared `CalendarItemDetail`/`CalendarItemCapabilities` read/detail contract 
 
 **Next architecture-level priority:** a bounded readiness assessment for full-calendar UI evaluation against the already-documented evaluation criteria (see below) — not vendor/library selection or integration, which remain separately gated.
 
+### Shared calendar item summary contract checkpoint (2026-08-26)
+
+Following the full-calendar readiness assessment above, a smaller, presentation-oriented sibling read model was introduced — `CalendarItemSummary` — plus its first two source adapters (`75a7ad0`). This implements the readiness-assessment direction already named as the next architecture-level priority above; it is not itself a new architecture decision.
+
+**Complete:** the `CalendarItemSummary` read contract; the legacy self-posted summary adapter; the event summary adapter. Both reuse the existing `CalendarItemKey`/`CalendarSource` vocabulary and the same availability shape as `CalendarItemDetail`, without duplicating its capability model (no editable/deletable/note/recurrence fields on the summary). No canonical `occurrenceId`/`calendarEntryId` is fabricated; no native event signup, `Favorite`, RSVP, `Participation`, or `TrainingLog` state is present.
+
+**Not complete:** an invitation summary adapter or equivalent invitation coverage; fravær summary coverage; projected new-model `CalendarEntry` summary coverage; recurrence visual-state coverage where currently rendered; remaining source-specific badges/visual states; a production presentation consumer; hybrid-free migration of `PersonalSchedule`, `MobileScrollView`, or `SearchOverlay`; external full-calendar component evaluation.
+
+**Readiness wording (precise).** The rendering contract and two source adapters exist. A targeted consumer-readiness analysis is still required. Repository evidence has not shown that one additional adapter alone unlocks a complete existing surface. No current surface is claimed ready for hybrid-free migration. No full-calendar component evaluation is approved yet.
+
+**Preserved scope for the later full-calendar evaluation:** open-item-to-existing-detail remains sufficient for its initial proof; drag, move and resize remain deferred; no missing canonical identity may be fabricated; calendar components must integrate through read-model and intent boundaries only.
+
 ### Next planning focus
 
 - Optionally perform physical mobile-device verification when proportionate.
@@ -291,7 +303,7 @@ The shared `CalendarItemDetail`/`CalendarItemCapabilities` read/detail contract 
 
 ## Future Spike: Calendar UI / FullCalendar Evaluation
 
-A calendar UI spike remains planned. **FullCalendar** is the first candidate to evaluate. This is a **future spike, not the active next task** — it comes after the discovery work for the next slice and after more `CalendarEntry`/`EventLog` flows have been proven. The required non-self-posted presentation proof now exists (`EventDetail`, `dfcc985` — see the checkpoint above), so a bounded readiness assessment against the questions below may now be considered before any vendor/library comparison or implementation. This does not select a component, approve integration, or mean the current contract is necessarily final — most detail surfaces (legacy self-posted, catalogue, invitations, calendar grid/list) still do not consume it.
+A calendar UI spike remains planned. **FullCalendar** is the first candidate to evaluate. This is a **future spike, not the active next task** — it comes after the discovery work for the next slice and after more `CalendarEntry`/`EventLog` flows have been proven. The required non-self-posted presentation proof now exists (`EventDetail`, `dfcc985` — see the checkpoint above), so a bounded readiness assessment against the questions below may now be considered before any vendor/library comparison or implementation. This does not select a component, approve integration, or mean the current contract is necessarily final — most detail surfaces (legacy self-posted, catalogue, invitations, calendar grid/list) still do not consume it. The readiness assessment's own identified prerequisite — a smaller calendar-item summary read contract — now exists for two proof sources (see the checkpoint above); a targeted consumer-readiness analysis for a current surface remains outstanding before any vendor/library comparison.
 
 The UI library must not drive the domain model. The spike evaluates whether a calendar component can render and interact with the cleaned-up `CalendarEntry`/`EventOccurrence` model, and helps decide whether to replace or reduce the current custom calendar UI.
 
