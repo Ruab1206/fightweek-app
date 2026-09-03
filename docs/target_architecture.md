@@ -4,7 +4,7 @@ _The architectural direction for FightWeek. This document is the bridge between 
 
 _Read at planning. Update at review._
 
-_Last updated: 2026-08-25_
+_Last updated: 2026-09-03_
 
 ---
 
@@ -457,7 +457,7 @@ Media is stored as URL references, not blobs. Native file upload is deferred unt
 
 ### Calendar UI library
 
-Whether a calendar UI component such as FullCalendar should replace or strengthen the current calendar UI is a spike, not a decision. No adoption has been made.
+A disposable FullCalendar spike proved technical viability (it can render from `CalendarItemSummary` without owning domain or persistence), but FullCalendar is not adopted now — the decision is product fit, not technical incapability (decision §28, `fightweek_decisions.md`). FightWeek continues with its own, Google Calendar-inspired (interaction/visual reference only) calendar presentation. Reconsidering an external component requires a new explicit decision.
 
 ---
 
@@ -480,3 +480,4 @@ Whether a calendar UI component such as FullCalendar should replace or strengthe
 | 1.2 | 2026-06-05 | Added Platform and Integration Decisions: own the domain model rather than rebuild on Google Calendar (integrate via a read-only per-fighter iCal feed); keep Firestore now with a tripwire to revisit the data store when analytics land. |
 | 1.3 | 2026-06-23 | Recorded the media/file storage decision: store media as URL references, not blobs; defer native upload until a data-store migration brings its own object storage. |
 | 1.4 | 2026-07-20 | Rewrote around the calendar-first scheduling model: EventSeries, EventOccurrence, CalendarEntry, EventSeriesParticipation, EventOccurrenceParticipation, EventLog and Favorite. EventOccurrence is now the scheduled atom and CalendarEntry controls where an occurrence appears; EventLog is a first-class, protected domain concept. This replaces the older idea that "Activity" is the universal calendar atom and that "log is annotation, not entity." Added the Scheduling Domain diagram, entity definitions, historical data protection, rolling 6-month recurrence behavior, the target-direction Firestore path map and the migration sequence. |
+| 1.5 | 2026-09-03 | Closed the Calendar UI library spike: FullCalendar proved technically viable but is not adopted now (product fit, not capability — decision §28). FightWeek continues with its own, Google Calendar-inspired calendar presentation. |

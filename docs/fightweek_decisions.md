@@ -1,6 +1,6 @@
 # Fightweek Decisions
 
-_Last updated: 2026-08-25_
+_Last updated: 2026-09-03_
 
 This document captures current product and architecture decisions for the Fightweek scheduling, participation and logging domain.
 
@@ -207,6 +207,8 @@ The first candidate to investigate is FullCalendar.
 
 This is not a decision to adopt it yet. The next step is a small technical spike.
 
+_Superseded by §28: the spike was run and FullCalendar is not adopted now (product fit, not technical incompatibility)._
+
 ## 16. Data store decision remains Firestore for now, with a Postgres/Supabase tripwire
 
 Current decision from the backlog remains valid:
@@ -397,3 +399,19 @@ UI mitigation (loading/error/none/one/conflict classification and visible creati
 **Unchanged by this decision.** No `Favorite` implementation, no event `CalendarEntry` persistence, no migration, and no compatibility-read behaviour is approved. Existing production event behaviour (signup persistence, `useEventMerge`, `EventDetail`, `EventsPage`) is unchanged.
 
 **Relationship to existing decisions.** Extends §7 (separate planning/participation/logging), §12 (Favorites separate from calendar entries), and §13 (event type and discipline/category are separate) to the event-native status vocabulary specifically; does not override them. Does not amend §17–§26.
+
+## 28. Retain Fightweek's custom calendar presentation; FullCalendar not adopted now
+
+**Decision.** Closes the FullCalendar disposable spike named in §15 and in `fightweek_refactoring_plan.md`'s "Future Spike" section. Fightweek will continue developing its own calendar presentation rather than adopt FullCalendar now.
+
+**Spike finding (technical viability — preserved).** The isolated, disposable spike (never wired into production) proved FullCalendar can render from `CalendarItemSummary` alone: week, day and list-style views; responsive narrow-layout rendering; overlapping items; custom badges and distinct active/cancelled state styling; and opaque `CalendarItemKey` click emission with no raw source model, persistence, or domain ownership required. This finding remains valid and reusable.
+
+**Product-fit rationale (why not adopted, not a capability gap).** FullCalendar's dense time-grid strengths target meeting-dense calendars; Fightweek fighters typically have only one or a few activities per day, so that density advantage provides limited current product value. Fightweek's existing visual design is preferred over the FullCalendar-driven presentation demonstrated by the spike. Technical viability does not equal product fit, and this decision does not claim FullCalendar is technically incapable.
+
+**Direction.** Continue with Fightweek's own, Google Calendar-*inspired* (interaction/visual reference only, not a dependency) calendar presentation, built on top of the already-approved boundary: source and compatibility adapters → `CalendarItemSummary` → Fightweek-owned presentation → opaque item-open intents → existing detail/application flows. `CalendarItemDetail`, `CalendarItemCapabilities`, `CalendarItemSummary`, the source adapters (`legacySessionDetailAdapter`, `eventDetailAdapter`, `legacySessionSummaryAdapter`, `eventSummaryAdapter`, `invitationSummaryAdapter`, `eventSessionSummaryAdapter`, `projectedCalendarEntrySummaryAdapter`) and the central `calendarItemProjection` remain the approved presentation boundary and are unaffected by this decision.
+
+**Reconsideration trigger.** An external calendar component may be reconsidered if concrete future requirements emerge: materially more complex overlap handling, drag/resize, month/agenda views, significantly larger activity volumes, or excessive maintenance cost in the custom presentation. Reconsideration requires a new explicit decision, not an implicit reintroduction.
+
+**Unchanged by this decision.** No production calendar integration, persistence migration, drag/resize, recurrence redesign, or domain-model change is approved. The FullCalendar spike code, `spike-calendar.html`, and its four npm dependencies are removed as disposable; nothing production-facing referenced them.
+
+**Relationship to existing decisions.** Resolves §15 (see superseding note there). Does not amend §21–§27 or the shared-contract/central-projection checkpoints recorded in `fightweek_refactoring_plan.md`.

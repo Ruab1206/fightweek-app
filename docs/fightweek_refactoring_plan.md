@@ -2,7 +2,7 @@
 
 _Tracks the in-progress refactor toward the CalendarEntry/EventLog target model: what's done, what's active now, and what's explicitly deferred. Complements /docs/target_architecture.md (the stable north star) and /docs/fightweek_decisions.md (durable domain decisions) — this file is the living status/decision log for the refactor itself._
 
-_Last updated: 2026-08-26_
+_Last updated: 2026-09-03_
 
 ---
 
@@ -287,7 +287,8 @@ Following the full-calendar readiness assessment above, a smaller, presentation-
 - Clarify the target new-model behavior of standalone/unplanned completed training (see above).
 - Then select the next domain-model strangler step.
 - Atomic reservation/persistence-level uniqueness is **not** automatically the next active slice — it remains explicit deferred hardening.
-- Catalogue integration, Participation, recurrence, reconciliation, and FullCalendar remain deferred unless deliberately selected.
+- Catalogue integration, Participation, recurrence and reconciliation remain deferred unless deliberately selected.
+- FullCalendar evaluation is closed (decision §28, not adopted now); see the closure checkpoint below. The next calendar-presentation direction is convergence of `PersonalSchedule`/`MobileScrollView` onto `CalendarItemSummary` and the central projection, not an external component.
 
 ### Retrospective
 
@@ -301,28 +302,33 @@ Following the full-calendar readiness assessment above, a smaller, presentation-
 
 ---
 
-## Future Spike: Calendar UI / FullCalendar Evaluation
+## Calendar UI / FullCalendar Evaluation — closed (2026-09-03 — decision §28)
 
-A calendar UI spike remains planned. **FullCalendar** is the first candidate to evaluate. This is a **future spike, not the active next task** — it comes after the discovery work for the next slice and after more `CalendarEntry`/`EventLog` flows have been proven. The required non-self-posted presentation proof now exists (`EventDetail`, `dfcc985` — see the checkpoint above), so a bounded readiness assessment against the questions below may now be considered before any vendor/library comparison or implementation. This does not select a component, approve integration, or mean the current contract is necessarily final — most detail surfaces (legacy self-posted, catalogue, invitations, calendar grid/list) still do not consume it. The readiness assessment's own identified prerequisite — a smaller calendar-item summary read contract — now exists for two proof sources (see the checkpoint above); a targeted consumer-readiness analysis for a current surface remains outstanding before any vendor/library comparison.
+The planned FullCalendar evaluation above ran to completion as a disposable, isolated spike and is now closed. **FullCalendar is not adopted now.** See decision §28 in `fightweek_decisions.md` for the full product-fit rationale; this entry states only what is complete and what follows.
 
-The UI library must not drive the domain model. The spike evaluates whether a calendar component can render and interact with the cleaned-up `CalendarEntry`/`EventOccurrence` model, and helps decide whether to replace or reduce the current custom calendar UI.
+**Completed:**
 
-**Questions the spike should answer:**
+- bounded readiness assessment
+- disposable FullCalendar technical spike
+- successful technical viability proof
+- PO product-fit evaluation
+- decision not to adopt FullCalendar now
 
-- Can it render `CalendarEntries` from the new model?
-- Can it support day/week/month style calendar views?
-- Can it represent cancelled, removed, logged, source-missing or source-changed entries clearly?
-- Can it support mobile behavior better than the current custom UI?
-- Can it support future recurrence interactions without forcing bad domain design?
-- Does it reduce duplicated desktop/mobile calendar behavior?
+**Retained architecture assets (unaffected by this closure):**
 
-**Out of scope for the spike:**
+- shared detail contract (`CalendarItemDetail`/`CalendarItemCapabilities`)
+- shared summary contract (`CalendarItemSummary`)
+- adapters (legacy self-posted, event, event-session, invitation, projected `CalendarEntry`)
+- central calendar summary projection (`calendarItemProjection`)
+- opaque item-key boundary
 
-- Do not change the domain model to fit FullCalendar.
-- Do not replace the whole calendar UI in one step.
-- Do not implement recurrence behavior as part of the spike.
-- Do not implement #1221 as part of the spike.
-- Do not implement participation normalization as part of the spike.
+**Next architecture-level direction:**
+
+- converge Fightweek's existing `PersonalSchedule` and `MobileScrollView` rendering through `CalendarItemSummary` and the central projection
+- preserve the current visual identity
+- use Google Calendar interaction patterns as inspiration, not as a dependency
+- keep `SearchOverlay` separate unless a later product need justifies convergence
+- do not introduce an external calendar component without a new explicit decision
 
 ---
 
