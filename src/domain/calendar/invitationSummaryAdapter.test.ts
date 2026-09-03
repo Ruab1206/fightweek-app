@@ -108,4 +108,34 @@ describe('mapInvitationSessionToCalendarItemSummary', () => {
     expect('occurrence' in summary).toBe(false);
     expect('calendarEntry' in summary).toBe(false);
   });
+
+  it('translates the inviter name into a generic inviter indicator', () => {
+    const summary = mapInvitationSessionToCalendarItemSummary(makeSession({ invitedByName: 'Karl' }), context);
+    expect(summary.indicators).toContainEqual({ kind: 'invitation_inviter', label: 'Fra Karl' });
+  });
+
+  it('falls back to a generic inviter label when no inviter name is present', () => {
+    const summary = mapInvitationSessionToCalendarItemSummary(makeSession({ invitedByName: '' }), context);
+    expect(summary.indicators).toContainEqual({ kind: 'invitation_inviter', label: 'Invitation' });
+  });
+
+  it('translates an accepted response into a positive-tone generic indicator', () => {
+    const summary = mapInvitationSessionToCalendarItemSummary(makeSession({ invitationResponse: 'accepted' }), context);
+    expect(summary.indicators).toContainEqual({ kind: 'invitation_response', label: 'Du deltager', tone: 'positive' });
+  });
+
+  it('translates a pending response into an attention-tone generic indicator', () => {
+    const summary = mapInvitationSessionToCalendarItemSummary(makeSession({ invitationResponse: 'pending' }), context);
+    expect(summary.indicators).toContainEqual({ kind: 'invitation_response', label: 'Svar mangler', tone: 'attention' });
+  });
+
+  it('omits the response indicator once cancelled, matching current rendering', () => {
+    const summary = mapInvitationSessionToCalendarItemSummary(makeSession({ invitationCancelled: true }), context);
+    expect(summary.indicators).toEqual([{ kind: 'invitation_inviter', label: 'Fra Karl' }]);
+  });
+
+  it('does not embed the raw invitation-response/inviter shape rejected by the architecture review', () => {
+    const summary = mapInvitationSessionToCalendarItemSummary(makeSession(), context) as Record<string, unknown>;
+    expect(summary).not.toHaveProperty('invitation');
+  });
 });

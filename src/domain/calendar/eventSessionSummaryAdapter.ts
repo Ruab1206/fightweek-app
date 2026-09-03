@@ -30,6 +30,9 @@ import type { EventSession } from '../../hooks/useEventMerge';
 import type { CalendarItemSummary } from './calendarItemSummary';
 import type { CalendarItemKey } from './calendarItemDetail';
 
+/** Current calendar cards always show a fixed "Event" badge for this source — no tone, no per-item variation. */
+const EVENT_INDICATORS: CalendarItemSummary['indicators'] = [{ kind: 'event', label: 'Event' }];
+
 /**
  * Placement context the caller already has today. `dateISO` is not stored
  * on the merged session itself (only local HH:mm `start`/`end`) — it is the
@@ -62,6 +65,7 @@ export function mapEventSessionToCalendarItemSummary(
     // file's doc comment for why that is preserved directly rather than
     // resolved from the full event.
     availability: { status: 'active' },
+    indicators: EVENT_INDICATORS,
   };
   // Firestore-safe / contract-honest: omit rather than assign undefined/empty for absent optional fields.
   if (session.location) summary.location = session.location;

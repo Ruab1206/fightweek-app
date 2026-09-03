@@ -20,6 +20,9 @@
  * unrecognised `type` throws rather than silently falling through to the
  * legacy-session mapper — silently mapping an unknown source as legacy would
  * be exactly the kind of undetected drift this contract exists to prevent.
+ * Legacy `{ id, isRestDay: true }` markers are excluded the same way as
+ * fravær — every current presentation already filters them out before
+ * rendering (see this file's admission checks).
  *
  * Pure — no Firebase, no React, no hooks, no routing, no mutation of
  * `items`/`context`. Delegates entirely to the existing, unchanged
@@ -42,11 +45,76 @@ import type { ProjectedNewModelCalendarEntry } from './types';
 export type DayCalendarItemProjectionContext = LegacySessionSummaryContext;
 
 /**
+ * Single per-item admission + dispatch decision, shared by
+ * `projectDayCalendarItems` and `calendarItemKeyLookup.ts`'s
+ * `projectDayCalendarItemsWithLookup` — the ONE place that decides which
+ * items are admitted and how each maps to a summary, so both consumers can
+ * never diverge on admission/ordering/unknown-type handling. Returns `null`
+ * for an explicitly excluded item (fravær, legacy rest-day marker); throws
+ * for an unsupported `type` rather than silently treating it as any other
+ * source.
+ */
+export function dispatchCalendarItem(
+  raw: unknown,
+  context: DayCalendarItemProjectionContext,
+): CalendarItemSummary | null {
+  const item = raw as { type?: unknown; isRestDay?: unknown };
+
+  // Fravær is explicitly out of scope for this projection: PersonalSchedule
+  // and MobileScrollView already render it in a structurally separate
+  // block, never mixed into the generic card list this projection serves.
+  if (item.type === 'fravær') return null;
+
+  // Legacy rest-day markers ({ id, isRestDay: true }) are leftover data
+  // with no name/time/type — every current presentation already filters
+  // them out (`!s.isRestDay`) before rendering. Admitting one here would
+  // produce a broken summary (undefined title, midnight fallback time),
+  // not a real card, so this projection excludes them the same way.
+  if (item.isRestDay) return null;
+
+  if (item.type === 'calendar_entry') {
+    return mapProjectedCalendarEntryToCalendarItemSummary(
+      raw as ProjectedNewModelCalendarEntry,
+      { dateISO: context.dateISO },
+    );
+  }
+
+  if (item.type === 'invitation') {
+    return mapInvitationSessionToCalendarItemSummary(
+      raw as InvitationSession,
+      { weekNumber: context.weekNumber, dateISO: context.dateISO },
+    );
+  }
+
+  if (item.type === 'event') {
+    return mapEventSessionToCalendarItemSummary(
+      raw as EventSession,
+      { dateISO: context.dateISO },
+    );
+  }
+
+  // Explicit legacy-session discriminator rule: this merge chain gives
+  // only self-posted training sessions no `type` field at all — every
+  // other current source ('fravær'/'event'/'invitation'/'calendar_entry')
+  // sets one explicitly (mirrors the same rule already relied on in
+  // src/domain/calendar/adapters.ts). Anything else is unsupported.
+  if (item.type === undefined) {
+    return mapLegacySessionToCalendarItemSummary(
+      raw as TrainingSession,
+      { weekNumber: context.weekNumber, dateISO: context.dateISO },
+    );
+  }
+
+  throw new Error(`projectDayCalendarItems: unsupported calendar item type "${String(item.type)}"`);
+}
+
+/**
  * Map one already-merged calendar day's item array into
  * `CalendarItemSummary[]`, dispatching each item by its existing `type`
- * discriminant to the matching pure source mapper. `fravær` is explicitly
- * excluded (out of scope — see module doc comment); an unrecognised `type`
- * throws rather than being silently treated as any other source.
+ * discriminant to the matching pure source mapper via `dispatchCalendarItem`.
+ * `fravær` is explicitly excluded (out of scope — see module doc comment);
+ * an unrecognised `type` throws rather than being silently treated as any
+ * other source.
  */
 export function projectDayCalendarItems(
   items: readonly unknown[],
@@ -55,51 +123,8 @@ export function projectDayCalendarItems(
   const results: CalendarItemSummary[] = [];
 
   for (const raw of items) {
-    const item = raw as { type?: unknown };
-
-    // Fravær is explicitly out of scope for this projection: PersonalSchedule
-    // and MobileScrollView already render it in a structurally separate
-    // block, never mixed into the generic card list this projection serves.
-    if (item.type === 'fravær') continue;
-
-    if (item.type === 'calendar_entry') {
-      results.push(mapProjectedCalendarEntryToCalendarItemSummary(
-        raw as ProjectedNewModelCalendarEntry,
-        { dateISO: context.dateISO },
-      ));
-      continue;
-    }
-
-    if (item.type === 'invitation') {
-      results.push(mapInvitationSessionToCalendarItemSummary(
-        raw as InvitationSession,
-        { weekNumber: context.weekNumber, dateISO: context.dateISO },
-      ));
-      continue;
-    }
-
-    if (item.type === 'event') {
-      results.push(mapEventSessionToCalendarItemSummary(
-        raw as EventSession,
-        { dateISO: context.dateISO },
-      ));
-      continue;
-    }
-
-    // Explicit legacy-session discriminator rule: this merge chain gives
-    // only self-posted training sessions no `type` field at all — every
-    // other current source ('fravær'/'event'/'invitation'/'calendar_entry')
-    // sets one explicitly (mirrors the same rule already relied on in
-    // src/domain/calendar/adapters.ts). Anything else is unsupported.
-    if (item.type === undefined) {
-      results.push(mapLegacySessionToCalendarItemSummary(
-        raw as TrainingSession,
-        { weekNumber: context.weekNumber, dateISO: context.dateISO },
-      ));
-      continue;
-    }
-
-    throw new Error(`projectDayCalendarItems: unsupported calendar item type "${String(item.type)}"`);
+    const summary = dispatchCalendarItem(raw, context);
+    if (summary) results.push(summary);
   }
 
   return results;

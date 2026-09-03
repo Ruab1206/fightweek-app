@@ -106,4 +106,14 @@ describe('mapLegacySessionToCalendarItemSummary', () => {
     expect('occurrence' in summary).toBe(false);
     expect('calendarEntry' in summary).toBe(false);
   });
+
+  it('adds a generic recurring indicator when the session is recurring', () => {
+    const summary = mapLegacySessionToCalendarItemSummary(makeSession({ isRecurring: true }), makeContext());
+    expect(summary.indicators).toEqual([{ kind: 'recurring', label: 'Gentagende træning' }]);
+  });
+
+  it('omits indicators for a non-recurring session', () => {
+    const summary = mapLegacySessionToCalendarItemSummary(makeSession({ isRecurring: false }), makeContext());
+    expect('indicators' in summary).toBe(false);
+  });
 });

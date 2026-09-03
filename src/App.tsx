@@ -47,6 +47,9 @@ import { useActivityNotes } from './hooks/useActivityNotes';
 import { useNotificationsMeta } from './hooks/useNotificationsMeta';
 import MobileScrollView from './components/MobileScrollView';
 import PersonalSchedule from './components/PersonalSchedule';
+import { projectDayCalendarItemsWithLookup } from './domain/calendar/calendarItemKeyLookup';
+import type { CalendarItemKey } from './domain/calendar/calendarItemDetail';
+import type { CalendarItemSummary } from './domain/calendar/calendarItemSummary';
 import BacklogPage from './pages/BacklogPage';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import EventsPage from './pages/EventsPage';
@@ -230,6 +233,31 @@ const App = () => {
     () => finalMultiWeekData[currentWeek] ?? mergedScheduleData,
     [finalMultiWeekData, currentWeek, mergedScheduleData],
   );
+
+  // MobileScrollView's non-fravær card path: project each visible scroll day's
+  // already-merged raw items into CalendarItemSummary[] (reusing
+  // projectDayCalendarItems via projectDayCalendarItemsWithLookup — no new
+  // dispatch/placement/merging), plus a transient, in-memory
+  // CalendarItemKey → {session, dayName, weekNumber} lookup so the existing
+  // source-specific routing below can still resolve a click to the exact
+  // original raw item. Never persisted, never passed to MobileScrollView.
+  const mobileCalendarProjection = useMemo(() => {
+    const calendarItemsByDayKey: Record<string, CalendarItemSummary[]> = {};
+    const rawByItemKey = new Map<CalendarItemKey, { session: any; dayName: string; weekNumber: number }>();
+    for (const scrollDay of scrollDays) {
+      const weekData = finalMultiWeekData[scrollDay.weekNumber] || {};
+      const sessions = weekData[scrollDay.dayName] || [];
+      const { summaries, rawByKey } = projectDayCalendarItemsWithLookup(sessions, {
+        weekNumber: scrollDay.weekNumber,
+        dateISO: scrollDay.key,
+      });
+      calendarItemsByDayKey[scrollDay.key] = summaries;
+      for (const [itemKey, session] of rawByKey) {
+        rawByItemKey.set(itemKey, { session, dayName: scrollDay.dayName, weekNumber: scrollDay.weekNumber });
+      }
+    }
+    return { calendarItemsByDayKey, rawByItemKey };
+  }, [scrollDays, finalMultiWeekData]);
 
   // --- Local UI State ---
   const [view, setView] = useState<'personal' | 'team' | 'events' | 'trainingLog'>('personal');
@@ -465,6 +493,47 @@ const App = () => {
   const handleProjectedCalendarEntryClick = useCallback((session: { aggregateId: string; occurrenceId: string }) => {
     setOpenProjectedEntry({ aggregateId: session.aggregateId, occurrenceId: session.occurrenceId });
   }, []);
+
+  // Existing mobile source-specific open routing, extracted so it can be
+  // reached both from a raw click (unchanged) and from the opaque-key
+  // resolver below — the branching itself is unchanged from before this
+  // slice; it now just runs after key resolution instead of directly in the
+  // MobileScrollView onClick handler. Does not change which detail surface
+  // opens, catalogue restrictions, or any signup/RSVP/persistence behaviour.
+  const openMobileCalendarItem = useCallback((session: any, dayName: string, weekNum: number) => {
+    if (session.type === 'calendar_entry') {
+      handleProjectedCalendarEntryClick(session);
+      return;
+    }
+    if (session.type === 'invitation' && session.invitationId) {
+      const inv = invitations.find(i => i.id === session.invitationId);
+      if (inv) { setActiveInvitation(inv); return; }
+    }
+    if (session.type === 'event' && session.eventId) {
+      setInitialEventId(session.eventId);
+      setView('events');
+      return;
+    }
+    if (session.catalogueClassId) {
+      const cls = catalogueClasses.find(c => c.id === session.catalogueClassId);
+      if (cls) { setClassInfoSession({ cls, session, day: dayName, weekNum }); return; }
+    }
+    setEditingDay(dayName); setEditingSession(session); setEditingWeek(weekNum); setModalOpen(true);
+  }, [invitations, catalogueClasses, handleProjectedCalendarEntryClick]);
+
+  // Resolves an opaque CalendarItemKey (emitted by MobileScrollView) back to
+  // the exact original raw item via the transient, in-memory lookup built
+  // alongside the projection above, then reuses the unchanged routing above.
+  // An unknown/stale key (should not happen — same-render-cycle lookup) is a
+  // safe no-op, never a fabricated open.
+  const handleMobileOpenItem = useCallback((itemKey: CalendarItemKey) => {
+    const resolved = mobileCalendarProjection.rawByItemKey.get(itemKey);
+    if (!resolved) {
+      if (import.meta.env.DEV) console.warn('[MobileScrollView] Unknown or stale CalendarItemKey:', itemKey);
+      return;
+    }
+    openMobileCalendarItem(resolved.session, resolved.dayName, resolved.weekNumber);
+  }, [mobileCalendarProjection, openMobileCalendarItem]);
 
   // Non-blocking notice when the calendar-entries read surfaced structured
   // load issues (Checkpoint B) — valid entries keep rendering regardless.
@@ -912,6 +981,7 @@ const App = () => {
               <MobileScrollView
                 scrollDays={scrollDays}
                 multiWeekData={finalMultiWeekData}
+                calendarItemsByDayKey={mobileCalendarProjection.calendarItemsByDayKey}
                 isDark={isDark}
                 onFraværClick={(session, dayKey) => {
                   setEditingFravær({
@@ -926,26 +996,7 @@ const App = () => {
                   setAddScreenType('fravær');
                   setAddScreenOpen(true);
                 }}
-                onEditSession={(day, session, weekNum) => {
-                  if (session.type === 'calendar_entry') {
-                    handleProjectedCalendarEntryClick(session);
-                    return;
-                  }
-                  if (session.type === 'invitation' && session.invitationId) {
-                    const inv = invitations.find(i => i.id === session.invitationId);
-                    if (inv) { setActiveInvitation(inv); return; }
-                  }
-                  if (session.type === 'event' && session.eventId) {
-                    setInitialEventId(session.eventId);
-                    setView('events');
-                    return;
-                  }
-                  if (session.catalogueClassId) {
-                    const cls = catalogueClasses.find(c => c.id === session.catalogueClassId);
-                    if (cls) { setClassInfoSession({ cls, session, day, weekNum }); return; }
-                  }
-                  setEditingDay(day); setEditingSession(session); setEditingWeek(weekNum); setModalOpen(true);
-                }}
+                onOpenItem={handleMobileOpenItem}
                 todayRef={mobileTodayRef}
                 onLoadMorePast={loadMorePast}
                 onLoadMoreFuture={loadMoreFuture}

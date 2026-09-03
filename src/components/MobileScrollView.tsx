@@ -1,6 +1,16 @@
 /**
  * MobileScrollView — continuous vertical day scroll (Google Calendar style).
  * Shows a date rail on the left and session cards on the right.
+ *
+ * The non-fravær card list renders exclusively from `CalendarItemSummary`
+ * (see `calendarItemSummary.ts`) and emits only the opaque `CalendarItemKey`
+ * on click — it never receives or inspects a raw session/event/invitation/
+ * calendar_entry record, and never branches on `CalendarSource`. Card
+ * placement/colour differentiation and badges are driven entirely by
+ * `summary.category`/`summary.availability`/`summary.indicators` (a small,
+ * generic presentation projection — see `CalendarItemIndicator`), looked up
+ * by `indicator.kind` only. Fravær and the friend-overlay list are
+ * unaffected: they remain on their existing raw `multiWeekData` path.
  */
 import React, { useRef, useEffect } from 'react';
 import {
@@ -8,17 +18,52 @@ import {
 } from 'lucide-react';
 
 import { CATEGORIES } from '../config/constants';
-import { invitationBadge } from '../types/invitation';
 import { getISOWeekForDate } from '../utils/dateUtils';
 import type { ScrollDay } from '../utils/dateUtils';
+import type { CalendarItemSummary, CalendarItemIndicator } from '../domain/calendar/calendarItemSummary';
+import type { CalendarItemKey } from '../domain/calendar/calendarItemDetail';
 
 const DAY_ABBREV: Record<string, string> = { Mandag: 'MAN', Tirsdag: 'TIR', Onsdag: 'ONS', Torsdag: 'TOR', Fredag: 'FRE', Lørdag: 'LØR', Søndag: 'SØN' };
+
+/** ISO "YYYY-MM-DDTHH:mm:00" → "HH:mm" — the exact reverse of the existing `toDateTime` helper. */
+function hhmm(dateTime: string): string {
+  return dateTime.slice(11, 16);
+}
+
+/** Renders one generic indicator by `kind` only — never inspects `CalendarSource`. */
+function IndicatorBadge({ indicator, isCancelled, isDark }: { indicator: CalendarItemIndicator; isCancelled: boolean; isDark: boolean }) {
+  if (indicator.kind === 'invitation_inviter') {
+    return (
+      <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase ${isCancelled ? 'text-red-400' : (isDark ? 'text-emerald-400' : 'text-emerald-600')}`}>
+        <UserPlus className="w-2.5 h-2.5" />{indicator.label}
+      </span>
+    );
+  }
+  if (indicator.kind === 'invitation_response') {
+    const toneCls = indicator.tone === 'positive' ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-amber-400' : 'text-amber-600');
+    return (
+      <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase ${toneCls}`}>
+        <span className="w-1.5 h-1.5 rounded-full bg-current" />{indicator.label}
+      </span>
+    );
+  }
+  if (indicator.kind === 'event') {
+    return (
+      <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase mt-0.5 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}>
+        <CalendarDays className="w-2.5 h-2.5" />{indicator.label}
+      </span>
+    );
+  }
+  return null; // 'recurring' is rendered next to the title, not in the badge block.
+}
 
 export interface MobileScrollViewProps {
   scrollDays: ScrollDay[];
   multiWeekData: Record<number, any>;
+  /** Non-fravær calendar cards per scroll day, keyed by `scrollDay.key`. */
+  calendarItemsByDayKey: Record<string, CalendarItemSummary[]>;
   isDark: boolean;
-  onEditSession: (day: string, session: any, weekNum: number) => void;
+  onOpenItem: (itemKey: CalendarItemKey) => void;
   onFraværClick: (session: any, dayKey: string) => void;
   todayRef: React.RefObject<HTMLDivElement | null>;
   onLoadMorePast: () => void;
@@ -29,7 +74,7 @@ export interface MobileScrollViewProps {
   friendColors?: Record<string, string>;
 }
 
-const MobileScrollView = ({ scrollDays, multiWeekData, isDark, onEditSession, onFraværClick, todayRef, onLoadMorePast, onLoadMoreFuture, initialScrollDone = false, visibleFriends = [], friendWeekData = {}, friendColors = {} }: MobileScrollViewProps) => {
+const MobileScrollView = ({ scrollDays, multiWeekData, calendarItemsByDayKey, isDark, onOpenItem, onFraværClick, todayRef, onLoadMorePast, onLoadMoreFuture, initialScrollDone = false, visibleFriends = [], friendWeekData = {}, friendColors = {} }: MobileScrollViewProps) => {
   const topSentinel = useRef<HTMLDivElement | null>(null);
   const bottomSentinel = useRef<HTMLDivElement | null>(null);
 
@@ -54,9 +99,9 @@ const MobileScrollView = ({ scrollDays, multiWeekData, isDark, onEditSession, on
     {scrollDays.map((scrollDay, idx) => {
       const weekData = multiWeekData[scrollDay.weekNumber] || {};
       const sessions = weekData[scrollDay.dayName] || [];
-      const visibleSessions = sessions.filter((s: any) => !s.isRestDay && s.type !== 'fravær');
       // Fravær entries
       const fraværSessions = sessions.filter((s: any) => s.type === 'fravær');
+      const calendarItems = calendarItemsByDayKey[scrollDay.key] || [];
       const showWeekDivider = idx > 0 && scrollDay.dayName === 'Mandag';
       const dayNum = scrollDay.date.getDate();
 
@@ -104,42 +149,37 @@ const MobileScrollView = ({ scrollDays, multiWeekData, isDark, onEditSession, on
                 );
               })}
               {/* Session cards */}
-              {visibleSessions.length === 0 && fraværSessions.length === 0 && (
+              {calendarItems.length === 0 && fraværSessions.length === 0 && (
                 <div className={`text-[10px] font-medium py-1.5 ${isDark ? 'text-slate-700' : 'text-ds-text-subtlest/60'}`}>Ingen pas</div>
               )}
-              {visibleSessions.map((s: any) => {
-                const cat = CATEGORIES.find(c => c.label === s.category) || CATEGORIES[6];
-                const isInvitation = s.type === 'invitation';
-                const isCancelled = s.status === 'cancelled' || (isInvitation && s.invitationCancelled);
-                const isRecurring = !!s.isRecurring;
-                const isEvent = s.type === 'event';
+              {calendarItems.map((item) => {
+                const cat = CATEGORIES.find(c => c.label === item.category) || CATEGORIES[6];
+                const isCancelled = item.availability.status === 'cancelled';
+                const recurringIndicator = item.indicators?.find((i) => i.kind === 'recurring');
+                const inviterIndicator = item.indicators?.find((i) => i.kind === 'invitation_inviter');
+                const responseIndicator = item.indicators?.find((i) => i.kind === 'invitation_response');
+                const eventIndicator = item.indicators?.find((i) => i.kind === 'event');
                 return (
-                  <div key={s.id} onClick={() => onEditSession(scrollDay.dayName, s, scrollDay.weekNumber)}
-                    className={`relative flex items-start p-2 rounded-xl border shadow-sm transition-all cursor-pointer active:scale-[0.98] ${isCancelled ? (isDark ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-red-50 border-red-200 opacity-75') : isInvitation ? (isDark ? 'bg-emerald-950/30 border-emerald-800/50' : 'bg-emerald-50 border-emerald-200') : isEvent ? (isDark ? 'bg-indigo-950/30 border-indigo-800/50' : 'bg-indigo-50 border-indigo-200') : (isDark ? 'bg-slate-800 border-slate-700/50' : 'bg-white border-surface-border')}`}>
+                  <div key={item.itemKey} onClick={() => onOpenItem(item.itemKey)}
+                    className={`relative flex items-start p-2 rounded-xl border shadow-sm transition-all cursor-pointer active:scale-[0.98] ${isCancelled ? (isDark ? 'bg-red-950/20 border-red-900/40 opacity-75' : 'bg-red-50 border-red-200 opacity-75') : inviterIndicator ? (isDark ? 'bg-emerald-950/30 border-emerald-800/50' : 'bg-emerald-50 border-emerald-200') : eventIndicator ? (isDark ? 'bg-indigo-950/30 border-indigo-800/50' : 'bg-indigo-50 border-indigo-200') : (isDark ? 'bg-slate-800 border-slate-700/50' : 'bg-white border-surface-border')}`}>
                     <div className={`absolute left-0 top-0 bottom-0 w-1.5 rounded-l-xl ${cat.color} ${isCancelled ? 'opacity-50' : ''}`}></div>
                     <div className="flex-1 pl-2.5 min-w-0">
                       <div className="flex items-start justify-between gap-1">
-                        <h4 className={`font-bold text-xs leading-tight mb-0.5 line-clamp-2 ${isCancelled ? (isDark ? 'line-through text-slate-500' : 'line-through text-ds-text-subtlest') : (isDark ? 'text-white' : 'text-ds-text')}`}>{s.name}</h4>
-                        {isRecurring && <Repeat className={`w-3 h-3 shrink-0 mt-0.5 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`} />}
+                        <h4 className={`font-bold text-xs leading-tight mb-0.5 line-clamp-2 ${isCancelled ? (isDark ? 'line-through text-slate-500' : 'line-through text-ds-text-subtlest') : (isDark ? 'text-white' : 'text-ds-text')}`}>{item.title}</h4>
+                        {recurringIndicator && <Repeat className={`w-3 h-3 shrink-0 mt-0.5 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`} />}
                       </div>
                       <div className={`flex flex-col gap-0.5 text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-ds-text-subtle'}`}>
-                        <span className="flex items-center"><Clock className="w-2.5 h-2.5 mr-0.5 shrink-0" />{s.start} - {s.end}</span>
-                        <span className="flex items-center truncate"><MapPin className="w-2.5 h-2.5 mr-0.5 shrink-0" />{s.location}</span>
+                        <span className="flex items-center"><Clock className="w-2.5 h-2.5 mr-0.5 shrink-0" />{hhmm(item.startDateTime)} - {hhmm(item.endDateTime)}</span>
+                        <span className="flex items-center truncate"><MapPin className="w-2.5 h-2.5 mr-0.5 shrink-0" />{item.location}</span>
                       </div>
-                      {isInvitation && (() => {
-                        const badge = invitationBadge(s.invitationResponse);
-                        const toneCls = badge.tone === 'positive'
-                          ? (isDark ? 'text-emerald-400' : 'text-emerald-600')
-                          : (isDark ? 'text-amber-400' : 'text-amber-600');
-                        return (
-                          <div className="mt-0.5 flex flex-col gap-0.5">
-                            <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase ${isCancelled ? 'text-red-400' : (isDark ? 'text-emerald-400' : 'text-emerald-600')}`}><UserPlus className="w-2.5 h-2.5" />{s.invitedByName ? `Fra ${s.invitedByName}` : 'Invitation'}</span>
-                            {!isCancelled && <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase ${toneCls}`}><span className="w-1.5 h-1.5 rounded-full bg-current" />{badge.label}</span>}
-                          </div>
-                        );
-                      })()}
-                      {isEvent && <span className={`inline-flex items-center gap-0.5 text-[9px] font-bold uppercase mt-0.5 ${isDark ? 'text-indigo-400' : 'text-indigo-600'}`}><CalendarDays className="w-2.5 h-2.5" />Event</span>}
-                      {isCancelled && <div className="mt-0.5 text-[9px] text-red-400 flex items-center"><AlertCircle className="w-2.5 h-2.5 mr-0.5" />Aflyst{s.cancellationReason ? `: ${s.cancellationReason}` : ''}</div>}
+                      {inviterIndicator && (
+                        <div className="mt-0.5 flex flex-col gap-0.5">
+                          <IndicatorBadge indicator={inviterIndicator} isCancelled={isCancelled} isDark={isDark} />
+                          {responseIndicator && <IndicatorBadge indicator={responseIndicator} isCancelled={isCancelled} isDark={isDark} />}
+                        </div>
+                      )}
+                      {eventIndicator && <IndicatorBadge indicator={eventIndicator} isCancelled={isCancelled} isDark={isDark} />}
+                      {isCancelled && <div className="mt-0.5 text-[9px] text-red-400 flex items-center"><AlertCircle className="w-2.5 h-2.5 mr-0.5" />Aflyst{item.availability.cancellationReason ? `: ${item.availability.cancellationReason}` : ''}</div>}
                     </div>
                   </div>
                 );

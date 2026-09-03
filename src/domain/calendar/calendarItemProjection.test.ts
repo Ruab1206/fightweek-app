@@ -6,7 +6,7 @@
  * Firebase, no React, no hooks, no routing, no merging/placement logic.
  */
 import { describe, it, expect } from 'vitest';
-import { projectDayCalendarItems, type DayCalendarItemProjectionContext } from './calendarItemProjection';
+import { projectDayCalendarItems, dispatchCalendarItem, type DayCalendarItemProjectionContext } from './calendarItemProjection';
 
 function makeLegacySession(overrides: Record<string, unknown> = {}) {
   return {
@@ -96,6 +96,18 @@ function makeContext(overrides: Partial<DayCalendarItemProjectionContext> = {}):
 }
 
 describe('projectDayCalendarItems', () => {
+  // dispatchCalendarItem is the single shared admission/dispatch decision —
+  // projectDayCalendarItems is a thin loop over it, and
+  // calendarItemKeyLookup.ts's projectDayCalendarItemsWithLookup calls the
+  // same function so both can never diverge on admission/ordering/unknown
+  // handling.
+  it('dispatchCalendarItem returns null for excluded items and a summary otherwise, matching projectDayCalendarItems', () => {
+    const context = makeContext();
+    expect(dispatchCalendarItem(makeFraværSession(), context)).toBeNull();
+    expect(dispatchCalendarItem({ id: 1, isRestDay: true }, context)).toBeNull();
+    expect(dispatchCalendarItem(makeLegacySession({ id: 'x' }), context)?.itemKey).toBe('self_posted_legacy:33:2026-08-17:x');
+  });
+
   // 1. Legacy self-posted merged items dispatch to the existing legacy summary adapter.
   it('dispatches a legacy self-posted item to the existing legacy summary adapter', () => {
     const [summary] = projectDayCalendarItems([makeLegacySession({ id: 'sess_7' })], makeContext({ weekNumber: 5, dateISO: '2026-02-02' }));
@@ -139,6 +151,13 @@ describe('projectDayCalendarItems', () => {
     expect(() => projectDayCalendarItems([{ id: 'x', type: 'something_new' }], makeContext())).toThrow();
   });
 
+  // Legacy rest-day markers have no name/time/type and must never become a card.
+  it('excludes legacy rest-day markers rather than mapping them as legacy sessions', () => {
+    const result = projectDayCalendarItems([{ id: 3, isRestDay: true }, makeLegacySession()], makeContext());
+    expect(result).toHaveLength(1);
+    expect(result[0].source).toBe('self_posted_legacy');
+  });
+
   // 7. Absence of type follows the explicit legacy-session rule.
   it('treats an item with no type field as a legacy self-posted session', () => {
     const item = makeLegacySession();
@@ -170,7 +189,7 @@ describe('projectDayCalendarItems', () => {
 
   // 11. No mapper emits raw source data or callbacks.
   it('emits only CalendarItemSummary fields for every dispatched item, never raw source data or callbacks', () => {
-    const allowedKeys = new Set(['itemKey', 'occurrenceId', 'calendarEntryId', 'source', 'title', 'dateISO', 'startDateTime', 'endDateTime', 'category', 'location', 'availability']);
+    const allowedKeys = new Set(['itemKey', 'occurrenceId', 'calendarEntryId', 'source', 'title', 'dateISO', 'startDateTime', 'endDateTime', 'category', 'location', 'availability', 'indicators']);
     const results = projectDayCalendarItems(
       [makeLegacySession(), makeEventSession(), makeInvitationSession(), makeCalendarEntry()],
       makeContext(),

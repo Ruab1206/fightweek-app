@@ -20,6 +20,23 @@
 import type { CalendarItemKey, CalendarSource } from './calendarItemDetail';
 
 /**
+ * Generic, source-neutral rendering projection for a small badge/icon on a
+ * calendar card (recurrence, event type, invitation inviter/response, …).
+ * Presentation looks up icon/placement/colour by `kind` only — never by
+ * inspecting `CalendarSource` — so adding a new indicator kind never
+ * requires presentation to branch on source. Data only: no callback, no
+ * raw source record, no routing information, no capability, no domain
+ * status (RSVP/Participation/Favorite/TrainingLog are not represented
+ * here).
+ */
+export interface CalendarItemIndicator {
+  kind: 'recurring' | 'event' | 'invitation_inviter' | 'invitation_response';
+  label: string;
+  tone?: 'neutral' | 'positive' | 'attention';
+  accessibilityLabel?: string;
+}
+
+/**
  * The smallest source-neutral rendering read model needed by current
  * calendar cards and search-result items.
  */
@@ -41,4 +58,6 @@ export interface CalendarItemSummary {
     status: 'active' | 'cancelled';
     cancellationReason?: string;
   };
+  /** Small, generic presentation badges (recurrence, event type, invitation inviter/response). Omitted when a source has none. */
+  indicators?: CalendarItemIndicator[];
 }

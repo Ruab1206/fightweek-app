@@ -108,4 +108,9 @@ describe('mapEventSessionToCalendarItemSummary', () => {
     // Structural proof: the function signature accepts exactly (session, context).
     expect(mapEventSessionToCalendarItemSummary.length).toBe(2);
   });
+
+  it('adds a generic, always-present event indicator', () => {
+    const summary = mapEventSessionToCalendarItemSummary(makeSession(), context);
+    expect(summary.indicators).toEqual([{ kind: 'event', label: 'Event' }]);
+  });
 });

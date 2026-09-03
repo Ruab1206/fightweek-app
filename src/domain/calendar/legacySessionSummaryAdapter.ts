@@ -60,6 +60,9 @@ export function mapLegacySessionToCalendarItemSummary(
   // Firestore-safe / contract-honest: omit rather than assign undefined/empty for absent optional fields.
   if (session.location) summary.location = session.location;
   if (session.category) summary.category = session.category;
+  if (session.isRecurring) {
+    summary.indicators = [{ kind: 'recurring', label: 'Gentagende træning' }];
+  }
 
   return summary;
 }
