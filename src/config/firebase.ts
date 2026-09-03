@@ -13,11 +13,25 @@ import { getFirestore } from "firebase/firestore";
 // storage (Safari 16.1+, Chrome 115+, Firefox 109+) can complete redirect
 // sign-in. localhost and preview deployments keep the default Firebase domain
 // (popup works there for development).
+//
+// Extended to the stable TST branch URL: exactly these two deployed
+// hostnames use a same-origin authDomain (their own hostname), sharing the
+// same vercel.json /__/auth reverse proxy. Deliberately an explicit
+// exact-host allow-list — never inferred from a vercel.app suffix, preview
+// URL pattern, branch-name substring, or environment variable. Every other
+// hostname (localhost, unique per-deployment Vercel URLs, any other
+// vercel.app host) keeps the default cross-origin Firebase domain,
+// unchanged.
 const PROD_AUTH_DOMAIN = "fightweek-app.vercel.app";
-const authDomain =
-  typeof window !== "undefined" && window.location.hostname === PROD_AUTH_DOMAIN
-    ? PROD_AUTH_DOMAIN
-    : "fightweek-app.firebaseapp.com";
+const STABLE_TST_AUTH_DOMAIN = "fightweek-app-git-feature-bedre-design-runes-projects-de9c17f6.vercel.app";
+const DEFAULT_AUTH_DOMAIN = "fightweek-app.firebaseapp.com";
+const SAME_ORIGIN_AUTH_DOMAINS = [PROD_AUTH_DOMAIN, STABLE_TST_AUTH_DOMAIN];
+
+export function resolveAuthDomain(hostname: string): string {
+  return SAME_ORIGIN_AUTH_DOMAINS.includes(hostname) ? hostname : DEFAULT_AUTH_DOMAIN;
+}
+
+const authDomain = typeof window !== "undefined" ? resolveAuthDomain(window.location.hostname) : DEFAULT_AUTH_DOMAIN;
 
 const firebaseConfig = {
   apiKey: "AIzaSyDdOsNxPtlvWBP3SmNOxo1JfVXV9KeGUVA",
