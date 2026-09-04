@@ -71,6 +71,27 @@ service cloud.firestore {
         && request.auth.token.email == userKey;
     }
 
+    // ─── Durable recurrence definitions (EventSeries — Slice 1) ───
+    // Path: artifacts/production/users/{userKey}/eventSeries/{seriesId}
+    //
+    // Per-user recurrence-foundation records for user-created recurring
+    // self-posted training. No Slice 1 consumer reads another user's
+    // definitions, so read is OWNER-ONLY (team-read is deferred until a Slice 2
+    // team-calendar consumer exists) — narrower than weeks, which IS team-read.
+    // Write stays owner + admin/coach: an eventSeries document is co-written
+    // with its initial week occurrences in ONE atomic batch, and the
+    // "Vis som bruger" flow lets an admin/coach create a recurring series on
+    // another fighter's calendar (isReadOnly === false), so the write grant
+    // must match the weeks-path writers or the atomic batch would be denied.
+    // NOT a generic wildcard: this enumerates only the eventSeries subcollection.
+    match /artifacts/production/users/{userKey}/eventSeries/{document=**} {
+      allow read: if isAuthenticated()
+        && request.auth.token.email == userKey;
+      allow write: if isAdminOrCoach();
+      allow write: if isAuthenticated()
+        && request.auth.token.email == userKey;
+    }
+
     // ─── Private per-user training logs (EventLog) ───
     // Path: artifacts/production/users/{userKey}/eventLogs/{logId}
     //

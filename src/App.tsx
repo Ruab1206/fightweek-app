@@ -204,7 +204,7 @@ const App = () => {
   const neededWeeks = useMemo(() => [...new Set(scrollDays.map(d => d.weekNumber))], [scrollDays]);
   const loadMoreFuture = useCallback(() => setWeeksAhead(prev => prev + 4), []);
   const loadMorePast = useCallback(() => setWeeksBack(prev => prev + 4), []);
-  const { multiWeekData: rawMultiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate } = useMultiWeekData(user, activeFighterKey, neededWeeks, accessDenied, isBrowserBlocked);
+  const { multiWeekData: rawMultiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate, persistRecurringSeries } = useMultiWeekData(user, activeFighterKey, neededWeeks, accessDenied, isBrowserBlocked);
 
   // Event-session merge (personal + team calendars)
   const {
@@ -360,9 +360,9 @@ const App = () => {
   } = useSessionHandlers({
     scheduleData, setScheduleData, multiWeekData, currentWeek, systemWeek,
     editingDay, editingWeek, expandedDay, setExpandedDay,
-    saveToDb, saveWeekToDb, fetchWeekData, showToast, getNote,
+    saveToDb, saveWeekToDb, persistRecurringSeries, fetchWeekData, showToast, getNote,
     setModalOpen, setEditingWeek, setEditingDay, setEditingSession, setAddScreenOpen,
-    seedWeekFromTemplate,
+    seedWeekFromTemplate, fighterKey: activeFighterKey,
   });
 
   // Scroll orchestration (scroll-to-today, month tracking, initial alignment)
@@ -863,6 +863,14 @@ const App = () => {
       {searchMode && view !== 'events' && <SearchOverlay searchQuery={searchQuery} scrollDays={scrollDays} multiWeekData={finalMultiWeekData} isDark={isDark}
         onOpenSession={(d, s, w) => {
           if ((s as any).type === 'calendar_entry') { handleProjectedCalendarEntryClick(s as any); return; }
+          // Catalogue-linked sessions open the catalogue detail sheet — the same
+          // routing used by the desktop and mobile entry points — instead of
+          // SessionModal (which is self-posted only and would otherwise show a
+          // recurrence scope prompt it cannot honour for catalogue sessions).
+          if ((s as any).catalogueClassId) {
+            const cls = catalogueClasses.find(c => c.id === (s as any).catalogueClassId);
+            if (cls) { setClassInfoSession({ cls, session: s, day: d, weekNum: w }); return; }
+          }
           setEditingDay(d); setEditingSession(s); setEditingWeek(w); setModalOpen(true);
         }}
         onOpenEvent={(id) => { setSearchMode(false); setSearchQuery(''); setInitialEventId(id); setView('events'); }} />}
@@ -1350,6 +1358,28 @@ const App = () => {
           setEditingWeek(null);
           // #1213: land the arranger on the first occurrence, like a single add does.
           anchorOnDay(startDate);
+        }}
+        onRecurringEditScope={async (scope, original, submitted, dayName, startDate) => {
+          // Slice 1: only this-occurrence is operational. Bulk-future is gated
+          // OFF at the UI (followingEditSupported={false}), so the future
+          // button cannot emit — Slice 2 will activate it via seriesId split.
+          // A defensive guard keeps this a zero-write no-op if ever reached.
+          if (scope !== 'this_occurrence') return;
+          if ((original as any)?.catalogueClassId || (submitted as any)?.catalogueClassId) {
+            showToast('Denne træning kan ikke ændres her', 'error');
+            return;
+          }
+          const fromWeek = editingWeek || currentWeek;
+          try {
+            if (submitted?.status === 'cancelled' && original?.status !== 'cancelled') {
+              arrangerActivityRemoved(submitted, dayName, fromWeek, 'this');
+            }
+            await handleSaveSession(submitted);
+            anchorOnDay(startDate);
+          } catch (err) {
+            console.error('[edit-scope] this-occurrence save failed:', err);
+            showToast('Kunne ikke gemme ændringen — prøv igen', 'error');
+          }
         }}
         onFeedback={(ctx) => setFeedbackContext(ctx)}
         getNote={getNote}

@@ -1,7 +1,8 @@
 import { DAYS, RECURRENCE_HORIZON_WEEKS } from '../config/constants';
-import { getDateForWeekDay, getISOWeekForDate } from '../utils/dateUtils';
+import { getDateForWeekDay, getISOWeekForDate, toLocalISODate } from '../utils/dateUtils';
 import { sessionNoteKey } from './noteKeys';
 import { decideDeletion, hasLog, type DeletionMode } from '../domain/calendar/logProtection';
+import { buildEventSeriesDefinition, type EventSeriesDefinition } from '../domain/calendar/eventSeriesDefinition';
 import type { CatalogueAddPayload } from '../components/InlineCataloguePicker';
 
 /**
@@ -204,6 +205,128 @@ export function decideFraværGroupProtection(params: {
   return false;
 }
 
+/** Generate an opaque, durable series identity (Slice 1). */
+export function newSeriesId(): string {
+  return crypto.randomUUID();
+}
+
+/**
+ * Typed result of `buildRecurringOccurrencePlan`. `ok:false` means the caller
+ * must persist NOTHING — no EventSeries definition, no occurrence, no
+ * mutation of the colliding existing occurrence.
+ */
+export type SeriesCreationPlanResult =
+  | { ok: true; weekUpdates: Array<{ weekNum: number; data: any }>; added: number; removed: number }
+  | { ok: false; reason: 'collision'; weekNum: number; dayName: string };
+
+/**
+ * Pure builder for the week-document write plan of a NEW recurring series
+ * creation (Slice 1). Given the target weeks and their already-resolved
+ * current data, produces the complete set of week updates BEFORE any
+ * persistence — the caller commits them atomically. `seriesId` is stamped
+ * ONLY on occurrences newly created by this operation (never on a
+ * pre-existing tuple-matched occurrence — see the dedup/collision branch). A
+ * null `seriesId` (catalogue-linked add) stamps nothing. Each new occurrence
+ * gets a fresh distinct id from `makeId` — the seriesId is series identity,
+ * never occurrence identity.
+ *
+ * `mode` gates the collision policy:
+ * - `'self_posted_series'` (any self-posted recurring create/convert,
+ *   catalogueClassId absent): a tuple match is SELF only when its `id`
+ *   already equals `session.id` (i.e. the very occurrence being converted to
+ *   recurring, not an unrelated activity) — that passthrough is unchanged.
+ *   Any OTHER tuple match is a genuine collision: the ENTIRE operation fails
+ *   closed (`ok:false`), before any week is added to the write plan, and the
+ *   destructive interval>1 stale-cleanup never runs (it could otherwise
+ *   delete an unrelated tuple-matched occurrence — not permitted here).
+ * - `'legacy'` (catalogue-linked): unchanged prior behaviour — a tuple match
+ *   is silently deduplicated (never a failure) and the interval>1
+ *   stale-cleanup still runs. Preserved exactly so catalogue flows are
+ *   unaffected by this correction.
+ */
+export function buildRecurringOccurrencePlan(params: {
+  session: any;
+  dayName: string;
+  seriesId: string | null;
+  targetWeeks: number[];
+  resolvedWeeks: Record<number, any>;
+  loadedWeeks: Record<number, any>;
+  systemWeek: number;
+  interval: number;
+  makeId: () => string;
+  mode: 'self_posted_series' | 'legacy';
+}): SeriesCreationPlanResult {
+  const { session, dayName, seriesId, targetWeeks, resolvedWeeks, loadedWeeks, systemWeek, interval, makeId, mode } = params;
+  const nameLC = (session.name || '').toLowerCase();
+  const startTime = session.start || '';
+  const targetSet = new Set(targetWeeks);
+  const updates: Record<number, any> = {};
+  let added = 0;
+  let removed = 0;
+
+  for (const weekNum of targetWeeks) {
+    const weekData = resolvedWeeks[weekNum] ?? {};
+    const newData = structuredClone(weekData);
+    if (!newData[dayName]) newData[dayName] = [];
+
+    const existing = newData[dayName].find((s: any) =>
+      !s.isRestDay && (s.name || '').toLowerCase() === nameLC && s.start === startTime
+    );
+    if (existing) {
+      const isSelf = session.id !== undefined && session.id !== null && existing.id === session.id;
+      if (mode === 'self_posted_series' && !isSelf) {
+        // Fail closed: no week processed so far was persisted (the caller
+        // only writes `weekUpdates` from an `ok:true` result), the colliding
+        // occurrence is never inspected further, mutated, or replaced.
+        return { ok: false, reason: 'collision', weekNum, dayName };
+      }
+      // Legacy dedup ONLY: a pre-existing tuple-matched occurrence is left
+      // OUTSIDE the new series identity — it is never stamped with the new
+      // seriesId (Slice 1 boundary: only occurrences created in this operation
+      // join the series). Its existing seriesId/provenance is untouched. The
+      // pre-existing `isRecurring` flagging predates Slice 1 and is unchanged.
+      if (!existing.isRecurring) { existing.isRecurring = true; updates[weekNum] = newData; }
+    } else {
+      const newSession: any = { ...session, id: makeId(), status: 'active', day: dayName, isRecurring: true };
+      if (seriesId) newSession.seriesId = seriesId;
+      const sessionDate = getDateForWeekDay(weekNum, dayName);
+      if (sessionDate && startTime) {
+        const [h, m] = startTime.split(':').map(Number);
+        sessionDate.setHours(h, m);
+        newSession.sessionDate = sessionDate.toISOString();
+      }
+      newData[dayName].push(newSession);
+      newData[dayName].sort((a: any, b: any) => (a.start || '').localeCompare(b.start || ''));
+      updates[weekNum] = newData;
+      added++;
+    }
+  }
+
+  // Remove stale copies from non-target loaded weeks (only matters for interval
+  // > 1). LEGACY MODE ONLY — this is destructive (removes an occurrence
+  // outright) and must never run for self-posted series creation, where it
+  // could delete an unrelated tuple-matched activity.
+  if (mode === 'legacy' && interval > 1) {
+    for (const weekNum of Object.keys(loadedWeeks).map(Number)) {
+      if (weekNum < systemWeek || targetSet.has(weekNum)) continue;
+      const weekData = loadedWeeks[weekNum];
+      if (!weekData?.[dayName]) continue;
+      const newData = structuredClone(weekData);
+      const before = newData[dayName].length;
+      newData[dayName] = newData[dayName].filter((s: any) =>
+        s.isRestDay || (s.name || '').toLowerCase() !== nameLC || s.start !== startTime
+      );
+      if (newData[dayName].length < before) {
+        updates[weekNum] = newData;
+        removed++;
+      }
+    }
+  }
+
+  const weekUpdates = Object.keys(updates).map(Number).map((weekNum) => ({ weekNum, data: updates[weekNum] }));
+  return { ok: true, weekUpdates, added, removed };
+}
+
 interface SessionHandlerDeps {
   scheduleData: any;
   setScheduleData: (data: any) => void;
@@ -216,6 +339,7 @@ interface SessionHandlerDeps {
   setExpandedDay: (d: string | null) => void;
   saveToDb: (data: any) => Promise<void>;
   saveWeekToDb: (week: number, data: any) => Promise<void>;
+  persistRecurringSeries: (series: { seriesId: string; data: any } | null, weekUpdates: Array<{ weekNum: number; data: any }>) => Promise<void>;
   fetchWeekData: (week: number) => Promise<any | null>;
   seedWeekFromTemplate: (week: number) => Promise<any | null>;
   showToast: (msg: string, type: string) => void;
@@ -225,15 +349,17 @@ interface SessionHandlerDeps {
   setEditingDay: (v: any) => void;
   setEditingSession: (v: any) => void;
   setAddScreenOpen: (v: boolean) => void;
+  /** Owner key (fighter email) for the durable eventSeries definition. */
+  fighterKey: string;
 }
 
 export function useSessionHandlers({
   scheduleData, setScheduleData,
   multiWeekData, currentWeek, systemWeek,
   editingDay, editingWeek, expandedDay, setExpandedDay,
-  saveToDb, saveWeekToDb, fetchWeekData, showToast, getNote,
+  saveToDb, saveWeekToDb, persistRecurringSeries, fetchWeekData, showToast, getNote,
   setModalOpen, setEditingWeek, setEditingDay, setEditingSession, setAddScreenOpen,
-  seedWeekFromTemplate,
+  seedWeekFromTemplate, fighterKey,
 }: SessionHandlerDeps) {
 
   const resolveSourceData = (weekNum: number): Promise<any> =>
@@ -354,11 +480,14 @@ export function useSessionHandlers({
     setModalOpen(true);
   };
 
-  // Add a recurring catalogue session — materialise it across all target weeks up
-  // to a year-ahead horizon (#1183), not just the weeks currently loaded.
+  // Add a recurring session — materialise it across all target weeks up to a
+  // year-ahead horizon (#1183). Slice 1: a NEW self-posted (non-catalogue)
+  // recurring series also gets a durable `seriesId` stamped on every
+  // occurrence and one `EventSeries` definition, committed ATOMICALLY with the
+  // occurrences. Catalogue-linked adds keep the prior behaviour (no seriesId,
+  // no definition) but are now committed in the same atomic batch.
   const handleAddRecurring = async (session: any, dayName: string, startDate: Date, recurrence: { interval: number; endDate: string | null }) => {
     if (recurrence.interval === 0) return;
-    const nameLC = (session.name || '').toLowerCase();
     const startTime = session.start || '';
 
     const startWeekDate = new Date(startDate);
@@ -378,59 +507,58 @@ export function useSessionHandlers({
       endWeek: endWeekNum,
       horizonWeek,
     }).filter(w => w >= systemWeek);
-    const targetSet = new Set(targetWeeks);
 
-    let added = 0;
-    let removed = 0;
+    // Self-posted (non-catalogue) recurring series get durable identity.
+    const isSelfPosted = !session.catalogueClassId;
+    const seriesId = isSelfPosted ? newSeriesId() : null;
 
+    // Resolve each target week's current data (in-memory, else Firestore, else
+    // seed from the standard template) BEFORE building the write plan, so the
+    // plan is complete and the commit is a single atomic batch.
+    const resolvedWeeks: Record<number, any> = {};
     for (const weekNum of targetWeeks) {
-      // Resolve the week's current data: in-memory, else from Firestore, else seed
-      // from the standard template so writing this session doesn't drop the
-      // week's normal sessions. Only genuinely template-less weeks start empty.
       let weekData = multiWeekData[weekNum];
       if (weekData === undefined) {
         weekData = (await fetchWeekData(weekNum)) ?? (await seedWeekFromTemplate(weekNum)) ?? {};
       }
-      const newData = structuredClone(weekData);
-      if (!newData[dayName]) newData[dayName] = [];
-
-      const existing = newData[dayName].find((s: any) =>
-        !s.isRestDay && (s.name || '').toLowerCase() === nameLC && s.start === startTime
-      );
-      if (existing) {
-        if (!existing.isRecurring) { existing.isRecurring = true; await saveWeekToDb(weekNum, newData); }
-      } else {
-        const newSession: any = { ...session, id: newSessionId(), status: 'active', day: dayName, isRecurring: true };
-        const sessionDate = getDateForWeekDay(weekNum, dayName);
-        if (sessionDate && startTime) {
-          const [h, m] = startTime.split(':').map(Number);
-          sessionDate.setHours(h, m);
-          newSession.sessionDate = sessionDate.toISOString();
-        }
-        newData[dayName].push(newSession);
-        newData[dayName].sort((a: any, b: any) => (a.start || '').localeCompare(b.start || ''));
-        await saveWeekToDb(weekNum, newData);
-        added++;
-      }
+      resolvedWeeks[weekNum] = weekData;
     }
 
-    // Remove stale copies from non-target loaded weeks (only matters for interval > 1).
-    if (recurrence.interval > 1) {
-      for (const weekNum of Object.keys(multiWeekData).map(Number)) {
-        if (weekNum < systemWeek || targetSet.has(weekNum)) continue;
-        const weekData = multiWeekData[weekNum];
-        if (!weekData?.[dayName]) continue;
-        const newData = structuredClone(weekData);
-        const before = newData[dayName].length;
-        newData[dayName] = newData[dayName].filter((s: any) =>
-          s.isRestDay || (s.name || '').toLowerCase() !== nameLC || s.start !== startTime
-        );
-        if (newData[dayName].length < before) {
-          await saveWeekToDb(weekNum, newData);
-          removed++;
-        }
-      }
+    const plan = buildRecurringOccurrencePlan({
+      session, dayName, seriesId, targetWeeks, resolvedWeeks,
+      loadedWeeks: multiWeekData, systemWeek, interval: recurrence.interval,
+      makeId: newSessionId, mode: isSelfPosted ? 'self_posted_series' : 'legacy',
+    });
+    if (!plan.ok) {
+      // Fail closed: no EventSeries definition, no occurrence, no mutation of
+      // the colliding occurrence — persistRecurringSeries is never called.
+      showToast('Kunne ikke oprette den gentagende træning — der findes allerede en aktivitet på det tidspunkt.', 'error');
+      return;
     }
+    const { weekUpdates, added, removed } = plan;
+
+    let seriesDoc: { seriesId: string; data: EventSeriesDefinition } | null = null;
+    if (seriesId) {
+      const dayOfWeek = DAYS.indexOf(dayName) + 1; // 1=Mon … 7=Sun
+      seriesDoc = {
+        seriesId,
+        data: buildEventSeriesDefinition({
+          seriesId,
+          ownerKey: fighterKey,
+          title: session.name || '',
+          discipline: session.category,
+          location: session.location,
+          dayOfWeek,
+          startTime,
+          endTime: session.end || '',
+          startDate: toLocalISODate(startWeekDate),
+          intervalWeeks: recurrence.interval,
+          endDate: recurrence.endDate, // null preserved verbatim (open-ended)
+        }),
+      };
+    }
+
+    await persistRecurringSeries(seriesDoc, weekUpdates);
 
     const intervalLabel = recurrence.interval === 1 ? 'hver uge' : `hver ${recurrence.interval}. uge`;
     showToast(`${session.name} ${intervalLabel} (+${added} -${removed})`, 'success');

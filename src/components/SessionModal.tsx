@@ -42,6 +42,37 @@ export function shouldApplyRecurrence(params: { interval: number; isNew: boolean
   return interval > 0 && (isNew || recurrenceTouched);
 }
 
+/**
+ * Explicit edit-scope intent emitted by the scope prompt for an existing
+ * recurring self-posted session. The UI never decides series-member
+ * selection, field propagation, or persistence itself — it only emits which
+ * scope the user chose; the application layer (useSessionHandlers) owns the
+ * rest. Deliberately has no 'all_occurrences' member — that scope is not
+ * supported (see docs/fightweek_refactoring_plan.md).
+ */
+export type SessionEditScope = 'this_occurrence' | 'this_and_following';
+
+/**
+ * Whether the submitted form differs from the original persisted values in
+ * any field SessionModal actually writes. Used to gate the edit-scope prompt
+ * for an EXISTING recurring session — never based on whether the recurrence
+ * dropdown itself was touched (that alone must not trigger the prompt).
+ * `original` is `null` for a new session, which always returns false.
+ */
+export function hasPersistedSessionFieldChange(original: SessionForm | null, submitted: SessionForm): boolean {
+  if (!original) return false;
+  return (
+    (original.name || '') !== (submitted.name || '') ||
+    (original.category || '') !== (submitted.category || '') ||
+    (original.start || '') !== (submitted.start || '') ||
+    (original.end || '') !== (submitted.end || '') ||
+    (original.location || '') !== (submitted.location || '') ||
+    (original.status || '') !== (submitted.status || '') ||
+    (original.cancellationReason || '') !== (submitted.cancellationReason || '') ||
+    (original.cancellationTime ?? null) !== (submitted.cancellationTime ?? null)
+  );
+}
+
 interface SessionForm {
     id?: string;
     name: string;
@@ -101,9 +132,20 @@ interface SessionModalProps {
      */
     trainingLogAssociation?: TrainingLogAssociationView;
     onOpenTrainingLogDetail?: (item: TrainingHistoryItem) => void;
+    /**
+     * Edit-scope slice: fires ONLY for an edited (not new) recurring
+     * self-posted session with an actual persisted-field change, after the
+     * user resolves the explicit edit-scope prompt. SessionModal emits the
+     * scope + original + submitted values only — it owns no series-member
+     * selection, field propagation, or persistence itself; the application
+     * layer (useSessionHandlers) owns all of that. When omitted, the modal
+     * falls back to the pre-existing implicit save behaviour (defensive —
+     * production always supplies this).
+     */
+    onRecurringEditScope?: (scope: SessionEditScope, original: SessionForm, submitted: SessionForm, dayName: string, startDate: Date) => void;
 }
 
-const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onSeriesInvite, onUninvite, canLogTraining, onLogTraining, trainingLogAssociation, onOpenTrainingLogDetail }: SessionModalProps) => {
+const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onSeriesInvite, onUninvite, canLogTraining, onLogTraining, trainingLogAssociation, onOpenTrainingLogDetail, onRecurringEditScope }: SessionModalProps) => {
     const { isDark } = useTheme();
     const isNew = !initialData;
     const [form, setForm] = useState<SessionForm>({
@@ -119,6 +161,11 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
     const [endType, setEndType] = useState<'never' | 'date'>('never');
     const [endDate, setEndDate] = useState('');
     const [showDeleteOptions, setShowDeleteOptions] = useState(false);
+    // Edit-scope slice: shown instead of persisting directly when the session
+    // being edited is an EXISTING recurring one AND the submitted form has an
+    // actual persisted-field change (never based on recurrence-dropdown touch
+    // alone — see hasPersistedSessionFieldChange).
+    const [showEditScopePrompt, setShowEditScopePrompt] = useState(false);
     // A4 (#1188): when deleting a session that has a training-log note, confirm first
     // so a logged session isn't silently removed. The note itself is preserved
     // (handleDeleteSession never deletes it); surfacing/recovering it is tracked in #1164.
@@ -164,6 +211,26 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
         : [];
 
     const handleSave = () => {
+        // Edit-scope slice: an EXISTING recurring session with an actual
+        // persisted-field change must always ask explicitly which occurrences
+        // the change applies to — never silently pick a scope. A session with
+        // no actual change (Save clicked with nothing edited) just closes;
+        // there is nothing to persist and no scope to ask about.
+        const isRecurringExisting = !isNew && !!(initialData as any)?.isRecurring;
+        if (isRecurringExisting && onRecurringEditScope) {
+            if (!hasPersistedSessionFieldChange(initialData, form)) {
+                onClose();
+                return;
+            }
+            setShowEditScopePrompt(true);
+            return;
+        }
+        commitDirectSave();
+    };
+
+    // Existing (pre-edit-scope-slice) save routing: unchanged for a NEW
+    // session, and for editing a session that isn't currently recurring.
+    const commitDirectSave = () => {
         const applyRecurrence = shouldApplyRecurrence({ interval: recurrenceInterval, isNew, recurrenceTouched });
         const recurrence = {
             interval: recurrenceInterval,
@@ -185,6 +252,17 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
         } else {
             onSave(form);
         }
+    };
+
+    // Edit-scope slice: fires once the user resolves the prompt. Slice 1 only
+    // reaches this with 'this_occurrence' (bulk-future is disabled); invites
+    // go out for this single activity like a normal single-occurrence save.
+    const resolveEditScope = (scope: SessionEditScope) => {
+        setShowEditScopePrompt(false);
+        if (selectedInvitees.length > 0 && onInvite) {
+            onInvite(form, selectedInvitees);
+        }
+        onRecurringEditScope!(scope, initialData as SessionForm, form, day, date);
     };
 
     return (
@@ -398,7 +476,29 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                 </div>
 
                 {/* Footer */}
-                {showDeleteOptions ? (
+                {showEditScopePrompt ? (
+                    <div className={`px-5 py-3 border-t space-y-1.5 shrink-0 ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
+                        <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>Anvend ændringer på</p>
+                        <button onClick={() => resolveEditScope('this_occurrence')}
+                            className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-blue-400 hover:bg-blue-900/20' : 'text-blue-600 hover:bg-blue-50'}`}>
+                            Kun denne træning
+                        </button>
+                        {/* Slice 1: bulk-future is not operational yet — shown disabled so the
+                            UI never implies availability and never fails after a selection.
+                            Slice 2 activates it via a seriesId-based split. */}
+                        <button type="button" disabled aria-disabled="true"
+                            className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium cursor-not-allowed opacity-40 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>
+                            Denne og alle fremtidige træninger
+                        </button>
+                        <p className={`px-4 text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>
+                            Ikke tilgængelig endnu.
+                        </p>
+                        <button onClick={() => setShowEditScopePrompt(false)}
+                            className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-ds-text-subtle hover:bg-surface-hover'}`}>
+                            Annuller
+                        </button>
+                    </div>
+                ) : showDeleteOptions ? (
                     confirmNoteDelete ? (
                         <div className={`px-5 py-3 border-t space-y-1.5 shrink-0 ${isDark ? 'border-slate-800' : 'border-surface-border'}`}>
                             <p className={`text-sm font-medium mb-1 ${isDark ? 'text-slate-200' : 'text-ds-text'}`}>Denne træning har en træningslog (note).</p>

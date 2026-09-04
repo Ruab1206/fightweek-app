@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { doc, setDoc, getDoc, onSnapshot, type Unsubscribe, type DocumentData } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, writeBatch, type Unsubscribe, type DocumentData } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 
 import { db } from '../config/firebase';
@@ -228,7 +228,35 @@ export function useMultiWeekData(
     return filterTemplateForWeek(stdSnap.data(), weekNum);
   }, [fighterKey]);
 
-  return { multiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate };
+  /**
+   * Atomically persist a NEW recurring series creation in ONE Firestore batch
+   * (max 500 ops; a weekly open-ended series is ≤53 occurrence weeks + 1
+   * definition = ≤54 writes, far under the limit). Either the EventSeries
+   * definition and every initial occurrence week are written, or none is.
+   * `series` is null for a catalogue-linked add (occurrences only, no
+   * definition). Same strip/lastUpdated treatment as saveWeekToDb.
+   */
+  const persistRecurringSeries = useCallback(async (
+    series: { seriesId: string; data: DocumentData } | null,
+    weekUpdates: Array<{ weekNum: number; data: DocumentData }>,
+  ) => {
+    if (!series && weekUpdates.length === 0) return;
+    const batch = writeBatch(db);
+    const stamp = new Date().toISOString();
+    if (series) {
+      const sref = doc(db, ROOT_COLLECTION, fighterKey, 'eventSeries', series.seriesId);
+      batch.set(sref, series.data);
+    }
+    for (const { weekNum, data } of weekUpdates) {
+      const clean = stripVirtualEntries(data);
+      clean.lastUpdated = stamp;
+      const ref = doc(db, ROOT_COLLECTION, fighterKey, 'weeks', `week_${weekNum}`);
+      batch.set(ref, clean);
+    }
+    await batch.commit();
+  }, [fighterKey]);
+
+  return { multiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate, persistRecurringSeries };
 }
 
 /**

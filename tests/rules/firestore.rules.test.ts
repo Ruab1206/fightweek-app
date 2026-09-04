@@ -62,6 +62,7 @@ const OWNER = 'owner@x';
 const P = {
   week: `artifacts/production/users/${OWNER}/weeks/week_10`,
   template: `artifacts/production/users/${OWNER}/templates/standard`,
+  eventSeries: `artifacts/production/users/${OWNER}/eventSeries/series1`,
   notes: `artifacts/production/users/${OWNER}/meta/notes`,
   notifications: `artifacts/production/users/${OWNER}/meta/notifications`,
   eventLog: `artifacts/production/users/${OWNER}/eventLogs/log1`,
@@ -122,6 +123,7 @@ beforeEach(async () => {
     });
     await setDoc(doc(db, P.week), { day: 'Mandag' });
     await setDoc(doc(db, P.template), { seeded: true });
+    await setDoc(doc(db, P.eventSeries), { id: 'series1' });
     await setDoc(doc(db, P.notes), { updatedAt: '2026-08-14' });
     await setDoc(doc(db, P.notifications), { lastSeen: '2026-08-14' });
     await setDoc(doc(db, P.eventLog), { id: 'log1' });
@@ -187,6 +189,47 @@ describe('CURRENT rules — weeks / templates / meta (behavior preserved by this
       });
     });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// eventSeries — Slice 1: owner-only READ (no team-read consumer yet), owner +
+// admin/coach WRITE (co-written atomically with weeks; "Vis som bruger" lets an
+// admin/coach create a series on another fighter's calendar).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Slice 1 rules — eventSeries (owner read; owner + admin/coach write; no team-read)', () => {
+  it('owner can read own definition', async () => {
+    await assertSucceeds(getDoc(doc(as(OWNER), P.eventSeries)));
+  });
+  it('owner can write own definition', async () => {
+    await assertSucceeds(setDoc(doc(as(OWNER), P.eventSeries), { id: 'series1' }));
+  });
+  it('admin can write (isAdminOrCoach — Vis som bruger co-write)', async () => {
+    await assertSucceeds(setDoc(doc(as('admin@x'), P.eventSeries), { id: 'series1' }));
+  });
+  it('coach can write (isAdminOrCoach — Vis som bruger co-write)', async () => {
+    await assertSucceeds(setDoc(doc(as('coach@x'), P.eventSeries), { id: 'series1' }));
+  });
+  it('teammate CANNOT read (no team-read in Slice 1)', async () => {
+    await assertFails(getDoc(doc(as('other@x'), P.eventSeries)));
+  });
+  it('teammate cannot write', async () => {
+    await assertFails(setDoc(doc(as('other@x'), P.eventSeries), { id: 'x' }));
+  });
+  it('admin cannot read (read is owner-only)', async () => {
+    await assertFails(getDoc(doc(as('admin@x'), P.eventSeries)));
+  });
+  it('unrelated authenticated user cannot read', async () => {
+    await assertFails(getDoc(doc(as('rando@x'), P.eventSeries)));
+  });
+  it('unrelated authenticated user cannot write', async () => {
+    await assertFails(setDoc(doc(as('rando@x'), P.eventSeries), { id: 'x' }));
+  });
+  it('unauthenticated cannot read', async () => {
+    await assertFails(getDoc(doc(as(null), P.eventSeries)));
+  });
+  it('unauthenticated cannot write', async () => {
+    await assertFails(setDoc(doc(as(null), P.eventSeries), { id: 'x' }));
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
