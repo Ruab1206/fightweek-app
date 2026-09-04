@@ -2,7 +2,7 @@
 
 _Tracks the in-progress refactor toward the CalendarEntry/EventLog target model: what's done, what's active now, and what's explicitly deferred. Complements /docs/target_architecture.md (the stable north star) and /docs/fightweek_decisions.md (durable domain decisions) — this file is the living status/decision log for the refactor itself._
 
-_Last updated: 2026-09-03_
+_Last updated: 2026-09-04_
 
 ---
 
@@ -329,6 +329,96 @@ The planned FullCalendar evaluation above ran to completion as a disposable, iso
 - use Google Calendar interaction patterns as inspiration, not as a dependency
 - keep `SearchOverlay` separate unless a later product need justifies convergence
 - do not introduce an external calendar component without a new explicit decision
+
+---
+
+## MobileScrollView production migration + bounded TST verification checkpoint (2026-09-04)
+
+Consolidates architecture status and manual-verification evidence following: (a) `MobileScrollView`'s migration onto `CalendarItemSummary` as its first production presentation consumer, (b) a stable-TST-URL same-origin auth fix enabling Copilot-controlled-browser verification, and (c) a bounded, PO-authorized live TST verification pass (read-only calendar/detail checks plus controlled `COPILOT TEST`-data CRUD using Rune — see decision §30).
+
+### Architecture status (completed)
+
+- `CalendarItemDetail` / `CalendarItemCapabilities` shared read/detail contract.
+- Legacy self-posted detail adapter; event detail adapter.
+- `EventDetail` as the first non-self-posted detail consumer.
+- `CalendarItemSummary` shared summary read model.
+- Central `projectDayCalendarItems` projection.
+- Compatibility mapping for current merged card sources.
+- Shared `dispatchCalendarItem` admission/dispatch decision, with fail-fast duplicate-`CalendarItemKey` handling (`calendarItemKeyLookup.projectDayCalendarItemsWithLookup`).
+- Application-owned, transitional `CalendarItemKey`-to-existing-item compatibility lookup, kept in `App.tsx` rather than inside presentation components.
+- **`MobileScrollView` is now the first production `CalendarItemSummary` consumer** — it renders non-fravær cards through the shared summary model and emits only `CalendarItemKey`, never a raw source item, to its caller.
+- Generic recurrence, event, and invitation indicators (shared, source-neutral).
+- A stable TST branch URL for repeatable browser verification: `https://fightweek-app-git-feature-bedre-design-runes-projects-de9c17f6.vercel.app/` (tracks `feature/bedre-design`).
+- Exact-host same-origin Firebase Auth support for PRD and the stable TST URL (`resolveAuthDomain`'s explicit allow-list, commit `a91ee09`), with matching Google OAuth Client redirect-URI registration for the stable TST host.
+- Successful Redirect-flow login in the Copilot-controlled browser against the stable TST URL.
+- A bounded `MobileScrollView` TST verification pass for the representative real data available during that pass.
+- A bounded, controlled create/edit/note/recurrence/delete verification pass using Rune, entirely with `COPILOT TEST`-prefixed data (decision §30).
+- Verified cleanup of all `COPILOT TEST` data created during that pass.
+- A disposable FullCalendar technical spike and the decision not to adopt FullCalendar now (decision §28 — restated here only as a status-list entry, not re-decided).
+
+### Manual verification evidence (2026-09-04, stable TST URL, Rune's account)
+
+**Manually verified in TST:**
+
+- Ordinary self-posted rendering (title, time, category colour, location).
+- Recurrence indicator.
+- Event indicator.
+- `EventDetail` routing (open/close, read-only).
+- Cancellation styling and reason text.
+- Multi-week scrolling (no load errors).
+- Create and edit of controlled `COPILOT TEST` activities (ordinary and recurring).
+- Note creation and removal on a controlled `COPILOT TEST` activity.
+- Recurring test-series rendering across generated future occurrences.
+- Deletion and cleanup of all controlled `COPILOT TEST` data — single-scope delete for a non-recurring item; a three-way scope choice ("this event only" / "this and following events" / cancel) for a recurring item, consistent with decision §5.
+- No duplicate-key, stale-key, projection, resolver, or `MobileScrollView` runtime error was observed during this pass.
+
+**Not manually verified in this pass** (no representative data available on the checked account):
+
+- Invitation inviter and response indicators.
+- Projected `CalendarEntry` rendering and routing.
+- Fravær rendering.
+
+Automated test coverage exists for all three paths above (adapter-level and `MobileScrollView`-level tests). **Automated coverage is not equivalent to manual verification** and is not claimed as such; these three remain open for a future manual pass with better representative data (see "Next calendar sequence" below).
+
+### Presentation-boundary status (as of this checkpoint)
+
+- `MobileScrollView` ordinary cards render through `CalendarItemSummary`.
+- `MobileScrollView` emits `CalendarItemKey` only; it does not expose raw source items to its caller.
+- `App.tsx` owns the transitional raw-item lookup and source-specific detail routing (`CalendarItemKey` → existing item → existing detail surface). This lookup is explicitly transitional, not a target-state pattern.
+- Fravær and the friend overlay remain on their existing, separate paths — unaffected by this checkpoint.
+- `PersonalSchedule` displayed the same controlled test items visually (desktop view, cross-checked against `MobileScrollView`) but **has not architecturally converged** onto `CalendarItemSummary`/`CalendarItemKey`. Visual consistency is not architectural convergence.
+- `PersonalSchedule` remains the next intended production presentation consumer for that convergence.
+- `SearchOverlay` remains separate unless a concrete product need justifies convergence.
+- **No claim of complete desktop/mobile presentation convergence is made by this checkpoint.**
+
+### TST verification process (for future repeatable use)
+
+- `feature/bedre-design` is the Vercel TST deployment branch.
+- The stable TST branch URL is `https://fightweek-app-git-feature-bedre-design-runes-projects-de9c17f6.vercel.app/`.
+- That hostname is explicitly allow-listed in both Firebase Auth (`resolveAuthDomain`) and the Google OAuth Client's authorized redirect URIs.
+- Redirect is the supported/working login method in the Copilot-controlled browser; popup remains blocked in that browser context.
+- Unique, per-deployment Vercel preview URLs must **not** be individually authorized — only the stable branch URL.
+- A safe fast-forward check is required before updating `feature/bedre-design` (do not force-push over it).
+- TST currently shares the same Firebase project/data with PRD. Normal authenticated application listeners may read (and, for authorized writes, write) real data. **This is frontend deployment isolation only, not backend-data isolation** — see decision §31 for the compensating bounded-test-data protocol and the binding future relational-database isolation gate.
+
+### Open PO follow-up (not resolved in this checkpoint): recurrence-edit scope feedback
+
+Editing a single field on one occurrence of a recurring series currently creates a silent per-occurrence exception with **no scope-choice prompt** — the three-way scope choice ("this event only" / "this and following" / "all events") is currently shown only on **delete**, not on edit, which is an inconsistency in user-facing discoverability (decision §5 describes the intended edit-choice behaviour). This is recorded here as a **bounded PO follow-up question**, not resolved, and explicitly **not bundled into `PersonalSchedule` convergence** or any other slice until the PO decides the intended edit-time behaviour.
+
+### Next calendar sequence (bounded)
+
+1. Treat `MobileScrollView` as manually verified for the available representative states (recorded above).
+2. During the next relevant manual pass, verify invitation, projected `CalendarEntry`, and fravær rendering when representative data is safely available.
+3. Converge `PersonalSchedule` onto `CalendarItemSummary` and `CalendarItemKey` without redesigning the UI.
+4. Preserve: sparse empty-day treatment (decision §29), current Fightweek visual identity, recurrence indicator, event indicator, invitation indicators, cancellation state, category colour, location, and current detail-routing behaviour.
+5. Use `CalendarItemIndicator.accessibilityLabel` during `PersonalSchedule` convergence so icon-only indicators gain accessible names.
+6. Do not resolve the recurrence-edit scope feedback question (above) inside the `PersonalSchedule` slice.
+7. Keep `SearchOverlay` separate unless a later product need justifies convergence.
+8. Continue canonical source convergence without a big-bang migration.
+
+### Parked work (explicitly not being pursued now)
+
+- The wider `src/content/*.md.ts` duplication pattern (in-app narrative copies of docs — e.g. `target-architecture.md.ts`, `domain-model.md.ts`, `personas.md.ts` — alongside the canonical `/docs/*.md` sources and, for personas specifically, `data/story-map.json`) is a known drift risk but **must not distract from current calendar work**. Handle it later as one bounded inventory slice. Do not continue one-off duplicate corrections unless a stale copy creates a direct active risk.
 
 ---
 

@@ -1,6 +1,6 @@
 # Fightweek Decisions
 
-_Last updated: 2026-09-03_
+_Last updated: 2026-09-04_
 
 This document captures current product and architecture decisions for the Fightweek scheduling, participation and logging domain.
 
@@ -415,3 +415,53 @@ UI mitigation (loading/error/none/one/conflict classification and visible creati
 **Unchanged by this decision.** No production calendar integration, persistence migration, drag/resize, recurrence redesign, or domain-model change is approved. The FullCalendar spike code, `spike-calendar.html`, and its four npm dependencies are removed as disposable; nothing production-facing referenced them.
 
 **Relationship to existing decisions.** Resolves §15 (see superseding note there). Does not amend §21–§27 or the shared-contract/central-projection checkpoints recorded in `fightweek_refactoring_plan.md`.
+
+## 29. Sparse empty-day presentation is an explicit preserved product strength (extends §28)
+
+**Decision.** §28 already records that Fightweek continues its own calendar presentation and preserves its current visual identity. This decision names one specific element of that identity explicitly: Fightweek's lightweight, low-visual-weight empty-day treatment (a sparse day stays visually light rather than being densified) is a **product strength to preserve**, not a gap to close, through any further calendar convergence work.
+
+**Rationale.** A bounded heuristic UX verification pass (2026-09-04) observed that Fightweek's typical fighter has only one or a few activities per day, and confirmed the current sparse empty-day treatment fits that reality well — consistent with §28's product-fit rationale for not adopting a meeting-dense external calendar component. Naming it explicitly prevents it from being reinterpreted or "improved" toward density during `PersonalSchedule`/`MobileScrollView` convergence.
+
+**Consequences.**
+- `PersonalSchedule`/`MobileScrollView` convergence work must preserve the current sparse empty-day treatment as-is.
+- This does not introduce any new UI change; it records an already-observed, already-approved characteristic as durable.
+
+**Relationship to existing decisions.** Extends §28; does not amend it or any other decision.
+
+## 30. Bounded GitHub Copilot TST verification authorization using Rune and San test data
+
+**Decision.** The PO authorizes GitHub Copilot, operating a Copilot-controlled browser against the stable TST deployment, to create, edit, and delete clearly-marked test calendar data for the Rune and San accounts, bounded to the scope of an explicit, PO-requested verification task.
+
+**Protocol (binding).**
+- Test data titles must begin with `COPILOT TEST`.
+- Test data must be created only for the current, explicitly scoped verification — not left in place "for later reuse."
+- Pre-existing data for Rune, San, or any other account must not be modified.
+- Test-data creation and deletion should be logged/reported as the verification proceeds, not only summarized at the end.
+- All test data must be removed via the normal application UI before the verification is reported complete.
+- If cleanup cannot be confirmed with certainty, the verification must report an explicit stop condition rather than assume success.
+
+**Rationale.** Enables real, representative-data UI verification in TST without risking PRD data or leaving orphaned test records, given that TST and PRD currently share the same Firebase project/data (§31 records the resulting isolation gap and the future gate that closes it).
+
+**Scope.** Applies to this and future bounded Copilot browser-verification tasks. Does not authorize unattended or unbounded test-data creation. Does not change §16 (Firestore remains the active datastore) or §28 (no calendar UI change is authorized by this decision).
+
+**Relationship to existing decisions.** New; does not amend §16 or §21–§29.
+
+## 31. Shared TST/PRD Firebase data today; binding isolation gate for a future relational database
+
+**Decision.** Records, as an explicit and durable architecture gate: (a) TST and PRD currently share the same Firebase/Firestore project and data — the `feature/bedre-design` stable TST URL is a Vercel deployment-branch (frontend) isolation only, not a backend-data isolation, so normal authenticated application listeners against it may read and, for authorized writes, write real shared data; and (b) if/when Fightweek migrates to a relational database (per the §16 tripwire), TST and PRD **must** use isolated database instances.
+
+**Current-state facts (not a target claim).**
+- Frontend/deployment isolation (distinct Vercel branch/URL) is not the same as backend-data isolation; both exist today only for the frontend.
+- §30's bounded test-data protocol is a compensating control for this shared-data reality, not a substitute for real isolation.
+
+**Binding requirements for any future relational-database migration.**
+- TST and PRD must use isolated database instances or projects, with separate service identities.
+- TST credentials must never be able to connect to the PRD database; no automatic TST-to-PRD fallback is allowed.
+- Environment selection must fail closed — an ambiguous or misconfigured environment must refuse to connect rather than default to PRD.
+- Migrations must run and be verified in TST before PRD.
+- TST must support deterministic seed/reset and must use synthetic or explicitly PO-approved data.
+- Production personal data must not be copied into TST without a separately reviewed process.
+- Backup, restore, and migration history must remain environment-specific.
+- Any future Copilot-driven verification must not operate against the PRD database once this isolation exists.
+
+**Relationship to existing decisions.** Extends §16 (Firestore-for-now tripwire) with an explicit forward-looking isolation gate; does not change the current Firestore decision or authorize any migration now.
