@@ -63,6 +63,31 @@ export function decideDeletion(params: {
   return hasLog(params.note) ? 'soft-cancel' : 'hard-delete';
 }
 
+/**
+ * Presence of an independent new-model TrainingLog/EventLog for the exact
+ * occurrence: `'none'` (proven absent), `'present'` (one or more), or
+ * `'indeterminate'` (the log store could not be reliably read — loading,
+ * error, or unresolvable occurrence date).
+ */
+export type TrainingLogSignal = 'none' | 'present' | 'indeterminate';
+
+/**
+ * Delete decision that also honours the independent TrainingLog/EventLog
+ * store (not just activity Notes). An occurrence is hard-deletable only when
+ * it has no protected Note, a resolvable note key, AND no associated
+ * TrainingLog. A `'present'` OR `'indeterminate'` log signal forces
+ * soft-cancel — fail-closed: never hard-delete when logged history cannot be
+ * proven absent. The TrainingLog itself is never touched.
+ */
+export function decideDeletionWithLog(params: {
+  canResolveKey: boolean;
+  note: string | null | undefined;
+  trainingLog: TrainingLogSignal;
+}): DeletionMode {
+  if (params.trainingLog !== 'none') return 'soft-cancel';
+  return decideDeletion({ canResolveKey: params.canResolveKey, note: params.note });
+}
+
 /** Build the preserved core-data snapshot for a training session. */
 export function preserveSessionCoreData(session: TrainingSession): CoreEventData {
   return {

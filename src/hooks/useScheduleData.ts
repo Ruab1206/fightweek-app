@@ -256,7 +256,36 @@ export function useMultiWeekData(
     await batch.commit();
   }, [fighterKey]);
 
-  return { multiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate, persistRecurringSeries };
+  /**
+   * Atomically persist a single-occurrence deletion suppression alongside the
+   * one week document it affects (Slice 2a). Both the
+   * `eventSeries/{seriesId}/suppressions/{docId}` record and the mutated week
+   * doc are written in ONE Firestore batch — they succeed or fail together, so
+   * a durable "this occurrence was removed" record can never be left without
+   * its week mutation (or vice versa). The suppression uses a deterministic
+   * doc id, so a retried delete upserts the SAME document (no duplicate). This
+   * is atomic, NOT concurrency-safe: the week doc is a full read-modify-write
+   * with no precondition, so a concurrent unrelated edit to the same week can
+   * still be lost (the named Slice-1 transitional risk, unchanged here).
+   * `week` may be null when the delete needs no week mutation.
+   */
+  const persistSuppressionWithWeek = useCallback(async (
+    suppression: { seriesId: string; docId: string; data: DocumentData },
+    week: { weekNum: number; data: DocumentData } | null,
+  ) => {
+    const batch = writeBatch(db);
+    const sref = doc(db, ROOT_COLLECTION, fighterKey, 'eventSeries', suppression.seriesId, 'suppressions', suppression.docId);
+    batch.set(sref, suppression.data);
+    if (week) {
+      const clean = stripVirtualEntries(week.data);
+      clean.lastUpdated = new Date().toISOString();
+      const wref = doc(db, ROOT_COLLECTION, fighterKey, 'weeks', `week_${week.weekNum}`);
+      batch.set(wref, clean);
+    }
+    await batch.commit();
+  }, [fighterKey]);
+
+  return { multiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate, persistRecurringSeries, persistSuppressionWithWeek };
 }
 
 /**

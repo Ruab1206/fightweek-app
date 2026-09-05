@@ -1,8 +1,9 @@
 import { DAYS, RECURRENCE_HORIZON_WEEKS } from '../config/constants';
 import { getDateForWeekDay, getISOWeekForDate, toLocalISODate } from '../utils/dateUtils';
 import { sessionNoteKey } from './noteKeys';
-import { decideDeletion, hasLog, type DeletionMode } from '../domain/calendar/logProtection';
+import { decideDeletion, decideDeletionWithLog, hasLog, type DeletionMode, type TrainingLogSignal } from '../domain/calendar/logProtection';
 import { buildEventSeriesDefinition, type EventSeriesDefinition } from '../domain/calendar/eventSeriesDefinition';
+import { buildOccurrenceSuppression, suppressionDocId } from '../domain/calendar/occurrenceSuppression';
 import type { CatalogueAddPayload } from '../components/InlineCataloguePicker';
 
 /**
@@ -119,6 +120,25 @@ export function decideOccurrenceDeletion(params: {
 }
 
 /**
+ * Like `decideOccurrenceDeletion` but also honours the independent
+ * TrainingLog/EventLog store: a `'present'`/`'indeterminate'` log signal
+ * forces soft-cancel (fail-closed). Used by the single-occurrence delete path
+ * only — delete-this-and-future is unchanged.
+ */
+export function decideOccurrenceDeletionWithLog(params: {
+  weekNum: number;
+  dayName: string;
+  entry: any;
+  getNote: (key: string) => string;
+  trainingLog: TrainingLogSignal;
+}): DeletionMode {
+  const { weekNum, dayName, entry, getNote, trainingLog } = params;
+  const { key, canResolveKey } = buildSessionNoteKey({ weekNum, dayName, sessionId: entry?.id });
+  const note = key ? getNote(key) : undefined;
+  return decideDeletionWithLog({ canResolveKey, note, trainingLog });
+}
+
+/**
  * Soft-cancel an entry while preserving the FULL object. Only status/cancellation
  * fields change (mirrors SessionDetailSheet); an existing cancellationReason is
  * kept rather than overwritten. Pass `defaultReason` to override the default reason
@@ -208,6 +228,21 @@ export function decideFraværGroupProtection(params: {
 /** Generate an opaque, durable series identity (Slice 1). */
 export function newSeriesId(): string {
   return crypto.randomUUID();
+}
+
+/**
+ * Slice 2a — this-occurrence edit result for one occurrence being saved.
+ * When the existing persisted occurrence belongs to a series (`seriesId`
+ * present), the saved occurrence PRESERVES that seriesId and is explicitly
+ * marked `isSeriesException: true` — an independently edited single occurrence
+ * (never inferred from field differences). A legacy occurrence without
+ * `seriesId` is returned unchanged (no seriesId invented, no exception flag).
+ * Pure; the caller preserves the occurrence id and date by writing this in
+ * place of the existing entry.
+ */
+export function mergeThisOccurrenceEdit(existing: any, submitted: any): any {
+  if (!existing?.seriesId) return submitted;
+  return { ...submitted, seriesId: existing.seriesId, isSeriesException: true };
 }
 
 /**
@@ -340,6 +375,7 @@ interface SessionHandlerDeps {
   saveToDb: (data: any) => Promise<void>;
   saveWeekToDb: (week: number, data: any) => Promise<void>;
   persistRecurringSeries: (series: { seriesId: string; data: any } | null, weekUpdates: Array<{ weekNum: number; data: any }>) => Promise<void>;
+  persistSuppressionWithWeek: (suppression: { seriesId: string; docId: string; data: any }, week: { weekNum: number; data: any } | null) => Promise<void>;
   fetchWeekData: (week: number) => Promise<any | null>;
   seedWeekFromTemplate: (week: number) => Promise<any | null>;
   showToast: (msg: string, type: string) => void;
@@ -357,7 +393,7 @@ export function useSessionHandlers({
   scheduleData, setScheduleData,
   multiWeekData, currentWeek, systemWeek,
   editingDay, editingWeek, expandedDay, setExpandedDay,
-  saveToDb, saveWeekToDb, persistRecurringSeries, fetchWeekData, showToast, getNote,
+  saveToDb, saveWeekToDb, persistRecurringSeries, persistSuppressionWithWeek, fetchWeekData, showToast, getNote,
   setModalOpen, setEditingWeek, setEditingDay, setEditingSession, setAddScreenOpen,
   seedWeekFromTemplate, fighterKey,
 }: SessionHandlerDeps) {
@@ -380,7 +416,10 @@ export function useSessionHandlers({
 
     if (session.id) {
       const idx = newData[editingDay].findIndex((s: any) => s.id === session.id);
-      if (idx > -1) newData[editingDay][idx] = session;
+      // Slice 2a: editing one occurrence of a series marks it an explicit
+      // exception (preserving its seriesId + id); legacy occurrences are
+      // saved unchanged.
+      if (idx > -1) newData[editingDay][idx] = mergeThisOccurrenceEdit(newData[editingDay][idx], session);
       else newData[editingDay].push(session);
     } else {
       session.id = newSessionId();
@@ -397,23 +436,46 @@ export function useSessionHandlers({
     setEditingWeek(null);
   };
 
-  const handleDeleteSession = async (sessionId: any) => {
+  const handleDeleteSession = async (sessionId: any, trainingLog: TrainingLogSignal = 'indeterminate') => {
     const weekNum = editingWeek || currentWeek;
     const sourceData = await resolveSourceData(weekNum);
     const newData = structuredClone(sourceData);
     if (newData[editingDay]) {
-      // Log protection: a session with a note/log (or whose note key cannot be
-      // resolved) is soft-cancelled in place, preserving the full object, rather
-      // than hard-deleted. Unnoted sessions are removed as before.
+      // Identify the target BEFORE the protected delete so its seriesId (id
+      // lookup, never tuple) decides whether a durable suppression is written.
+      const target = newData[editingDay].find((s: any) => s.id === sessionId);
+      const seriesId: string | undefined = target?.seriesId;
+
+      // Log protection: soft-cancel (preserve the full object) when the
+      // occurrence has an activity note, an unresolvable note key, OR an
+      // independent TrainingLog/EventLog (`trainingLog` present/indeterminate
+      // → fail-closed). Only a fully un-noted, un-logged, resolvable
+      // occurrence is hard-deleted.
       const cancellationTime = new Date().toISOString();
       const { entries } = applyProtectedDelete({
         entries: newData[editingDay],
         isTarget: (s: any) => s.id === sessionId,
-        decide: (s: any) => decideOccurrenceDeletion({ weekNum, dayName: editingDay as string, entry: s, getNote }),
+        decide: (s: any) => decideOccurrenceDeletionWithLog({ weekNum, dayName: editingDay as string, entry: s, getNote, trainingLog }),
         cancellationTime,
       });
       newData[editingDay] = entries;
-      if (editingWeek) {
+
+      if (seriesId) {
+        // Slice 2a: a single-occurrence delete of a series member writes a
+        // durable suppression (deterministic id = occurrence date) ATOMICALLY
+        // with the week mutation, for BOTH hard-delete and soft-cancel — so
+        // the removal intent survives even if the tombstone does not. Slice 2c
+        // will consume it. Series identity comes from the occurrence's own
+        // seriesId, never tuple matching; the EventSeries definition is not
+        // touched.
+        const occDate = getDateForWeekDay(weekNum, editingDay as string);
+        const occurrenceDateISO = occDate ? toLocalISODate(occDate) : '';
+        const suppression = buildOccurrenceSuppression({ seriesId, occurrenceDateISO, now: cancellationTime });
+        await persistSuppressionWithWeek(
+          { seriesId, docId: suppressionDocId(occurrenceDateISO), data: suppression },
+          { weekNum, data: newData },
+        );
+      } else if (editingWeek) {
         await saveWeekToDb(weekNum, newData);
       } else {
         await saveToDb(newData);

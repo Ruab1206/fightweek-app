@@ -63,6 +63,7 @@ const P = {
   week: `artifacts/production/users/${OWNER}/weeks/week_10`,
   template: `artifacts/production/users/${OWNER}/templates/standard`,
   eventSeries: `artifacts/production/users/${OWNER}/eventSeries/series1`,
+  suppression: `artifacts/production/users/${OWNER}/eventSeries/series1/suppressions/2026-09-07`,
   notes: `artifacts/production/users/${OWNER}/meta/notes`,
   notifications: `artifacts/production/users/${OWNER}/meta/notifications`,
   eventLog: `artifacts/production/users/${OWNER}/eventLogs/log1`,
@@ -124,6 +125,7 @@ beforeEach(async () => {
     await setDoc(doc(db, P.week), { day: 'Mandag' });
     await setDoc(doc(db, P.template), { seeded: true });
     await setDoc(doc(db, P.eventSeries), { id: 'series1' });
+    await setDoc(doc(db, P.suppression), { seriesId: 'series1', occurrenceDateISO: '2026-09-07', reason: 'deleted' });
     await setDoc(doc(db, P.notes), { updatedAt: '2026-08-14' });
     await setDoc(doc(db, P.notifications), { lastSeen: '2026-08-14' });
     await setDoc(doc(db, P.eventLog), { id: 'log1' });
@@ -229,6 +231,50 @@ describe('Slice 1 rules — eventSeries (owner read; owner + admin/coach write; 
   });
   it('unauthenticated cannot write', async () => {
     await assertFails(setDoc(doc(as(null), P.eventSeries), { id: 'x' }));
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// eventSeries/{seriesId}/suppressions/{docId} — Slice 2a. Governed by the
+// recursive eventSeries matcher (no separate rule). Same policy as the parent:
+// owner read; owner + admin/coach write; no teammate/unrelated/unauthenticated.
+// ───────────────────────────────────────────────────────────────────────────
+describe('Slice 2a rules — eventSeries suppressions (effective recursive-matcher behavior)', () => {
+  it('owner can read own suppression', async () => {
+    await assertSucceeds(getDoc(doc(as(OWNER), P.suppression)));
+  });
+  it('owner can create/update own suppression', async () => {
+    await assertSucceeds(setDoc(doc(as(OWNER), P.suppression), { seriesId: 'series1', occurrenceDateISO: '2026-09-07', reason: 'deleted' }));
+  });
+  it('owner can delete own suppression', async () => {
+    await assertSucceeds(deleteDoc(doc(as(OWNER), P.suppression)));
+  });
+  it('admin can write (isAdminOrCoach)', async () => {
+    await assertSucceeds(setDoc(doc(as('admin@x'), P.suppression), { reason: 'deleted' }));
+  });
+  it('coach can write (isAdminOrCoach)', async () => {
+    await assertSucceeds(setDoc(doc(as('coach@x'), P.suppression), { reason: 'deleted' }));
+  });
+  it('teammate CANNOT read (no team-read on eventSeries subtree)', async () => {
+    await assertFails(getDoc(doc(as('other@x'), P.suppression)));
+  });
+  it('teammate cannot write', async () => {
+    await assertFails(setDoc(doc(as('other@x'), P.suppression), { reason: 'x' }));
+  });
+  it('admin cannot read (read is owner-only)', async () => {
+    await assertFails(getDoc(doc(as('admin@x'), P.suppression)));
+  });
+  it('unrelated authenticated user cannot read', async () => {
+    await assertFails(getDoc(doc(as('rando@x'), P.suppression)));
+  });
+  it('unrelated authenticated user cannot write', async () => {
+    await assertFails(setDoc(doc(as('rando@x'), P.suppression), { reason: 'x' }));
+  });
+  it('unauthenticated cannot read', async () => {
+    await assertFails(getDoc(doc(as(null), P.suppression)));
+  });
+  it('unauthenticated cannot write', async () => {
+    await assertFails(setDoc(doc(as(null), P.suppression), { reason: 'x' }));
   });
 });
 

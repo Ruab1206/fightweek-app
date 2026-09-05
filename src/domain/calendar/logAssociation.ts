@@ -144,3 +144,16 @@ export function classifyOccurrenceLogAssociation(
   if (matches.length === 1) return { kind: 'one', log: matches[0] };
   return { kind: 'conflict', logs: matches.slice() };
 }
+
+/**
+ * Map an occurrence's log-association classification to the delete-protection
+ * signal (Slice 2a): `'present'` for one/many logs, `'none'` for a proven
+ * absence, `'indeterminate'` for loading/error (fail-closed → protect).
+ */
+export function deletionLogSignalFor(
+  association: OccurrenceLogAssociation,
+): 'none' | 'present' | 'indeterminate' {
+  if (association.kind === 'one' || association.kind === 'conflict') return 'present';
+  if (association.kind === 'none') return 'none';
+  return 'indeterminate';
+}

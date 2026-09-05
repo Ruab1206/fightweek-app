@@ -79,7 +79,7 @@ import {
 import type { CompletedSelfPostedTrainingInput } from './domain/calendar/selfPostedTraining';
 import { buildTrainingLogHistoryItem } from './domain/calendar/trainingLogSnapshotCompatibility';
 import { resolveTrainingLogHistoryItem } from './domain/calendar/trainingLogTimingResolution';
-import { selectLogsForCalendarOccurrence, selectLogsForNewModelCalendarEntry, classifyOccurrenceLogAssociation } from './domain/calendar/logAssociation';
+import { selectLogsForCalendarOccurrence, selectLogsForNewModelCalendarEntry, classifyOccurrenceLogAssociation, deletionLogSignalFor } from './domain/calendar/logAssociation';
 import type { TrainingHistoryItem } from './domain/calendar/types';
 import type { TrainingLogAssociationView } from './components/SessionModal';
 
@@ -204,7 +204,7 @@ const App = () => {
   const neededWeeks = useMemo(() => [...new Set(scrollDays.map(d => d.weekNumber))], [scrollDays]);
   const loadMoreFuture = useCallback(() => setWeeksAhead(prev => prev + 4), []);
   const loadMorePast = useCallback(() => setWeeksBack(prev => prev + 4), []);
-  const { multiWeekData: rawMultiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate, persistRecurringSeries } = useMultiWeekData(user, activeFighterKey, neededWeeks, accessDenied, isBrowserBlocked);
+  const { multiWeekData: rawMultiWeekData, saveWeekToDb, fetchWeekData, seedWeekFromTemplate, persistRecurringSeries, persistSuppressionWithWeek } = useMultiWeekData(user, activeFighterKey, neededWeeks, accessDenied, isBrowserBlocked);
 
   // Event-session merge (personal + team calendars)
   const {
@@ -360,7 +360,7 @@ const App = () => {
   } = useSessionHandlers({
     scheduleData, setScheduleData, multiWeekData, currentWeek, systemWeek,
     editingDay, editingWeek, expandedDay, setExpandedDay,
-    saveToDb, saveWeekToDb, persistRecurringSeries, fetchWeekData, showToast, getNote,
+    saveToDb, saveWeekToDb, persistRecurringSeries, persistSuppressionWithWeek, fetchWeekData, showToast, getNote,
     setModalOpen, setEditingWeek, setEditingDay, setEditingSession, setAddScreenOpen,
     seedWeekFromTemplate, fighterKey: activeFighterKey,
   });
@@ -1342,7 +1342,21 @@ const App = () => {
           // invitees are notified it was called off (Outlook-style) instead of
           // it silently lingering on their calendars (#1201).
           arrangerActivityRemoved(editingSession, editingDay, editingWeek || currentWeek, 'this');
-          handleDeleteSession(id);
+          // Slice 2a: protect a logged occurrence from hard-delete using the
+          // independent eventLogs store (already in memory), keyed by exact
+          // sessionId + occurrenceDateISO. Computed here (not the eligibility-
+          // gated section state) so a cancelled-but-logged occurrence is still
+          // protected; an unresolvable date or unread log store fails closed.
+          const delWeek = editingWeek || currentWeek;
+          const delDate = getDateForWeekDay(delWeek, editingDay);
+          const delISO = delDate ? toLocalISODate(delDate) : '';
+          const delMatches = (editingSession && (editingSession as any).id != null && delISO)
+            ? selectLogsForCalendarOccurrence(eventLogs, { sessionId: String((editingSession as any).id), occurrenceDateISO: delISO })
+            : [];
+          const trainingLogSignal = delISO
+            ? deletionLogSignalFor(classifyOccurrenceLogAssociation(eventLogsStatus, delMatches))
+            : 'indeterminate';
+          handleDeleteSession(id, trainingLogSignal);
         }}
         onDeleteThisAndFuture={(dayName, name, start, fromWeek) => {
           setModalOpen(false);

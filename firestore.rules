@@ -84,6 +84,14 @@ service cloud.firestore {
     // another fighter's calendar (isReadOnly === false), so the write grant
     // must match the weeks-path writers or the atomic batch would be denied.
     // NOT a generic wildcard: this enumerates only the eventSeries subcollection.
+    //
+    // Slice 2a: the recursive `{document=**}` here also governs the nested
+    // deletion-suppression docs at eventSeries/{seriesId}/suppressions/{docId}
+    // — same owner-read + owner/admin/coach-write policy, no teammate read.
+    // The bottom catch-all denies everything else, so no broader matcher can
+    // re-grant teammate/unrelated access to suppressions. No separate nested
+    // match is added: Firestore allow rules are additive and cannot narrow a
+    // broader recursive grant, so a redundant nested match would be dead.
     match /artifacts/production/users/{userKey}/eventSeries/{document=**} {
       allow read: if isAuthenticated()
         && request.auth.token.email == userKey;

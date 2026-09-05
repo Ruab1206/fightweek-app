@@ -240,3 +240,40 @@ Intended sequence, documented but not implemented here. It MAY be changed only t
 7. **Firestore-rules layer implemented (decision §26); application composition implemented (`ee35671`).** A `TrainingLog` may reference an already-existing independent `CalendarEntry` via unidirectional provenance at the security-rules layer, and `addTrainingLogForExistingCalendarEntry` composes the existing `TrainingLog` builders and log writer to do so. Production caller/UI wiring remains unimplemented, and manual TST verification of the complete user-visible flow remains outstanding.
 8. **No new `CalendarEntry` source may proceed.** Persisted I2 is now achieved at the type/read/rules/persistence layer (step 5, decision §26), but I18 remains gated separately: it requires an approved application operation to actually use the independent-write capability, with its persisted behaviour manually verified, before any new source may be added (steps 3–7 otherwise unchanged in scope).
 9. Evaluate target persistence technology after the canonical model is sufficiently defined.
+
+---
+
+## J. Legacy recurring self-posted series — occurrence identity and durable deletion (Slice 1/2a)
+
+This section is normative for the **legacy week-document recurring self-posted training** lifecycle (Section E: "Legacy self-posted calendar sessions remain in `users/{fighterKey}/weeks/week_{n}` documents. TRANSITIONAL."). It governs recurring-series occurrence identity and deletion, independently of the `EventOccurrence`/`CalendarEntry`/`TrainingLog` strangler concepts in Sections B–D. Invariants here use the prefix **R** (recurrence) to avoid conflation with I1–I18.
+
+### J.1 Occurrence exception identity
+
+- **R1.** `seriesId` is the durable series-membership identifier for a materialized recurring occurrence, persisted at `users/{fighterKey}/eventSeries/{seriesId}`.
+- **R2.** `isSeriesException: true` marks one occurrence as independently edited. It MUST be set only by an explicit this-occurrence edit action.
+- **R3.** An occurrence marked `isSeriesException` MUST retain its original `seriesId` and its original occurrence id and date.
+- **R4.** Exception status MUST NOT be inferred from field differences (name, time, category, location, or status). It exists only when explicitly set.
+- **R5.** A legacy occurrence without `seriesId` MUST NOT be assigned one, and MUST NOT receive `isSeriesException`, during ordinary this-occurrence editing.
+
+### J.2 Durable deletion suppression
+
+- **R6.** A single-occurrence deletion of a `seriesId`-bearing occurrence MUST write one deterministic suppression record at `users/{fighterKey}/eventSeries/{seriesId}/suppressions/{occurrenceDateISO}`.
+- **R7.** The suppression record is the **authoritative no-regeneration source**. A cancelled tombstone occurrence is **supplementary** history/presentation state only, never a regeneration authority.
+- **R8.** A future materializer MUST generate an occurrence for a given series/date only when **both**: no suppression exists for that series/date, **and** no occurrence already exists for that series/date.
+- **R9.** A legacy occurrence without `seriesId` MUST NOT receive a suppression record on deletion, and MUST NOT be assigned a series identity to enable one.
+
+### J.3 Logged-history protection during deletion
+
+- **R10.** An occurrence with a protected Note or an associated TrainingLog/EventLog MUST NOT be hard-deleted, regardless of `seriesId` presence.
+- **R11.** TrainingLog association for this purpose MUST be resolved by stable `sessionId` + `occurrenceDateISO` only, never by title, time, category, or location.
+- **R12.** A failed or indeterminate TrainingLog lookup MUST fail closed to the existing cancelled/tombstone representation — it MUST NOT be treated as proof of absence.
+- **R13.** A retained tombstone MUST preserve the occurrence id, occurrence date, `seriesId` (if present), and `isSeriesException` (if already present). The TrainingLog/EventLog itself MUST NOT be modified or deleted by this protection.
+
+### J.4 Transitional boundaries
+
+- Suppression records are persisted under R6 but are **not yet consumed** by any materializer. No repository code currently reads them to decide occurrence generation.
+- "This and all future trainings" (this-and-following) remains disabled and MUST perform zero writes until a series-split operation and a materializer exist and are separately approved.
+- Legacy occurrences without `seriesId` are **not** migrated or backfilled by this section. They remain single-occurrence-only.
+- Delete-this-and-future (tuple-matched, multi-occurrence delete) is unchanged and remains outside this section.
+- Invitation behaviour is unchanged by R1–R13.
+- The shared week-document read-modify-write concurrency risk (a full week document is read, modified in memory, and committed via `writeBatch` with no read precondition) remains **transitional and unresolved** by this section. Suppression and its affected week document are committed together (atomic), which does not by itself make the operation concurrency-safe.

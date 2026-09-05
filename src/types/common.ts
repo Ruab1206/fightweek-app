@@ -33,6 +33,13 @@ export interface TrainingSession {
   recurrenceStartWeek?: number;
   sessionDate?: string;
   type?: string;
+  // Slice 1: durable identity of the recurring self-posted series this
+  // occurrence belongs to (absent on legacy/non-recurring/catalogue sessions).
+  seriesId?: string;
+  // Slice 2a: set when this single occurrence was independently edited, so
+  // later series materialization must not overwrite it. Never inferred from
+  // field differences; only an explicit this-occurrence edit sets it.
+  isSeriesException?: boolean;
 }
 
 // Fravær (absence aktivitet) — stored inline with training sessions
