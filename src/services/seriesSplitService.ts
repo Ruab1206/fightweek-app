@@ -17,7 +17,7 @@
  * production writes until a materializer exists and this-and-following is
  * separately activated.
  */
-import { doc, runTransaction, type Transaction } from 'firebase/firestore';
+import { doc, runTransaction, type Firestore, type Transaction } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ROOT_COLLECTION, DAYS } from '../config/constants';
 import {
@@ -49,6 +49,8 @@ export interface SeriesSplitOptions {
   newSeriesId?: string;
   now?: string;
   horizonEndDate?: string;
+  /** Injected Firestore for emulator tests; defaults to the production client. */
+  firestore?: Firestore;
 }
 
 export type SeriesSplitPersistResult =
@@ -136,10 +138,11 @@ export async function persistSeriesSplitAtomically(
   const newSeriesId = opts.newSeriesId ?? crypto.randomUUID();
   const now = opts.now ?? new Date().toISOString();
   const horizonEndDate = opts.horizonEndDate ?? recurrenceHorizonEndDate();
+  const fs = opts.firestore ?? db;
 
   try {
-    const counts = await runTransaction(db, async (tx: Transaction) => {
-      const oldDefRef = doc(db, ROOT_COLLECTION, fighterKey, EVENT_SERIES_SUBCOLLECTION, oldSeriesId);
+    const counts = await runTransaction(fs, async (tx: Transaction) => {
+      const oldDefRef = doc(fs, ROOT_COLLECTION, fighterKey, EVENT_SERIES_SUBCOLLECTION, oldSeriesId);
       const oldDefSnap = await tx.get(oldDefRef);
       const oldDefinition = oldDefSnap.exists() ? (oldDefSnap.data() as EventSeriesDefinition) : null;
 
@@ -165,8 +168,8 @@ export async function persistSeriesSplitAtomically(
       for (const dateISO of candidateDates) {
         const weekNum = isoWeekForDate(dateISO);
         const dayName = dayNameForDate(dateISO);
-        const weekRef = doc(db, ROOT_COLLECTION, fighterKey, WEEKS_SUBCOLLECTION, `week_${weekNum}`);
-        const suppRef = doc(db, ROOT_COLLECTION, fighterKey, EVENT_SERIES_SUBCOLLECTION, oldSeriesId, SUPPRESSIONS_SUBCOLLECTION, suppressionDocId(dateISO));
+        const weekRef = doc(fs, ROOT_COLLECTION, fighterKey, WEEKS_SUBCOLLECTION, `week_${weekNum}`);
+        const suppRef = doc(fs, ROOT_COLLECTION, fighterKey, EVENT_SERIES_SUBCOLLECTION, oldSeriesId, SUPPRESSIONS_SUBCOLLECTION, suppressionDocId(dateISO));
         const weekSnap = await tx.get(weekRef);
         const suppSnap = await tx.get(suppRef);
         perDate.push({
@@ -208,12 +211,12 @@ export async function persistSeriesSplitAtomically(
       // --- Writes (all reads are complete) ---
 
       // 1. New definition (deterministic id → retry-safe).
-      const newDefRef = doc(db, ROOT_COLLECTION, fighterKey, EVENT_SERIES_SUBCOLLECTION, newSeriesId);
+      const newDefRef = doc(fs, ROOT_COLLECTION, fighterKey, EVENT_SERIES_SUBCOLLECTION, newSeriesId);
       tx.set(newDefRef, plan.newDefinition);
 
       // 2. Suppression continuities (deterministic ids → retry-safe/idempotent).
       for (const cont of plan.suppressionContinuations) {
-        const suppRef = doc(db, ROOT_COLLECTION, fighterKey, EVENT_SERIES_SUBCOLLECTION, newSeriesId, SUPPRESSIONS_SUBCOLLECTION, suppressionDocId(cont.to.occurrenceDateISO));
+        const suppRef = doc(fs, ROOT_COLLECTION, fighterKey, EVENT_SERIES_SUBCOLLECTION, newSeriesId, SUPPRESSIONS_SUBCOLLECTION, suppressionDocId(cont.to.occurrenceDateISO));
         tx.set(suppRef, buildOccurrenceSuppression({ seriesId: newSeriesId, occurrenceDateISO: cont.to.occurrenceDateISO, now }));
       }
 
