@@ -22,6 +22,19 @@ function snapFor(path: string) {
 
 const mockDoc = vi.fn((_db: unknown, ...rest: string[]) => ({ __ref: rest.join('/') }));
 const mockGetDoc = vi.fn(async (ref: any) => snapFor(ref.__ref));
+const mockCollection = vi.fn((_db: unknown, ...rest: string[]) => ({ __col: rest.join('/') }));
+// Shallow collection read: direct children only (one more path segment, no deeper).
+const mockGetDocs = vi.fn(async (col: any) => {
+  const prefix = `${col.__col}/`;
+  const docs: Array<{ id: string; data: () => any }> = [];
+  for (const [path, data] of store.entries()) {
+    if (!path.startsWith(prefix)) continue;
+    const rest = path.slice(prefix.length);
+    if (rest.includes('/')) continue; // nested subcollection doc → not a direct child
+    docs.push({ id: rest, data: () => data });
+  }
+  return { docs };
+});
 
 const mockRunTransaction = vi.fn(async (_db: unknown, updater: (tx: any) => Promise<any>) => {
   let didMutate = false;
@@ -49,11 +62,13 @@ const mockRunTransaction = vi.fn(async (_db: unknown, updater: (tx: any) => Prom
 vi.mock('firebase/firestore', () => ({
   doc: (...args: any[]) => (mockDoc as any)(...args),
   getDoc: (...args: any[]) => (mockGetDoc as any)(...args),
+  collection: (...args: any[]) => (mockCollection as any)(...args),
+  getDocs: (...args: any[]) => (mockGetDocs as any)(...args),
   runTransaction: (...args: any[]) => (mockRunTransaction as any)(...args),
 }));
 vi.mock('../config/firebase', () => ({ db: {} }));
 
-import { materializeSeries } from './seriesMaterializationService';
+import { materializeSeries, listActiveOwnerSeriesDefinitions } from './seriesMaterializationService';
 
 const OWNER = 'fighter@example.com';
 const SERIES = 'series-1';
@@ -274,5 +289,41 @@ describe('seriesMaterializationService — concurrency (harness retry)', () => {
     if (!res.ok) return;
     expect(res.totalCreated).toBe(0); // suppressed on retry
     expect(store.get(weekPathFor('2026-01-05'))).toBeUndefined();
+  });
+});
+
+describe('listActiveOwnerSeriesDefinitions — owner active-series reader', () => {
+  it('returns only active definitions and counts skipped inactive/malformed ones', async () => {
+    store.set(seriesPath('a'), { id: 'a', status: 'active', startDate: '2026-01-05', intervalWeeks: 1 });
+    store.set(seriesPath('b'), { id: 'b', status: 'discontinued', startDate: '2026-01-05', intervalWeeks: 1 });
+    store.set(seriesPath('c'), { status: 'active' }); // malformed: no id
+    const res = await listActiveOwnerSeriesDefinitions(OWNER);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.definitions.map((d) => d.id)).toEqual(['a']);
+    expect(res.skipped).toBe(2);
+  });
+
+  it('does not descend into the suppressions subcollection (shallow read)', async () => {
+    store.set(seriesPath('a'), { id: 'a', status: 'active', startDate: '2026-01-05', intervalWeeks: 1 });
+    store.set(suppPath('a', '2026-01-12'), { seriesId: 'a', occurrenceDateISO: '2026-01-12', reason: 'deleted' });
+    const res = await listActiveOwnerSeriesDefinitions(OWNER);
+    if (!res.ok) return;
+    expect(res.definitions.map((d) => d.id)).toEqual(['a']); // suppression doc excluded
+  });
+
+  it('returns a typed read failure instead of throwing', async () => {
+    mockGetDocs.mockRejectedValueOnce(new Error('offline'));
+    const res = await listActiveOwnerSeriesDefinitions(OWNER);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.kind).toBe('read');
+  });
+
+  it('does not mutate any definition or write anything', async () => {
+    store.set(seriesPath('a'), { id: 'a', status: 'active', startDate: '2026-01-05', intervalWeeks: 1 });
+    const before = new Map(store);
+    await listActiveOwnerSeriesDefinitions(OWNER);
+    expect(store).toEqual(before);
   });
 });

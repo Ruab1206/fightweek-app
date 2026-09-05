@@ -63,6 +63,7 @@ import { ProjectedCalendarEntryStatusSheet } from './components/ProjectedCalenda
 import { useEventLogs } from './hooks/useEventLogs';
 import { useCalendarEntries } from './hooks/useCalendarEntries';
 import { useCalendarEntryMerge } from './hooks/useCalendarEntryMerge';
+import { useOwnSeriesMaterialization } from './hooks/useOwnSeriesMaterialization';
 import {
   isUnplannedTrainingRefreshSettled,
   didUnplannedTrainingRefreshFail,
@@ -94,6 +95,11 @@ const App = () => {
     isLocked,
     triggerLoginPopup, triggerLoginRedirect, handleLogout,
   } = useAuth(USER_MAPPING);
+
+  // Slice 2c-3: owner-scoped rolling EventSeries materialization. Keyed ONLY on
+  // the authenticated user (never activeFighter*), so viewing another fighter
+  // never materializes the viewed calendar. Invisible, non-blocking maintenance.
+  useOwnSeriesMaterialization({ user, accessDenied, isBrowserBlocked });
 
   // #1191: schedule data is keyed by email (a stable id) in Firestore. Resolve the
   // active fighter's display name to their email path key for all data hooks; the

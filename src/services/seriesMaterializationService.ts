@@ -20,7 +20,7 @@
  * directly testable but is imported by no App/hook/presentation code, so it
  * performs zero production writes.
  */
-import { doc, getDoc, runTransaction, type Firestore, type Transaction } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, runTransaction, type Firestore, type Transaction } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ROOT_COLLECTION, DAYS } from '../config/constants';
 import {
@@ -292,4 +292,47 @@ export async function materializeSeries(
   }
 
   return { ok: true, weeks, totalCreated };
+}
+
+/** True for a structurally-usable ACTIVE series definition. Deep cadence /
+ *  identity validation stays with the planner (single authority); this only
+ *  gates which definitions the owner-trigger should hand to `materializeSeries`,
+ *  failing closed (skipping) on anything not plainly an active, id-bearing def. */
+function isActiveOwnerDefinition(data: unknown): data is EventSeriesDefinition {
+  if (!data || typeof data !== 'object') return false;
+  const d = data as Record<string, unknown>;
+  return d.status === 'active' && typeof d.id === 'string' && d.id.trim() !== '';
+}
+
+export type ActiveOwnerSeriesResult =
+  | { ok: true; definitions: EventSeriesDefinition[]; skipped: number }
+  | { ok: false; kind: 'read'; error: unknown };
+
+/**
+ * List the owner's ACTIVE `EventSeries` definitions from
+ * `users/{fighterKey}/eventSeries`. One shallow owner-scoped collection read
+ * (no index — status is filtered locally). Malformed or non-active definitions
+ * are skipped (fail closed per series, counted in `skipped`); a collection-read
+ * failure returns a typed `read` diagnostic instead of throwing. Never mutates
+ * a definition and never touches `templates/standard`.
+ */
+export async function listActiveOwnerSeriesDefinitions(
+  fighterKey: string,
+  opts: { firestore?: Firestore } = {},
+): Promise<ActiveOwnerSeriesResult> {
+  if (!fighterKey) throw new Error('listActiveOwnerSeriesDefinitions: fighterKey is required');
+  const fs = opts.firestore ?? db;
+  try {
+    const snap = await getDocs(collection(fs, ROOT_COLLECTION, fighterKey, EVENT_SERIES_SUBCOLLECTION));
+    const definitions: EventSeriesDefinition[] = [];
+    let skipped = 0;
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data();
+      if (isActiveOwnerDefinition(data)) definitions.push(data);
+      else skipped += 1;
+    }
+    return { ok: true, definitions, skipped };
+  } catch (error) {
+    return { ok: false, kind: 'read', error };
+  }
 }

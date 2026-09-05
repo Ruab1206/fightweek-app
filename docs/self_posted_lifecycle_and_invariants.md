@@ -259,7 +259,7 @@ This section is normative for the **legacy week-document recurring self-posted t
 
 - **R6.** A single-occurrence deletion of a `seriesId`-bearing occurrence MUST write one deterministic suppression record at `users/{fighterKey}/eventSeries/{seriesId}/suppressions/{occurrenceDateISO}`.
 - **R7.** The suppression record is the **authoritative no-regeneration source**. A cancelled tombstone occurrence is **supplementary** history/presentation state only, never a regeneration authority.
-- **R8.** A future materializer MUST generate an occurrence for a given series/date only when **both**: no suppression exists for that series/date, **and** no occurrence already exists for that series/date.
+- **R8.** The materializer MUST generate an occurrence for a given series/date only when **both**: no suppression exists for that series/date, **and** no occurrence already exists for that series/date.
 - **R9.** A legacy occurrence without `seriesId` MUST NOT receive a suppression record on deletion, and MUST NOT be assigned a series identity to enable one.
 
 ### J.3 Logged-history protection during deletion
@@ -269,11 +269,37 @@ This section is normative for the **legacy week-document recurring self-posted t
 - **R12.** A failed or indeterminate TrainingLog lookup MUST fail closed to the existing cancelled/tombstone representation — it MUST NOT be treated as proof of absence.
 - **R13.** A retained tombstone MUST preserve the occurrence id, occurrence date, `seriesId` (if present), and `isSeriesException` (if already present). The TrainingLog/EventLog itself MUST NOT be modified or deleted by this protection.
 
-### J.4 Transitional boundaries
+### J.4 Materializer authority (Slice 2c)
 
-- Suppression records are persisted under R6 but are **not yet consumed** by any materializer. No repository code currently reads them to decide occurrence generation.
-- "This and all future trainings" (this-and-following) remains disabled and MUST perform zero writes until a series-split operation and a materializer exist and are separately approved.
+- **R14.** `EventSeries` (the durable `EventSeriesDefinition` at `users/{fighterKey}/eventSeries/{seriesId}`) is the recurrence authority for a newly created self-posted recurring series. `templates/standard` remains a separate, non-authoritative planning-default source (it seeds a display-only weekly default; it does not determine recurrence for an `EventSeries`).
+- **R15.** `planSeriesMaterialization` is the sole domain authority for cadence, occurrence identity, suppression consumption, existing-occurrence handling, and conflict detection. The persistence adapter (`seriesMaterializationService`) MUST NOT re-derive or duplicate this logic; it only turns the plan's decisions into per-week transactional writes.
+- **R16.** A generated occurrence's identity is deterministic, derived only from `seriesId` and `occurrenceDateISO` — never a random id, never inferred from mutable fields (name, time, category, location, status).
+
+### J.5 Suppression consumption (Slice 2c)
+
+- **R17.** The suppression record (R6) is now **consumed**: the materializer reads it before generating and honours R8 (no generation when a suppression exists for that series/date). J.4's prior "not yet consumed" statement is superseded by this section.
+- **R18.** An existing occurrence for a series/date — including one marked `isSeriesException` or a cancelled tombstone — blocks generation for that date exactly as R8 already required; the materializer performs no additional inference beyond presence.
+- **R19.** An ACTIVE occurrence (plain or exception) coexisting with a suppression for the same series/date remains a **data-integrity conflict** and fails closed for that date; a CANCELLED occurrence (plain or exception) coexisting with a suppression is valid and is never reported as a conflict (R7).
+
+### J.6 Owner-scoped trigger (Slice 2c-3)
+
+- **R20.** The materializer runs only for the **authenticated owner's own** series. Owner identity is derived solely from the authenticated Firebase user's email — never from viewed-fighter/"Vis som bruger" state. Viewing another fighter's calendar MUST NOT cause a write to that fighter's data.
+- **R21.** The trigger lifecycle is: once on first eligible authenticated startup, a one-shot timer at the next local ISO-week boundary (rescheduled only after firing), and a `visibilitychange` catch-up that re-checks the current ISO week. No recurring polling exists, and no scrolling, routing, or SearchOverlay interaction triggers materialization.
+
+### J.7 Retry and failure contract (Slice 2c-3)
+
+- **R22.** In-flight execution prevents concurrent runs for the current owner. A given ISO week is recorded as successfully handled only once a run completes with no owner-series collection read failure and no infrastructure/transaction failure.
+- **R23.** A transient infrastructure failure (read failure, or an infrastructure/transaction failure in any series/week) does not mark the week successful and does not block application rendering; it permits — but does not itself schedule — a retry via a later discrete same-week signal (typically `visibilitychange`). No immediate or polling retry is introduced.
+- **R24.** A malformed definition or a planner data-integrity conflict (R19) remains a structured, per-series diagnostic. It does not block other valid series in the same run and does not, by itself, cause the week to be retried indefinitely (R22's success rule ignores diagnostic-only issues).
+
+### J.8 Transitional boundaries
+
+- R14–R24 supersede the prior statements that suppressions were unconsumed and that no repository code read `EventSeries` definitions; both are now false.
+- The technical materialization horizon remains **52 weeks** (unchanged); this is a technical cap only, never a substitute for an `EventSeries` definition's semantic `endDate` (open-ended when `null`).
+- "This and all future trainings" (this-and-following) remains disabled and MUST perform zero writes until separately approved and activated — a series-split operation (Slice 2b) and a materializer (Slice 2c) now both exist, but this-and-following's own activation is a distinct, not-yet-made decision.
+- `seriesSplitService` remains unwired from production; it has no production consumer.
+- Manual TST verification and production deployment of the Slice 2c materializer remain outstanding.
 - Legacy occurrences without `seriesId` are **not** migrated or backfilled by this section. They remain single-occurrence-only.
 - Delete-this-and-future (tuple-matched, multi-occurrence delete) is unchanged and remains outside this section.
-- Invitation behaviour is unchanged by R1–R13.
-- The shared week-document read-modify-write concurrency risk (a full week document is read, modified in memory, and committed via `writeBatch` with no read precondition) remains **transitional and unresolved** by this section. Suppression and its affected week document are committed together (atomic), which does not by itself make the operation concurrency-safe.
+- Invitation behaviour is unchanged by R1–R24.
+- The shared week-document read-modify-write concurrency risk (a full week document is read, modified in memory, and committed via `writeBatch` with no read precondition) remains **transitional and unresolved** for the legacy self-posted session save path. The Slice 2c-2 materializer and Slice 2b-2 split adapter do not carry this risk themselves — each commits its affected week via a Firestore transaction with reads preceding writes — but the ordinary week-document save path (R6's own suppression+week commit, and manual session edits) is unchanged by this section.
