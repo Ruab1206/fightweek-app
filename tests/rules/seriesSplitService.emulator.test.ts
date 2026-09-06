@@ -24,6 +24,7 @@ import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { persistSeriesSplitAtomically } from '../../src/services/seriesSplitService';
 import { getISOWeekForDate } from '../../src/utils/dateUtils';
+import { computeSeriesOccurrenceDates, recurrenceHorizonEndDate, productionWeekNumberForOccurrence } from '../../src/hooks/computeSeriesOccurrences';
 
 const PROJECT_ID = 'demo-fightweek-rules';
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -46,6 +47,9 @@ const weekPathFor = (dateISO: string) => {
 
 let testEnv: RulesTestEnvironment;
 const ownerDb = () => testEnv.authenticatedContext(OWNER, { email: OWNER }).firestore();
+const adminDb = () => testEnv.authenticatedContext('admin@x', { email: 'admin@x' }).firestore();
+const coachDb = () => testEnv.authenticatedContext('coach@x', { email: 'coach@x' }).firestore();
+const teammateDb = () => testEnv.authenticatedContext('other@x', { email: 'other@x' }).firestore();
 
 /** Typed field/day-array accessors for snapshot data (avoids `any`). */
 const field = (data: unknown, key: string): unknown => ((data ?? {}) as Record<string, unknown>)[key];
@@ -76,7 +80,7 @@ afterAll(async () => { if (testEnv) await testEnv.cleanup(); });
 async function seed(defOverrides: Record<string, unknown> = {}) {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const db = ctx.firestore();
-    await setDoc(doc(db, ROLES_DOC), { admins: ['admin@x'], coaches: ['coach@x'], members: { 'owner@x': 'Owner', 'other@x': 'Other' } });
+    await setDoc(doc(db, ROLES_DOC), { admins: ['admin@x'], coaches: ['coach@x'], members: { 'owner@x': 'Owner', 'other@x': 'Other', 'coach@x': 'Coach', 'admin@x': 'Admin' } });
     await setDoc(doc(db, seriesPath(OLD)), { ...OLD_DEF, ...defOverrides });
     await setDoc(doc(db, weekPathFor('2026-01-12')), { Mandag: [occ('occ-w2')], lastUpdated: NOW });
     await setDoc(doc(db, weekPathFor('2026-01-19')), { Mandag: [occ('occ-w3')], lastUpdated: NOW });
@@ -88,10 +92,10 @@ beforeEach(async () => {
   await testEnv.clearFirestore();
 });
 
-function run(selectedId = 'occ-w2') {
+function run(selectedId = 'occ-w2', firestore: ReturnType<typeof ownerDb> = ownerDb()) {
   return persistSeriesSplitAtomically(
     { fighterKey: OWNER, selected: { id: selectedId, seriesId: OLD, occurrenceDateISO: SPLIT }, edited: EDITED },
-    { firestore: ownerDb() as never, newSeriesId: NEW, now: NOW, horizonEndDate: HORIZON },
+    { firestore: firestore as never, newSeriesId: NEW, now: NOW, horizonEndDate: HORIZON },
   );
 }
 
@@ -128,5 +132,180 @@ describe('persistSeriesSplitAtomically — emulator', () => {
       const wk = await getDoc(doc(db, weekPathFor('2026-01-19')));
       expect(dayArr(wk.data())[0].seriesId).toBe(OLD); // unchanged
     });
+  });
+
+  // ─── Authorization matrix (short 3-week horizon — mirrors seriesDeleteService's
+  // existing owner/admin/coach/teammate coverage so split and delete are held to
+  // the SAME documented policy). No rules change; this only PROVES current
+  // behavior for the small-horizon case before the realistic/open-horizon
+  // characterization below.
+  it('admin cross-owner split SUCCEEDS under the admin read rule (short horizon)', async () => {
+    await seed();
+    const res = await run('occ-w2', adminDb());
+    expect(res).toMatchObject({ ok: true, newSeriesId: NEW });
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      expect(field((await getDoc(doc(ctx.firestore(), seriesPath(OLD)))).data(), 'endDate')).toBe('2026-01-11');
+    });
+  });
+
+  it('coach cross-owner split FAILS (no coach eventSeries read) with zero writes', async () => {
+    await seed();
+    const res = await run('occ-w2', coachDb());
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.kind).toBe('transaction');
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      expect(field((await getDoc(doc(db, seriesPath(OLD)))).data(), 'endDate')).toBeNull();
+      expect(dayArr((await getDoc(doc(db, weekPathFor('2026-01-12')))).data())[0].seriesId).toBe(OLD);
+    });
+  });
+
+  it('teammate cross-owner split FAILS with zero writes', async () => {
+    await seed();
+    const res = await run('occ-w2', teammateDb());
+    expect(res.ok).toBe(false);
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      expect(field((await getDoc(doc(ctx.firestore(), seriesPath(OLD)))).data(), 'endDate')).toBeNull();
+    });
+  });
+});
+
+/**
+ * ─── Realistic open-ended / real-default-horizon characterization ───
+ *
+ * Distinct from the short 3-week fixtures above: this reproduces the SHAPE of
+ * the San TST scenario (open-ended `endDate: null` series, split anchored at
+ * "now", the REAL `recurrenceHorizonEndDate()` default — no shortened
+ * `horizonEndDate` override) to establish whether an admin cross-owner split
+ * of a long/open-ended series actually succeeds or fails under the currently
+ * deployed rules, and to capture the exact Firestore error when it does not.
+ * Purely local `demo-fightweek-rules` emulator project — unrelated to and
+ * incapable of touching the real `fightweek-app` TST/production data.
+ */
+function toLocalISO(d: Date): string {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function mostRecentMonday(from: Date): string {
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  const diffFromMonday = (d.getDay() + 6) % 7; // 0 = already Monday
+  d.setDate(d.getDate() - diffFromMonday);
+  return toLocalISO(d);
+}
+function addWeeksISO(iso: string, weeks: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + weeks * 7);
+  return toLocalISO(dt);
+}
+
+describe('persistSeriesSplitAtomically — emulator — realistic open-ended default-horizon characterization', () => {
+  const REAL_OLD = 'realistic-old-series';
+  const REAL_NEW = 'realistic-new-series';
+  const REAL_NOW = '2026-09-06T12:00:00.000Z';
+  // Anchored to the most recent Monday on/before the actual test-run clock, so
+  // the forward window to `recurrenceHorizonEndDate()` (today + 52 weeks) stays
+  // a realistic ~52-occurrence span no matter which day this suite is run.
+  const REAL_SPLIT = mostRecentMonday(new Date());
+  const REAL_SERIES_START = addWeeksISO(REAL_SPLIT, -8); // already running for 8 weeks
+  const REAL_HORIZON_END = recurrenceHorizonEndDate();
+  const REAL_CANDIDATE_DATES = computeSeriesOccurrenceDates({
+    startDate: REAL_SPLIT, intervalWeeks: 1, endDate: null, horizonEndDate: REAL_HORIZON_END,
+  });
+  const REAL_EDITED = { title: 'COPILOT CHARACTERIZATION split title', discipline: 'MMA', location: 'COPILOT CHARACTERIZATION GYM', startTime: '18:00', endTime: '19:30' };
+  const SELECTED_REAL = { id: 'real-occ-0', seriesId: REAL_OLD, occurrenceDateISO: REAL_SPLIT };
+
+  function realisticWeekPathFor(dateISO: string): string {
+    const wk = productionWeekNumberForOccurrence(dateISO, REAL_SERIES_START);
+    return `artifacts/production/users/${OWNER}/weeks/week_${wk}`;
+  }
+  function realisticOcc(id: string, overrides: Record<string, unknown> = {}) {
+    return { id, seriesId: REAL_OLD, name: 'Realistic characterization training', category: 'MMA', location: 'Original Gym', start: '17:00', end: '18:30', status: 'active', isRecurring: true, day: 'Mandag', ...overrides };
+  }
+
+  async function seedRealistic() {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, ROLES_DOC), { admins: ['admin@x'], coaches: ['coach@x'], members: { 'owner@x': 'Owner', 'other@x': 'Other', 'coach@x': 'Coach', 'admin@x': 'Admin' } });
+      await setDoc(doc(db, seriesPath(REAL_OLD)), {
+        id: REAL_OLD, type: 'self_posted_training', ownerKey: OWNER, title: 'Realistic characterization training',
+        discipline: 'MMA', location: 'Original Gym', dayOfWeek: 1, startTime: '17:00', endTime: '18:30',
+        startDate: REAL_SERIES_START, intervalWeeks: 1, endDate: null, status: 'active', createdAt: REAL_NOW, updatedAt: REAL_NOW,
+      });
+      for (let i = 0; i < REAL_CANDIDATE_DATES.length; i++) {
+        const dateISO = REAL_CANDIDATE_DATES[i];
+        const wkPath = realisticWeekPathFor(dateISO);
+        if (i === 6) {
+          // A pre-existing suppression with no live occurrence — exercises the
+          // "copy an existing forward suppression" continuation path.
+          await setDoc(doc(db, wkPath), { Mandag: [], lastUpdated: REAL_NOW });
+          await setDoc(doc(db, `${seriesPath(REAL_OLD)}/suppressions/${dateISO}`), { seriesId: REAL_OLD, occurrenceDateISO: dateISO, reason: 'deleted', createdAt: REAL_NOW });
+          continue;
+        }
+        const id = `real-occ-${i}`;
+        let entry;
+        if (i === 2) entry = realisticOcc(id, { name: 'Realistic active exception', isSeriesException: true, start: '19:00', end: '20:00' }); // active future exception
+        else if (i === 4) entry = realisticOcc(id, { status: 'cancelled' }); // triggers a suppression continuation write
+        else entry = realisticOcc(id);
+        await setDoc(doc(db, wkPath), { Mandag: [entry], lastUpdated: REAL_NOW });
+      }
+    });
+  }
+
+  function runRealistic(firestore: ReturnType<typeof ownerDb>) {
+    // Deliberately NO `horizonEndDate` override — persistSeriesSplitAtomically
+    // must fall back to the REAL `recurrenceHorizonEndDate()` default, exactly
+    // as production does.
+    return persistSeriesSplitAtomically(
+      { fighterKey: OWNER, selected: SELECTED_REAL, edited: REAL_EDITED },
+      { firestore: firestore as never, newSeriesId: REAL_NEW, now: REAL_NOW },
+    );
+  }
+
+  /** Sanitized, no-PII/no-token diagnostic dump for whichever result actually occurred. */
+  function describeResult(actor: string, res: Awaited<ReturnType<typeof runRealistic>>) {
+    if (res.ok) {
+      console.log(`[characterization:${actor}] ok=true newSeriesId=${res.newSeriesId} counts=${JSON.stringify(res.counts)}`);
+      return;
+    }
+    const errAny = res as { kind: string; error?: unknown; reason?: unknown };
+    const err = errAny.error as { code?: string; message?: string } | undefined;
+    console.log(`[characterization:${actor}] ok=false kind=${errAny.kind} reason=${errAny.reason ?? ''} code=${err?.code ?? ''} message=${String(err?.message ?? '').slice(0, 200)}`);
+  }
+
+  it('owner: complete split of an open-ended series across the real default horizon (intended: succeeds)', async () => {
+    expect(REAL_CANDIDATE_DATES.length).toBeGreaterThan(40); // sanity: this really is a large/open-ended horizon
+    await seedRealistic();
+    const res = await runRealistic(ownerDb());
+    describeResult('owner', res);
+    expect(res).toMatchObject({ ok: true, newSeriesId: REAL_NEW });
+  });
+
+  it('admin cross-owner: complete split of an open-ended series across the real default horizon (intended: succeeds)', async () => {
+    await seedRealistic();
+    const res = await runRealistic(adminDb());
+    describeResult('admin', res);
+
+    // Atomicity evidence FIRST (must hold regardless of ok/fail): either every
+    // forward occurrence moved to the new series, or NONE did — never partial.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      const oldDef = await getDoc(doc(db, seriesPath(REAL_OLD)));
+      const sampleUntouchedWeek = await getDoc(doc(db, realisticWeekPathFor(REAL_CANDIDATE_DATES[10])));
+      const sampleEntry = dayArr(sampleUntouchedWeek.data())[0];
+      if (res.ok) {
+        expect(field(oldDef.data(), 'endDate')).not.toBeNull(); // ended just before the split date
+        expect(sampleEntry?.seriesId).toBe(REAL_NEW);
+      } else {
+        expect(field(oldDef.data(), 'endDate')).toBeNull(); // untouched
+        expect(sampleEntry?.seriesId).toBe(REAL_OLD);
+      }
+    });
+
+    // Documents the APPROVED, INTENDED behavior (admin cross-owner split is a
+    // sanctioned capability) — failing-first if the hypothesis under
+    // investigation is real; a genuine pass outright refutes it.
+    expect(res).toMatchObject({ ok: true, newSeriesId: REAL_NEW });
   });
 });
