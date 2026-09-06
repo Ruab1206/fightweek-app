@@ -21,6 +21,7 @@ import { useSessionHandlers } from './hooks/useSessionHandlers';
 import { computeSeriesOccurrenceDates, recurrenceHorizonEndDate } from './hooks/computeSeriesOccurrences';
 import { persistSeriesDeleteAtomically } from './services/seriesDeleteService';
 import { coordinateDurableSeriesDelete } from './domain/calendar/durableSeriesDeleteFlow';
+import { classifyDeleteThisAndFollowingDispatch, describeDurableDeleteOutcome } from './domain/calendar/durableDeleteObservability';
 import { useToast } from './hooks/useToast';
 import { useTheme } from './hooks/useTheme';
 import { useCatalogue } from './hooks/useCatalogue';
@@ -1376,11 +1377,12 @@ const App = () => {
           // route to the seriesId-based durable delete: it ENDS the EventSeries
           // definition before the selected date so the materializer cannot
           // regenerate the removed range. Legacy no-seriesId occurrences keep
-          // the unchanged tuple-based handler below.
-          const isDurableSeries = !!sel?.seriesId && !sel?.catalogueClassId;
+          // the unchanged tuple-based handler below. Extracted to a named,
+          // independently-testable classifier — see durableDeleteObservability.
+          const dispatch = classifyDeleteThisAndFollowingDispatch(sel);
           setModalOpen(false);
           setEditingWeek(null);
-          if (isDurableSeries) {
+          if (dispatch === 'durable') {
             const selDate = getDateForWeekDay(fromWeek, dayName);
             const selISO = selDate ? toLocalISODate(selDate) : '';
             // Ordering: run the durable delete FIRST; cancel invitations only
@@ -1394,17 +1396,16 @@ const App = () => {
               }),
               cancelInvitations: () => arrangerActivityRemoved({ name, start }, dayName, fromWeek, 'future') ?? Promise.resolve(),
             });
-            if (outcome.kind === 'deleted') {
-              showToast(`${name} fjernet`, 'success');
-            } else if (outcome.kind === 'deleted_invitations_failed') {
-              // Deletion committed; only the invitation update failed — not a rollback.
-              showToast('Træningen blev slettet, men invitationerne kunne ikke opdateres.', 'error');
-            } else {
-              showToast('Kunne ikke slette den gentagende træning.', 'error');
-            }
+            const feedback = describeDurableDeleteOutcome(outcome, { name, seriesId: sel?.seriesId });
+            // Structured, no-PII diagnostic — lets a controlled verification
+            // session distinguish dispatch/outcome from the browser console
+            // without inspecting production data.
+            console.info('[durable-delete]', feedback.diagnostic);
+            showToast(feedback.toastMessage, feedback.toastType);
             return;
           }
           // Legacy (no durable seriesId) path unchanged.
+          console.info('[durable-delete]', { path: 'legacy', seriesId: sel?.seriesId, catalogueClassId: !!sel?.catalogueClassId });
           showToast(`${name} fjernet`, 'success');
           arrangerActivityRemoved({ name, start }, dayName, fromWeek, 'future');
           handleDeleteThisAndFuture(dayName, name, start, fromWeek);
