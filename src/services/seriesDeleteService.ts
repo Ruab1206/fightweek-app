@@ -29,6 +29,7 @@
 import { doc, runTransaction, type Firestore, type Transaction } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ROOT_COLLECTION, DAYS } from '../config/constants';
+import { getISOWeekForDate } from '../utils/dateUtils';
 import {
   planSeriesDelete,
   type DeleteSelectedOccurrence,
@@ -78,13 +79,28 @@ function dayNameForDate(dateISO: string): string {
   return DAYS[(jsDay + 6) % 7];
 }
 
-/** ISO week number for a local YYYY-MM-DD (matches getISOWeekForDate). */
-function isoWeekForDate(dateISO: string): number {
-  const [y, m, d] = dateISO.split('-').map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d));
-  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+/** Whole calendar days from local `a` to `b` (may be negative), timezone-independent. */
+function daysBetweenLocalISO(a: string, b: string): number {
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+}
+
+/**
+ * Week-document number for an occurrence date, in the SAME continuously-
+ * incrementing convention the production recurring-session creation path
+ * uses (computeRecurringWeeks/getDaysInRange: the series anchor's own ISO
+ * week plus a whole-week offset, which keeps counting up and never resets at
+ * a calendar-year boundary). A per-date `getISOWeekForDate` call resets every
+ * January and silently targets the wrong week document for any occurrence
+ * materialized in a later calendar year than the series anchor — this is the
+ * year-boundary defect this function corrects.
+ */
+function productionWeekNumberForOccurrence(occurrenceDateISO: string, seriesStartDateISO: string): number {
+  const [sy, sm, sd] = seriesStartDateISO.split('-').map(Number);
+  const anchorWeek = getISOWeekForDate(new Date(sy, sm - 1, sd));
+  const weeksOffset = daysBetweenLocalISO(seriesStartDateISO, occurrenceDateISO) / 7;
+  return anchorWeek + weeksOffset;
 }
 
 /** Mark a week-doc entry as an invisible deletion record in place. Preserves
@@ -153,7 +169,7 @@ export async function persistSeriesDeleteAtomically(
         suppExists: boolean;
       }> = [];
       for (const dateISO of candidateDates) {
-        const weekNum = isoWeekForDate(dateISO);
+        const weekNum = productionWeekNumberForOccurrence(dateISO, definition!.startDate);
         const dayName = dayNameForDate(dateISO);
         const weekRef = doc(fs, ROOT_COLLECTION, fighterKey, WEEKS_SUBCOLLECTION, `week_${weekNum}`);
         const suppRef = doc(fs, ROOT_COLLECTION, fighterKey, EVENT_SERIES_SUBCOLLECTION, seriesId, SUPPRESSIONS_SUBCOLLECTION, suppressionDocId(dateISO));
