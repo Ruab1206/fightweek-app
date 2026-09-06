@@ -217,8 +217,11 @@ describe('Slice 1 rules — eventSeries (owner read; owner + admin/coach write; 
   it('teammate cannot write', async () => {
     await assertFails(setDoc(doc(as('other@x'), P.eventSeries), { id: 'x' }));
   });
-  it('admin cannot read (read is owner-only)', async () => {
-    await assertFails(getDoc(doc(as('admin@x'), P.eventSeries)));
+  it('admin CAN read (deliberate cross-owner management — Slice 2d)', async () => {
+    await assertSucceeds(getDoc(doc(as('admin@x'), P.eventSeries)));
+  });
+  it('coach CANNOT read (admin-only cross-owner read)', async () => {
+    await assertFails(getDoc(doc(as('coach@x'), P.eventSeries)));
   });
   it('unrelated authenticated user cannot read', async () => {
     await assertFails(getDoc(doc(as('rando@x'), P.eventSeries)));
@@ -261,8 +264,11 @@ describe('Slice 2a rules — eventSeries suppressions (effective recursive-match
   it('teammate cannot write', async () => {
     await assertFails(setDoc(doc(as('other@x'), P.suppression), { reason: 'x' }));
   });
-  it('admin cannot read (read is owner-only)', async () => {
-    await assertFails(getDoc(doc(as('admin@x'), P.suppression)));
+  it('admin CAN read (deliberate cross-owner management — Slice 2d)', async () => {
+    await assertSucceeds(getDoc(doc(as('admin@x'), P.suppression)));
+  });
+  it('coach CANNOT read (admin-only cross-owner read)', async () => {
+    await assertFails(getDoc(doc(as('coach@x'), P.suppression)));
   });
   it('unrelated authenticated user cannot read', async () => {
     await assertFails(getDoc(doc(as('rando@x'), P.suppression)));

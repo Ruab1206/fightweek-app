@@ -95,6 +95,12 @@ service cloud.firestore {
     match /artifacts/production/users/{userKey}/eventSeries/{document=**} {
       allow read: if isAuthenticated()
         && request.auth.token.email == userKey;
+      // Deliberate admin management ("Vis som bruger") needs to READ the owner's
+      // definition + nested suppressions to run the durable delete transaction.
+      // Admin ONLY — NOT coach/teammate: no cross-owner durable-series read is
+      // granted beyond admin, and this never affects owner-scoped materialization
+      // (which derives ownership solely from the authenticated user's email).
+      allow read: if isAdmin();
       allow write: if isAdminOrCoach();
       allow write: if isAuthenticated()
         && request.auth.token.email == userKey;
