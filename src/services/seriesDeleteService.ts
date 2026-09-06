@@ -29,7 +29,6 @@
 import { doc, runTransaction, type Firestore, type Transaction } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ROOT_COLLECTION, DAYS } from '../config/constants';
-import { getISOWeekForDate } from '../utils/dateUtils';
 import {
   planSeriesDelete,
   type DeleteSelectedOccurrence,
@@ -40,7 +39,11 @@ import {
 } from '../domain/calendar/seriesDeletePlan';
 import type { EventSeriesDefinition } from '../domain/calendar/eventSeriesDefinition';
 import { suppressionDocId } from '../domain/calendar/occurrenceSuppression';
-import { computeSeriesOccurrenceDates, recurrenceHorizonEndDate } from '../hooks/computeSeriesOccurrences';
+import {
+  computeSeriesOccurrenceDates,
+  recurrenceHorizonEndDate,
+  productionWeekNumberForOccurrence,
+} from '../hooks/computeSeriesOccurrences';
 
 const PLAIN_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const EVENT_SERIES_SUBCOLLECTION = 'eventSeries';
@@ -77,30 +80,6 @@ function dayNameForDate(dateISO: string): string {
   const [y, m, d] = dateISO.split('-').map(Number);
   const jsDay = new Date(y, m - 1, d).getDay(); // 0=Sun..6=Sat
   return DAYS[(jsDay + 6) % 7];
-}
-
-/** Whole calendar days from local `a` to `b` (may be negative), timezone-independent. */
-function daysBetweenLocalISO(a: string, b: string): number {
-  const [ay, am, ad] = a.split('-').map(Number);
-  const [by, bm, bd] = b.split('-').map(Number);
-  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
-}
-
-/**
- * Week-document number for an occurrence date, in the SAME continuously-
- * incrementing convention the production recurring-session creation path
- * uses (computeRecurringWeeks/getDaysInRange: the series anchor's own ISO
- * week plus a whole-week offset, which keeps counting up and never resets at
- * a calendar-year boundary). A per-date `getISOWeekForDate` call resets every
- * January and silently targets the wrong week document for any occurrence
- * materialized in a later calendar year than the series anchor — this is the
- * year-boundary defect this function corrects.
- */
-function productionWeekNumberForOccurrence(occurrenceDateISO: string, seriesStartDateISO: string): number {
-  const [sy, sm, sd] = seriesStartDateISO.split('-').map(Number);
-  const anchorWeek = getISOWeekForDate(new Date(sy, sm - 1, sd));
-  const weeksOffset = daysBetweenLocalISO(seriesStartDateISO, occurrenceDateISO) / 7;
-  return anchorWeek + weeksOffset;
 }
 
 /** Mark a week-doc entry as an invisible deletion record in place. Preserves

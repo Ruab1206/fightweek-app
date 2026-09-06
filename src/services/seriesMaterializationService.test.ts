@@ -327,3 +327,95 @@ describe('listActiveOwnerSeriesDefinitions — owner active-series reader', () =
     expect(store).toEqual(before);
   });
 });
+
+describe('seriesMaterializationService — year-boundary week-document lookup', () => {
+  // Anchored the Monday before an ISO year boundary so candidates span both
+  // the same year and the next one.
+  const Y_START = '2026-12-14';
+  const Y_HORIZON = '2027-01-11';
+  const WEEKLY_DATES = ['2026-12-14', '2026-12-21', '2026-12-28', '2027-01-04', '2027-01-11'];
+
+  /**
+   * Independently mirrors the REAL production recurring-session creation
+   * path's week-document convention (computeRecurringWeeks/getDaysInRange):
+   * the series anchor's own ISO week plus a whole-week offset, never
+   * resetting at a calendar-year boundary. Built from first principles here
+   * — it never calls into seriesMaterializationService.ts, so it cannot
+   * accidentally encode the same assumption as the code under test.
+   */
+  function productionWeekPathFor(dateISO: string, startDateISO: string = Y_START) {
+    const [sy, sm, sd] = startDateISO.split('-').map(Number);
+    const anchorWeek = getISOWeekForDate(new Date(sy, sm - 1, sd));
+    const [ty, tm, td] = dateISO.split('-').map(Number);
+    const diffDays = Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(sy, sm - 1, sd)) / 86400000);
+    return `artifacts/production/users/${OWNER}/weeks/week_${anchorWeek + diffDays / 7}`;
+  }
+
+  it('materializes weekly occurrences under the production-convention week document across an ISO year boundary', async () => {
+    seedDef({ startDate: Y_START, intervalWeeks: 1, endDate: null });
+    const res = await materializeSeries({ fighterKey: OWNER, seriesId: SERIES }, { now: NOW, horizonEndDate: Y_HORIZON });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.totalCreated).toBe(WEEKLY_DATES.length);
+    for (const dateISO of WEEKLY_DATES) {
+      const week = store.get(productionWeekPathFor(dateISO));
+      expect(week?.Mandag?.[0]).toMatchObject({ id: materializedOccurrenceId(SERIES, dateISO), seriesId: SERIES });
+    }
+  });
+
+  it('materializes an intervalWeeks=2 series on the correct cadence and week documents across the boundary', async () => {
+    seedDef({ startDate: Y_START, intervalWeeks: 2, endDate: null });
+    const biweekly = ['2026-12-14', '2026-12-28', '2027-01-11', '2027-01-25'];
+    const res = await materializeSeries({ fighterKey: OWNER, seriesId: SERIES }, { now: NOW, horizonEndDate: '2027-01-25' });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.totalCreated).toBe(biweekly.length);
+    for (const dateISO of biweekly) {
+      const week = store.get(productionWeekPathFor(dateISO));
+      expect(week?.Mandag?.[0]).toMatchObject({ id: materializedOccurrenceId(SERIES, dateISO), seriesId: SERIES });
+    }
+  });
+
+  it('does not duplicate a post-boundary occurrence already persisted under the production-convention week document', async () => {
+    seedDef({ startDate: Y_START, intervalWeeks: 1, endDate: null });
+    store.set(productionWeekPathFor('2027-01-04'), { Mandag: [dayEntry('2027-01-04')], lastUpdated: NOW });
+    const res = await materializeSeries({ fighterKey: OWNER, seriesId: SERIES }, { now: NOW, horizonEndDate: Y_HORIZON });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.totalCreated).toBe(WEEKLY_DATES.length - 1); // every date except the pre-existing one
+    expect(store.get(productionWeekPathFor('2027-01-04')).Mandag).toHaveLength(1); // no duplicate
+  });
+
+  it('never regenerates a post-boundary occurrence already marked isDeleted', async () => {
+    seedDef({ startDate: Y_START, intervalWeeks: 1, endDate: null });
+    store.set(productionWeekPathFor('2027-01-04'), { Mandag: [dayEntry('2027-01-04', { isDeleted: true, deletedAt: NOW })], lastUpdated: NOW });
+    const res = await materializeSeries({ fighterKey: OWNER, seriesId: SERIES }, { now: NOW, horizonEndDate: Y_HORIZON });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.totalCreated).toBe(WEEKLY_DATES.length - 1); // the isDeleted date is never recreated
+    const week = store.get(productionWeekPathFor('2027-01-04'));
+    expect(week.Mandag).toHaveLength(1);
+    expect(week.Mandag[0].isDeleted).toBe(true); // never overwritten/reactivated
+  });
+
+  it('produces no future materialization once the definition ends before the boundary', async () => {
+    seedDef({ startDate: Y_START, intervalWeeks: 1, endDate: '2026-12-20' });
+    const res = await materializeSeries({ fighterKey: OWNER, seriesId: SERIES }, { now: NOW, horizonEndDate: Y_HORIZON });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.totalCreated).toBe(1); // only 2026-12-14
+    expect(store.get(productionWeekPathFor('2027-01-04'))).toBeUndefined();
+  });
+
+  it('leaves an unrelated series occurrence sharing the same post-boundary week document untouched', async () => {
+    seedDef({ startDate: Y_START, intervalWeeks: 1, endDate: null });
+    const foreign = { id: 'foreign-1', seriesId: 'unrelated-series', name: 'Yoga', start: '19:00', end: '20:00', status: 'active', day: 'Mandag' };
+    store.set(productionWeekPathFor('2027-01-04'), { Mandag: [foreign], lastUpdated: NOW });
+    const res = await materializeSeries({ fighterKey: OWNER, seriesId: SERIES }, { now: NOW, horizonEndDate: Y_HORIZON });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const week = store.get(productionWeekPathFor('2027-01-04'));
+    expect(week.Mandag.find((s: any) => s.id === 'foreign-1')).toEqual(foreign); // untouched
+    expect(week.Mandag.find((s: any) => s.id === materializedOccurrenceId(SERIES, '2027-01-04'))).toBeTruthy();
+  });
+});

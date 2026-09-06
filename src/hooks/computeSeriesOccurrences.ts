@@ -1,4 +1,5 @@
 import { RECURRENCE_HORIZON_WEEKS } from '../config/constants';
+import { getISOWeekForDate } from '../utils/dateUtils';
 
 /**
  * Compute the occurrence dates a recurring-series invitation materialises (#1213,
@@ -51,6 +52,44 @@ export function recurrenceHorizonEndDate(from: Date = new Date()): string {
   const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
   d.setDate(d.getDate() + RECURRENCE_HORIZON_WEEKS * 7);
   return toLocalISO(d);
+}
+
+/** Whole calendar days from local `a` to `b` (may be negative), timezone-independent. */
+function daysBetweenLocalISO(a: string, b: string): number {
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000);
+}
+
+/**
+ * Week-document number for an occurrence date, in the SAME continuously-
+ * incrementing convention the production recurring-session creation path
+ * uses (computeRecurringWeeks/getDaysInRange in useSessionHandlers.ts /
+ * dateUtils.ts): the series anchor's own ISO week plus a whole-week offset,
+ * which keeps counting up and never resets at a calendar-year boundary. A
+ * per-date `getISOWeekForDate` call resets every January and silently
+ * targets the wrong week document for any occurrence materialized in a later
+ * calendar year than the series anchor. Shared by seriesDeleteService and
+ * seriesMaterializationService so both address the exact same persisted week
+ * document a candidate occurrence date resolves to, for any `intervalWeeks`.
+ *
+ * Fails closed (throws) rather than silently rounding when the offset is not
+ * a whole number of weeks — every legitimate candidate date this is called
+ * with is, by construction, an exact multiple of 7 days from
+ * `seriesStartDateISO` (see `computeSeriesOccurrenceDates`); a fractional
+ * offset means the caller passed an off-cadence date, a bug worth surfacing
+ * immediately rather than masking with a wrong week number.
+ */
+export function productionWeekNumberForOccurrence(occurrenceDateISO: string, seriesStartDateISO: string): number {
+  const [sy, sm, sd] = seriesStartDateISO.split('-').map(Number);
+  const anchorWeek = getISOWeekForDate(new Date(sy, sm - 1, sd));
+  const diffDays = daysBetweenLocalISO(seriesStartDateISO, occurrenceDateISO);
+  if (diffDays % 7 !== 0) {
+    throw new Error(
+      `productionWeekNumberForOccurrence: occurrenceDateISO ${occurrenceDateISO} is not a whole number of weeks from seriesStartDateISO ${seriesStartDateISO}`,
+    );
+  }
+  return anchorWeek + diffDays / 7;
 }
 
 function parseLocalDate(iso: string): Date | null {

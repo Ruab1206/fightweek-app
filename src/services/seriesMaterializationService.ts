@@ -16,9 +16,11 @@
  * duplicate). `now` and the recurrence horizon are minted EXACTLY ONCE so every
  * per-week transaction re-runs the planner with identical injected values.
  *
- * R275: this adapter is NOT wired to any enabled UI path or trigger. It is
- * directly testable but is imported by no App/hook/presentation code, so it
- * performs zero production writes.
+ * R275: this adapter performs zero SPLIT/this-and-following writes (still a
+ * distinct, disabled operation — see seriesSplitService). It IS wired to a
+ * production trigger: `useOwnSeriesMaterialization` (App.tsx) calls it
+ * automatically, owner-scoped, on auth/owner-change, a weekly ISO-boundary
+ * timer, and tab-visibility catch-up.
  */
 import { collection, doc, getDoc, getDocs, runTransaction, type Firestore, type Transaction } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -32,8 +34,7 @@ import {
 } from '../domain/calendar/materializationPlan';
 import type { EventSeriesDefinition } from '../domain/calendar/eventSeriesDefinition';
 import { suppressionDocId } from '../domain/calendar/occurrenceSuppression';
-import { recurrenceHorizonEndDate } from '../hooks/computeSeriesOccurrences';
-import { getISOWeekForDate } from '../utils/dateUtils';
+import { recurrenceHorizonEndDate, productionWeekNumberForOccurrence } from '../hooks/computeSeriesOccurrences';
 
 const EVENT_SERIES_SUBCOLLECTION = 'eventSeries';
 const SUPPRESSIONS_SUBCOLLECTION = 'suppressions';
@@ -100,10 +101,15 @@ function dayNameForDate(dateISO: string): string {
   return DAYS[(jsDay + 6) % 7];
 }
 
-/** Week-document key for a local YYYY-MM-DD (production ISO-week keying). */
-function weekKeyForDate(dateISO: string): string {
-  const [y, m, d] = dateISO.split('-').map(Number);
-  return `week_${getISOWeekForDate(new Date(y, m - 1, d))}`;
+/** Week-document key for a candidate occurrence date, in the SAME
+ *  continuously-incrementing convention the production recurring-session
+ *  creation path uses — the series anchor's own ISO week plus a whole-week
+ *  offset, never resetting at a calendar-year boundary (see
+ *  productionWeekNumberForOccurrence). A per-date standard-ISO calculation
+ *  resets every January and silently targets the wrong week document for any
+ *  occurrence materialized in a later calendar year than the series anchor. */
+function weekKeyForDate(dateISO: string, seriesStartDateISO: string): string {
+  return `week_${productionWeekNumberForOccurrence(dateISO, seriesStartDateISO)}`;
 }
 
 /** ISO timestamp of a local date at the occurrence's start time (for note keys). */
@@ -201,7 +207,7 @@ export async function materializeSeries(
   // occurrence falls in a distinct ISO week, but grouping is defensive).
   const byWeek = new Map<string, string[]>();
   for (const planned of preview.generate) {
-    const key = weekKeyForDate(planned.occurrenceDateISO);
+    const key = weekKeyForDate(planned.occurrenceDateISO, definition!.startDate);
     const list = byWeek.get(key);
     if (list) list.push(planned.occurrenceDateISO);
     else byWeek.set(key, [planned.occurrenceDateISO]);
