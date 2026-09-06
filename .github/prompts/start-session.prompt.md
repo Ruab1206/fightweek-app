@@ -1,112 +1,150 @@
 ---
 mode: agent
-description: Resume a Fightweek session safely — verify repo state, load only the context the current item needs, and gate implementation behind explicit authority.
+description: Resume a Fightweek session safely — derive the live checkpoint from Git, emit a copy-ready M365 handoff, load only the context the active outcome needs, and gate implementation behind explicit authority.
 ---
 
 # Fightweek session start
 
-Run this at the start of a session, or when resuming after a checkpoint/handoff.
+Run this at the start of a session, or when resuming after a checkpoint/handoff. It is read-only:
+do not modify files, do not begin implementation.
 
-## 1. Checkpoint first
+## 1. Derive the live checkpoint from Git (never from chat memory)
 
-Check, before anything else:
+Establish the checkpoint from the repository itself, using read-only Git:
 
-- current branch
-- current HEAD (hash + subject)
-- tracked worktree is clean (or list what's dirty)
-- staged state is empty (or list what's staged)
-- if deployment/TST is in scope this turn, the relevant upstream ref too
+- repository root, current branch, HEAD (short hash + subject), upstream
+- staged state (should be empty) and tracked modifications
+- relevant untracked work — **do not open unrelated untracked files** (e.g. scratch `scripts/_*.cjs`);
+  never stage, delete, or report them as a problem unless the task targets them directly
+- the active uncommitted outcome (what the current worktree changes represent)
+- the last completed outcome (recent commits) and, where repository evidence supports it, the
+  deployed TST HEAD (`origin/feature/bedre-design`) — do not guess it
+- open category-B decisions and any stale/conflicting task or todo context
 
-Preserve pre-existing untracked files (e.g. scratch `scripts/_*.cjs`) — never stage, delete, or
-report them as a problem unless the user's task targets them directly.
+**Git and the active builder-session history are authoritative for the live checkpoint.** Governing
+documentation is authoritative for product and architecture meaning.
 
-If the user gave an expected checkpoint (branch/HEAD/commit subject), confirm it matches. **Stop
-and report** if it differs — do not proceed past a mismatched checkpoint.
+## 2. Reconcile — reject stale prompts
 
-## 2. Read context just-in-time, not upfront
+If a prompt's expected checkpoint or active outcome conflicts with the live repository/session state
+(wrong HEAD/branch, an outcome already advanced past, or a plan another session superseded), treat it
+as **stale**: stop and report the mismatch instead of proceeding. Do not proceed past a mismatched
+checkpoint.
 
-Do not read every governing doc at session start. Once you know the current item:
+## 3. Required output — two concise blocks
 
-- For self-posted calendar/occurrence/participation/notes/TrainingLog/favorite/persistence/routing
-  work, `/docs/self_posted_lifecycle_and_invariants.md` is the **normative** contract — read it.
-- Pull in `/docs/target_architecture.md` or the other `/docs/*` files only where the item actually
-  needs them (recurrence math, test scenarios, core flows, decisions log).
-- Otherwise, inspect only the repository paths the item touches.
+**Block 1 — Builder checkpoint**
 
-## 3. Role split
+- repository · branch · HEAD · subject · worktree · staged state
+- active uncommitted outcome
+- last completed outcome
+- deployed TST HEAD (if evidenced)
+- category-B decision needed (if any)
+- recommended next outcome
+- whether this session supersedes an older plan
 
-- **Rune** — Product Owner (product/user-journey decisions).
-- **M365 Copilot** — solution architect (lifecycle/invariant assessment).
-- **GitHub Copilot (you)** — repository-informed builder.
+**Block 2 — M365 handoff** (compact, copy-ready):
 
-When you surface an open question, classify it explicitly as a **PO decision**, an **architect
-decision**, or a **builder implementation detail**. Don't decide product meaning yourself.
+```
+M365 HANDOFF
 
-## 4. Implementation requires explicit authority
+Live checkpoint:
+- branch:
+- HEAD:
+- active uncommitted outcome:
+- last completed outcome:
+- deployed TST HEAD:
 
-Completing repository discovery is never itself authorization to code. Before writing any code,
-report:
+Builder assessment:
+- checkpoint conflict:
+- category-B decision:
+- recommended next outcome:
 
-- repository evidence found
-- concrete disagreement or risk (if any)
-- affected canonical concepts (see §6)
-- affected invariants
-- proposed smallest coherent slice
-- stop conditions
-- whether a PO decision is still open
+Instruction:
+Reconcile the M365 plan against this live checkpoint before creating the next builder delegation.
+```
 
-Only implement when the **current** user instruction explicitly authorizes it. A read-only,
-discovery-only, review-only, or stop-after-report instruction is a hard gate — stop there even if
-everything looks clean.
+The start-session response is sufficient — do not store this checkpoint in normative documentation and
+do not create a manually maintained checkpoint file. A gitignored/ephemeral handoff artifact may be
+offered only as optional.
 
-## 5. Fast path once a slice is approved
+## 4. Read context just-in-time
 
-For a normal, already-authorized slice: narrow inspection → smallest coherent implementation →
-focused tests → verification proportionate to risk → full diff review → a concise, decision-oriented
-report.
+Do not read every governing doc, and do not run broad repository discovery, at session start. Once the
+active outcome is known:
 
-Avoid: re-running broad repository discovery you already did this session, re-reading governing
-docs you already loaded, reopening a settled PO/architect decision, unrelated refactoring,
-unnecessary documentation commits, and treating green tests as proof of untested lifecycle
-semantics they don't actually cover.
+- For self-posted calendar / occurrence / participation / notes / TrainingLog / favorite / persistence
+  / routing work, `/docs/self_posted_lifecycle_and_invariants.md` is the **normative** contract — read it.
+- Pull in `/docs/target_architecture.md` or other `/docs/*` only where the outcome needs them.
+- Otherwise inspect only the repository paths the outcome touches.
 
-## 6. Protect the architecture
+## 5. Implementation requires explicit authority
 
-Identify and protect, wherever the current item touches them: `EventSeries`, `EventOccurrence`,
-`CalendarEntry`, `Participation`, `Note`, `TrainingLog`, `Favorite`, invitation RSVP, and
-occurrence/series identity + suppression/exception invariants.
+Discovery is never itself authorization. A read-only, discovery-only, review-only, or
+stop-after-report instruction is a hard gate — stop there even if everything looks clean. Implement
+only when the **current** instruction explicitly authorizes it, after reconciling the checkpoint (hard
+gate 1).
 
-Never treat a transitional presentation contract or persistence envelope as a durable domain
-aggregate. Never use a mutable tuple (name/time/status/etc.) as canonical identity — identity is
-always an explicit, stable id.
+## 6. Roles, autonomy, and the three hard gates
 
-## 7. Environment and deployment gates
+Follow the collaboration model in `/.github/copilot-instructions.md`: Rune = PO, M365 = architect,
+you = repository-informed builder; **Level 1 autonomy is default for category-A** technical mechanics
+(choose files, boundaries, names, signatures, tests, verification, commits — silently, reported in one
+line). For a **category-B** decision (product outcome, lifecycle/recurrence/deletion meaning, canonical
+identity, authorization/privacy, TST/PRD behavior, migration, destructive shared-data, or an excluded
+surface) emit one concise `STOP — category B` line. Classify each open question as a **PO**,
+**architect**, or **builder** matter. The only universal gates are: (1) reconcile checkpoint + outcome
+before implementing; (2) stop before unapproved product/identity/lifecycle/authorization/privacy/
+environment/migration change; (3) explicit approval + fast-forward / allow-list / cleanup control for
+push, PRD, shared Firebase/rules, or destructive ops.
 
-- No commit unless explicitly authorized this turn.
-- No push or deployment unless explicitly authorized this turn. Never force-push.
-- Promoting to the shared TST branch requires an explicitly checked fast-forward — stop and report
-  on divergence or a non-fast-forward, never force through it.
+## 7. Once a slice is authorized — the fast path
+
+Narrow inspection → smallest coherent implementation → focused tests → verification proportionate to
+risk → full diff review → a short, delta-oriented report. Reuse this session's evidence; don't re-run
+broad discovery, re-read already-loaded docs, reopen settled decisions, or re-verify what the previous
+turn proved. Commit at green, coherent sub-slice checkpoints; update normative docs once per shipped
+outcome. Default builder dissent: one short repository-evidenced line, then continue if it stays inside
+category A.
+
+## 8. Default implementation-delegation format
+
+A routine delegation should carry only: (1) authoritative checkpoint, (2) approved outcome, (3) product
+meaning, (4) architecture boundary, (5) material safety constraints, (6) genuine stop conditions, (7)
+acceptance evidence. **Builder-owned by default:** exact files, helper design, signatures, test-file
+organization, refactoring mechanics, focused checks, and commit grouping. Reserve exact file
+allow-lists for destructive cleanup, staging of mixed tracked/untracked work, migrations, shared-data
+operations, or another explicitly high-risk boundary.
+
+## 9. Protect the architecture
+
+Protect, wherever the outcome touches them: `EventSeries`, `EventOccurrence`, `CalendarEntry`,
+`Participation`, `Note`, `TrainingLog`, `Favorite`, invitation RSVP, and occurrence/series identity +
+suppression/exception invariants. Never treat a transitional presentation contract or persistence
+envelope as a durable domain aggregate. Never use a mutable tuple (name/time/status/etc.) as canonical
+identity — identity is always an explicit, stable id.
+
+## 10. Environment and deployment gates
+
+- No commit unless explicitly authorized this turn. No push or deployment unless explicitly authorized
+  this turn. Never force-push.
+- Promoting to the shared TST branch requires an explicitly checked fast-forward — stop and report on
+  divergence or a non-fast-forward, never force through it.
 - When manual TST verification is approved, use the stable TST URL and its redirect-login flow.
-- Any TST data write follows the COPILOT TEST ledger and its cleanup rule — writes stay minimal
-  because current TST and PRD share the same Firebase project/data.
-- A future relational-DB migration would require isolated TST/PRD databases and fail-closed
-  environment selection — flag this if a task starts to assume otherwise.
+- Any TST data write follows the COPILOT TEST ledger and its cleanup rule — writes stay minimal because
+  current TST and PRD share the same Firebase project/data.
+- A future relational-DB migration would require isolated TST/PRD databases and fail-closed environment
+  selection — flag this if a task starts to assume otherwise.
 
-## 8. Keep evidence categories separate
+## 11. Keep evidence categories separate
 
-In every report, distinguish: architecture assessment, automated test results, emulator
-verification, manual TST verification, and assumptions/missing evidence. Never call automated or
-emulator coverage "manual verification."
+In every report distinguish: architecture assessment, automated test results, emulator verification,
+manual TST verification, and assumptions/missing evidence. Never call automated or emulator coverage
+"manual verification."
 
-## 9. Final report shape
+## 12. Session-switch judgment
 
-Keep it concise: checkpoint result, evidence/disagreement, implementation summary, verification
-results, exact changed files, remaining open decisions, commit/deployment status, recommended next
-action.
-
-## 10. Session-switch judgment
-
-At a natural commit or slice checkpoint, state whether continuing in this session is safe or
-whether a fresh session is recommended before the next slice (e.g. before a materially different
-risk class like activating a production trigger). Never start a new chat session yourself — only
-recommend it.
+Recommend a fresh GitHub Copilot session when materially useful — context compaction, a completed major
+milestone, a material domain change, a prompt that contradicts session history, unresolved uncommitted
+work from another outcome, or stale-todo / task-context contamination. Not every slice needs one; never
+start a new chat session yourself — only recommend it.
