@@ -29,6 +29,7 @@ function makeContext(overrides: Partial<LegacySessionAdapterContext> = {}): Lega
   return {
     weekNumber: 34,
     dateISO: '2026-08-24',
+    todayISO: '2026-08-24',
     ...overrides,
   };
 }
@@ -82,7 +83,9 @@ describe('mapLegacySessionToCalendarItemDetail', () => {
       makeContext(),
     );
     expect(detail.recurrenceContext).toEqual({ isRecurring: true, intervalWeeks: 1 });
-    expect(capabilities.recurringEditScope).toBe('this_and_following');
+    // No durable seriesId on this legacy session — 'this' only (see the
+    // dedicated eligibility describe block below for the full contract).
+    expect(capabilities.recurringEditScope).toBe('this');
   });
 
   it('omits recurrence context for a non-recurring session', () => {
@@ -127,14 +130,40 @@ describe('mapLegacySessionToCalendarItemDetail', () => {
   });
 
   // 7. Delete-this-and-following capability is represented where currently supported.
-  it('represents this_and_following recurring edit scope only when the session is recurring', () => {
+  it('represents recurringEditScope only when the session is recurring, and only "this" without a durable seriesId', () => {
     const recurring = mapLegacySessionToCalendarItemDetail(
       makeSession({ isRecurring: true, recurrenceInterval: 2 }),
       makeContext(),
     );
     const nonRecurring = mapLegacySessionToCalendarItemDetail(makeSession(), makeContext());
-    expect(recurring.capabilities.recurringEditScope).toBe('this_and_following');
+    expect(recurring.capabilities.recurringEditScope).toBe('this');
     expect(nonRecurring.capabilities.recurringEditScope).toBeUndefined();
+  });
+
+  describe('recurringEditScope — shared this-and-following eligibility contract', () => {
+    it('is this_and_following for a durable-seriesId session dated today or later', () => {
+      const { capabilities } = mapLegacySessionToCalendarItemDetail(
+        makeSession({ isRecurring: true, seriesId: 'series-1' }),
+        makeContext({ dateISO: '2026-08-24', todayISO: '2026-08-24' }),
+      );
+      expect(capabilities.recurringEditScope).toBe('this_and_following');
+    });
+
+    it('is "this" only for a durable-seriesId session dated in the past (historical)', () => {
+      const { capabilities } = mapLegacySessionToCalendarItemDetail(
+        makeSession({ isRecurring: true, seriesId: 'series-1' }),
+        makeContext({ dateISO: '2026-08-20', todayISO: '2026-08-24' }),
+      );
+      expect(capabilities.recurringEditScope).toBe('this');
+    });
+
+    it('is "this" only for a recurring session without a durable seriesId even when dated today or later (legacy)', () => {
+      const { capabilities } = mapLegacySessionToCalendarItemDetail(
+        makeSession({ isRecurring: true }),
+        makeContext({ dateISO: '2026-08-24', todayISO: '2026-08-24' }),
+      );
+      expect(capabilities.recurringEditScope).toBe('this');
+    });
   });
 
   // 8. Invitation and series-invitation capabilities are represented where currently supported.

@@ -20,8 +20,12 @@ import { useScheduleData, useMultiWeekData, useMultiWeekTeamData } from './hooks
 import { useSessionHandlers } from './hooks/useSessionHandlers';
 import { computeSeriesOccurrenceDates, recurrenceHorizonEndDate } from './hooks/computeSeriesOccurrences';
 import { persistSeriesDeleteAtomically } from './services/seriesDeleteService';
+import { persistSeriesSplitAtomically } from './services/seriesSplitService';
 import { coordinateDurableSeriesDelete } from './domain/calendar/durableSeriesDeleteFlow';
 import { classifyDeleteThisAndFollowingDispatch, describeDurableDeleteOutcome } from './domain/calendar/durableDeleteObservability';
+import { evaluateThisAndFollowingEligibility } from './domain/calendar/seriesEditScopeEligibility';
+import { coordinateThisAndFollowingEdit } from './domain/calendar/seriesSplitFlow';
+import { describeSeriesSplitOutcome, describeThisAndFollowingIneligible } from './domain/calendar/seriesSplitObservability';
 import { useToast } from './hooks/useToast';
 import { useTheme } from './hooks/useTheme';
 import { useCatalogue } from './hooks/useCatalogue';
@@ -1418,16 +1422,57 @@ const App = () => {
           anchorOnDay(startDate);
         }}
         onRecurringEditScope={async (scope, original, submitted, dayName, startDate) => {
-          // Slice 1: only this-occurrence is operational. Bulk-future is gated
-          // OFF at the UI (followingEditSupported={false}), so the future
-          // button cannot emit — Slice 2 will activate it via seriesId split.
-          // A defensive guard keeps this a zero-write no-op if ever reached.
-          if (scope !== 'this_occurrence') return;
           if ((original as any)?.catalogueClassId || (submitted as any)?.catalogueClassId) {
             showToast('Denne træning kan ikke ændres her', 'error');
             return;
           }
           const fromWeek = editingWeek || currentWeek;
+          if (scope === 'this_and_following') {
+            const sel = original as any;
+            const selISO = toLocalISODate(startDate);
+            // Defense-in-depth only — SessionModal's own button gating already
+            // uses this exact same shared contract, so a historical/legacy
+            // dispatch should never reach here. Never re-derives the rule.
+            const eligibility = evaluateThisAndFollowingEligibility({
+              isRecurring: true,
+              seriesId: sel?.seriesId,
+              occurrenceDateISO: selISO,
+              todayISO: toLocalISODate(new Date()),
+            });
+            setModalOpen(false);
+            setEditingWeek(null);
+            try {
+              // coordinateThisAndFollowingEdit guarantees persistSeriesSplitAtomically
+              // runs at most once, and only when eligible. Notes/TrainingLogs/
+              // invitations are never read or written by the split itself —
+              // they stay attached/unchanged via preserved occurrence id+date.
+              const outcome = await coordinateThisAndFollowingEdit({
+                eligibility,
+                persist: () => persistSeriesSplitAtomically({
+                  fighterKey: activeFighterKey,
+                  selected: { id: String(sel.id), seriesId: sel.seriesId, occurrenceDateISO: selISO, isSeriesException: sel.isSeriesException, status: sel.status, isDeleted: sel.isDeleted },
+                  edited: { title: submitted.name, discipline: submitted.category, location: submitted.location, startTime: submitted.start, endTime: submitted.end },
+                }),
+              });
+              if (outcome.kind === 'ineligible') {
+                const feedback = describeThisAndFollowingIneligible(outcome.reason);
+                console.info('[series-split]', feedback.diagnostic);
+                showToast(feedback.toastMessage, feedback.toastType);
+                return;
+              }
+              const feedback = describeSeriesSplitOutcome(outcome.result, { name: submitted.name, seriesId: sel?.seriesId });
+              console.info('[series-split]', feedback.diagnostic);
+              showToast(feedback.toastMessage, feedback.toastType);
+              // Success only after the transaction is confirmed committed. The
+              // affected week documents refresh via the existing onSnapshot
+              // subscriptions (useMultiWeekData) — no separate refetch needed.
+              if (outcome.result.ok) anchorOnDay(startDate);
+            } catch (err) {
+              console.error('[edit-scope] this-and-following split failed:', err);
+              showToast('Kunne ikke opdatere den gentagende træning — prøv igen', 'error');
+            }
+            return;
+          }
           try {
             if (submitted?.status === 'cancelled' && original?.status !== 'cancelled') {
               arrangerActivityRemoved(submitted, dayName, fromWeek, 'this');

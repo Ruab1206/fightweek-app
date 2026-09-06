@@ -12,6 +12,17 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import SessionModal from './SessionModal';
 
+// Dynamic, never hardcoded — this suite runs indefinitely into the future and
+// must not silently start exercising the wrong (historical) eligibility branch.
+function daysFromNow(days: number): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+const TOMORROW = daysFromNow(1);
+const YESTERDAY = daysFromNow(-1);
+
 const recurringInitialData = {
   id: 'sess_1',
   name: 'MMA Sparring',
@@ -25,6 +36,13 @@ const recurringInitialData = {
   isRecurring: true,
 };
 
+// A durable seriesId is what distinguishes an eligible this-and-following
+// occurrence from the legacy (tuple-matched, no seriesId) case above.
+const durableRecurringInitialData = {
+  ...recurringInitialData,
+  seriesId: 'series-abc',
+};
+
 const nonRecurringInitialData = {
   ...recurringInitialData,
   id: 'sess_2',
@@ -36,7 +54,7 @@ function renderModal(overrides: Record<string, unknown> = {}) {
     <SessionModal
       day="Mandag"
       weekNum={33}
-      date={new Date('2026-08-17T00:00:00')}
+      date={TOMORROW}
       initialData={recurringInitialData as any}
       existingSessions={[]}
       onClose={vi.fn()}
@@ -137,7 +155,7 @@ describe('SessionModal — explicit edit-scope prompt', () => {
     expect(submitted).toMatchObject({ name: 'MMA Sparring (ny)' });
   });
 
-  it('"Denne og alle fremtidige træninger" is DISABLED in Slice 1 and never emits', () => {
+  it('"Denne og alle fremtidige træninger" is disabled with a concise explanation for a legacy recurring occurrence (no durable seriesId)', () => {
     const onRecurringEditScope = vi.fn();
     renderModal({ onRecurringEditScope });
 
@@ -148,7 +166,48 @@ describe('SessionModal — explicit edit-scope prompt', () => {
     expect((futureBtn as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(futureBtn);
     expect(onRecurringEditScope).not.toHaveBeenCalled();
-    expect(screen.getByText('Ikke tilgængelig endnu.')).toBeTruthy();
+    expect(screen.getByText('Kun tilgængelig for nyere gentagende træninger.')).toBeTruthy();
+  });
+
+  it('enables "Denne og alle fremtidige træninger" and emits this_and_following for a durable-series occurrence in the future', () => {
+    const onRecurringEditScope = vi.fn();
+    renderModal({ initialData: durableRecurringInitialData, onRecurringEditScope });
+
+    fireEvent.change(screen.getByPlaceholderText('F.eks. MMA Sparring'), { target: { value: 'MMA Sparring (ny)' } });
+    fireEvent.click(screen.getByText('Gem'));
+
+    const futureBtn = screen.getByText('Denne og alle fremtidige træninger').closest('button')!;
+    expect((futureBtn as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(futureBtn);
+
+    expect(onRecurringEditScope).toHaveBeenCalledTimes(1);
+    const [scope, original, submitted] = onRecurringEditScope.mock.calls[0];
+    expect(scope).toBe('this_and_following');
+    expect(original).toMatchObject({ name: 'MMA Sparring', seriesId: 'series-abc' });
+    expect(submitted).toMatchObject({ name: 'MMA Sparring (ny)' });
+  });
+
+  it('enables "Denne og alle fremtidige træninger" for a durable-series occurrence dated exactly today', () => {
+    const onRecurringEditScope = vi.fn();
+    renderModal({ date: daysFromNow(0), initialData: durableRecurringInitialData, onRecurringEditScope });
+
+    fireEvent.change(screen.getByPlaceholderText('F.eks. MMA Sparring'), { target: { value: 'MMA Sparring (ny)' } });
+    fireEvent.click(screen.getByText('Gem'));
+
+    const futureBtn = screen.getByText('Denne og alle fremtidige træninger').closest('button')!;
+    expect((futureBtn as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('does not render "Denne og alle fremtidige træninger" at all for a historical occurrence, even with a durable seriesId', () => {
+    const onRecurringEditScope = vi.fn();
+    renderModal({ date: YESTERDAY, initialData: durableRecurringInitialData, onRecurringEditScope });
+
+    fireEvent.change(screen.getByPlaceholderText('F.eks. MMA Sparring'), { target: { value: 'MMA Sparring (ny)' } });
+    fireEvent.click(screen.getByText('Gem'));
+
+    expect(screen.getByText('Kun denne træning')).toBeTruthy();
+    expect(screen.queryByText('Denne og alle fremtidige træninger')).toBeNull();
+    expect(screen.getByText('Annuller')).toBeTruthy();
   });
 
   it('never offers an "all trainings" option', () => {

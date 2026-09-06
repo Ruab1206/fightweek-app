@@ -24,6 +24,7 @@
  */
 import { toDateTime } from './adapters';
 import { sessionNoteKey } from '../../hooks/noteKeys';
+import { evaluateThisAndFollowingEligibility } from './seriesEditScopeEligibility';
 import type { OccurrenceLogAssociation } from './logAssociation';
 import type { TrainingSession } from '../../types/common';
 import type {
@@ -43,6 +44,10 @@ import type {
 export interface LegacySessionAdapterContext {
   weekNumber: number;
   dateISO: string;
+  /** Local "YYYY-MM-DD" today — needed only to classify this-and-following
+   *  eligibility via the single shared `evaluateThisAndFollowingEligibility`
+   *  contract (never re-derived or used for any other capability here). */
+  todayISO: string;
   /** Reuse the existing read-side classification unchanged — never recomputed here. */
   trainingLogAssociation?: OccurrenceLogAssociation;
   canLogTraining?: boolean;
@@ -102,7 +107,17 @@ export function mapLegacySessionToCalendarItemDetail(
     canInvite: context.canInvite ?? false,
     canSeriesInvite: context.canSeriesInvite ?? false,
   };
-  if (isRecurring) capabilities.recurringEditScope = 'this_and_following';
+  // Single source of truth (shared with SessionModal) — never re-derives the
+  // durable-seriesId/historical rule independently here.
+  if (isRecurring) {
+    const eligibility = evaluateThisAndFollowingEligibility({
+      isRecurring: true,
+      seriesId: session.seriesId,
+      occurrenceDateISO: context.dateISO,
+      todayISO: context.todayISO,
+    });
+    capabilities.recurringEditScope = eligibility.eligible ? 'this_and_following' : 'this';
+  }
   if (context.trainingLogAssociation !== undefined) capabilities.trainingLogAssociation = context.trainingLogAssociation;
 
   return { detail, capabilities };

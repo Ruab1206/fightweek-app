@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { Clock, Calendar } from 'lucide-react';
 
 import { CATEGORIES } from '../config/constants';
-import { addMinutes } from '../utils/dateUtils';
+import { addMinutes, toLocalISODate } from '../utils/dateUtils';
 import { useTheme } from '../hooks/useTheme';
 import { NotesEditor } from './NotesEditor';
 import { sessionNoteKey } from '../hooks/useActivityNotes';
 import { InvitePicker, type InviteCandidate } from './shared/InvitePicker';
+import { evaluateThisAndFollowingEligibility } from '../domain/calendar/seriesEditScopeEligibility';
 import type { InvitationResponse } from '../types/invitation';
 import { TrainingLogSummary } from './TrainingLogSummary';
 import type { TrainingHistoryItem } from '../domain/calendar/types';
@@ -148,6 +149,20 @@ interface SessionModalProps {
 const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _existingSessions, onClose, onSave, onDelete, onDeleteThisAndFuture, onRecurrenceSave, onFeedback: _onFeedback, getNote, saveNote, inviteCandidates, existingInvitees, onInvite, onSeriesInvite, onUninvite, canLogTraining, onLogTraining, trainingLogAssociation, onOpenTrainingLogDetail, onRecurringEditScope }: SessionModalProps) => {
     const { isDark } = useTheme();
     const isNew = !initialData;
+    // Edit-scope slice: whether this is an EXISTING recurring session (needed
+    // both to gate the Save routing below and to compute the this-and-
+    // following eligibility for the JSX render further down).
+    const isRecurringExisting = !isNew && !!(initialData as any)?.isRecurring;
+    // Single shared source of truth (also used by legacySessionDetailAdapter) —
+    // never re-derive the durable-seriesId/historical rule independently here.
+    const thisAndFollowingEligibility = isRecurringExisting
+        ? evaluateThisAndFollowingEligibility({
+            isRecurring: true,
+            seriesId: (initialData as any)?.seriesId,
+            occurrenceDateISO: toLocalISODate(date),
+            todayISO: toLocalISODate(new Date()),
+        })
+        : null;
     const [form, setForm] = useState<SessionForm>({
         name: '', category: 'MMA', start: '17:00', end: '18:30', location: '', status: 'active', cancellationReason: '', cancellationTime: null
     });
@@ -216,7 +231,6 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
         // the change applies to — never silently pick a scope. A session with
         // no actual change (Save clicked with nothing edited) just closes;
         // there is nothing to persist and no scope to ask about.
-        const isRecurringExisting = !isNew && !!(initialData as any)?.isRecurring;
         if (isRecurringExisting && onRecurringEditScope) {
             if (!hasPersistedSessionFieldChange(initialData, form)) {
                 onClose();
@@ -254,12 +268,12 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
         }
     };
 
-    // Edit-scope slice: fires once the user resolves the prompt. Slice 1 only
-    // reaches this with 'this_occurrence' (bulk-future is disabled); invites
-    // go out for this single activity like a normal single-occurrence save.
+    // Edit-scope slice: fires once the user resolves the prompt. Invites go
+    // out only for a single-occurrence save ("this and following" never reads
+    // or writes invitations — they remain snapshots, see architecture notes).
     const resolveEditScope = (scope: SessionEditScope) => {
         setShowEditScopePrompt(false);
-        if (selectedInvitees.length > 0 && onInvite) {
+        if (scope === 'this_occurrence' && selectedInvitees.length > 0 && onInvite) {
             onInvite(form, selectedInvitees);
         }
         onRecurringEditScope!(scope, initialData as SessionForm, form, day, date);
@@ -483,16 +497,28 @@ const SessionModal = ({ day, weekNum, date, initialData, existingSessions: _exis
                             className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-blue-400 hover:bg-blue-900/20' : 'text-blue-600 hover:bg-blue-50'}`}>
                             Kun denne træning
                         </button>
-                        {/* Slice 1: bulk-future is not operational yet — shown disabled so the
-                            UI never implies availability and never fails after a selection.
-                            Slice 2 activates it via a seriesId-based split. */}
-                        <button type="button" disabled aria-disabled="true"
-                            className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium cursor-not-allowed opacity-40 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>
-                            Denne og alle fremtidige træninger
-                        </button>
-                        <p className={`px-4 text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>
-                            Ikke tilgængelig endnu.
-                        </p>
+                        {/* Historical occurrence: this-and-following is never offered at all
+                            (not even disabled) — "Kun denne træning" remains the only forward option. */}
+                        {thisAndFollowingEligibility?.reason !== 'historical' && (
+                            thisAndFollowingEligibility?.eligible ? (
+                                <button onClick={() => resolveEditScope('this_and_following')}
+                                    className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-blue-400 hover:bg-blue-900/20' : 'text-blue-600 hover:bg-blue-50'}`}>
+                                    Denne og alle fremtidige træninger
+                                </button>
+                            ) : (
+                                <>
+                                    {/* Legacy recurring occurrence (no durable seriesId): shown, but
+                                        disabled with a concise explanation — never fails after a click. */}
+                                    <button type="button" disabled aria-disabled="true"
+                                        className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium cursor-not-allowed opacity-40 ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>
+                                        Denne og alle fremtidige træninger
+                                    </button>
+                                    <p className={`px-4 text-xs ${isDark ? 'text-slate-500' : 'text-ds-text-subtlest'}`}>
+                                        Kun tilgængelig for nyere gentagende træninger.
+                                    </p>
+                                </>
+                            )
+                        )}
                         <button onClick={() => setShowEditScopePrompt(false)}
                             className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${isDark ? 'text-slate-400 hover:bg-slate-800' : 'text-ds-text-subtle hover:bg-surface-hover'}`}>
                             Annuller
