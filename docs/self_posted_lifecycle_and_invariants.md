@@ -297,7 +297,7 @@ This section is normative for the **legacy week-document recurring self-posted t
 - R14–R24 supersede the prior statements that suppressions were unconsumed and that no repository code read `EventSeries` definitions; both are now false.
 - The technical materialization horizon remains **52 weeks** (unchanged); this is a technical cap only, never a substitute for an `EventSeries` definition's semantic `endDate` (open-ended when `null`).
 - **Delete**-this-and-following for a `seriesId`-bearing self-posted occurrence is now activated (Slice 2d — see J.9). **Edit**-this-and-following (the series-split re-parent) remains disabled and MUST perform zero writes until separately approved; its `seriesSplitService`/`planSeriesSplit` still have no production consumer.
-- Manual TST verification and production deployment of the Slice 2c materializer and the Slice 2d durable delete remain outstanding.
+- TST manual verification of the Slice 2c materializer and the Slice 2d durable delete is complete for owner and admin cross-owner paths. Production/main promotion remains separate and unapproved.
 - Legacy occurrences without `seriesId` are **not** migrated or backfilled by this section. They remain single-occurrence-only.
 - Legacy delete-this-and-future (tuple-matched, no-`seriesId`) is unchanged; the durable `seriesId`-based delete-this-and-following is the new operation in J.9.
 - Invitation behaviour is unchanged by R1–R24.
