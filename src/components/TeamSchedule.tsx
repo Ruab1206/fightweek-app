@@ -52,7 +52,7 @@ const TeamSchedule = ({ days, teamData, currentWeek, isDark = true }: TeamSchedu
                         if (!data) return;
                         const sessions = data[day] || [];
                         sessions.forEach(s => {
-                            if (s.isRestDay) return;
+                            if (s.isRestDay || s.isDeleted) return;
                             const key = `${s.start}###${s.location}`;
                             if (!slots[key]) slots[key] = [];
                             slots[key].push({ ...s, fighter });

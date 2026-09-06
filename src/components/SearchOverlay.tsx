@@ -29,7 +29,7 @@ const SearchOverlay = ({ searchQuery, scrollDays, multiWeekData, isDark, onOpenS
     const weekData = multiWeekData[sd.weekNumber] || {};
     const sessions = weekData[sd.dayName] || [];
     for (const s of sessions) {
-      if (s.isRestDay) continue;
+      if (s.isRestDay || s.isDeleted) continue;
       const fields = [s.name, s.category, s.location, s.start, s.end, s.cancellationReason].filter(Boolean).map((f: string) => f.toLowerCase());
       if (fields.some((f: string) => f.includes(q))) {
         results.push({ date: sd.date, dayName: sd.dayName, weekNum: sd.weekNumber, session: s, key: sd.key });

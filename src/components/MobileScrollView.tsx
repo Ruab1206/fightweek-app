@@ -187,7 +187,7 @@ const MobileScrollView = ({ scrollDays, multiWeekData, calendarItemsByDayKey, is
               {/* Friend sessions overlay */}
               {visibleFriends.length > 0 && visibleFriends.map(friend => {
                 const fWeek = friendWeekData[friend]?.[scrollDay.weekNumber] || {};
-                const fSessions = (fWeek[scrollDay.dayName] || []).filter((s: any) => !s.isRestDay);
+                const fSessions = (fWeek[scrollDay.dayName] || []).filter((s: any) => !s.isRestDay && !s.isDeleted);
                 if (fSessions.length === 0) return null;
                 const colorClass = friendColors[friend] || 'bg-gray-400';
                 return (

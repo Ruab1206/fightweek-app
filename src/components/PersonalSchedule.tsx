@@ -46,7 +46,7 @@ const PersonalSchedule = ({ days, scheduleData, weekDates, fullWeekDates, isRead
     <div className="grid grid-cols-1 md:grid-cols-7 md:grid-rows-[1fr_auto] gap-3">
     {days.map(day => {
       const sessions = scheduleData[day] || [];
-      const visibleSessions = sessions.filter(s => !s.isRestDay && s.type !== 'fravær');
+      const visibleSessions = sessions.filter(s => !s.isRestDay && !s.isDeleted && s.type !== 'fravær');
       const fraværSessions = sessions.filter(s => s.type === 'fravær');
       const isExpanded = expandedDay === day;
       const dayCatalogue = catalogueByDay?.[day] || [];
@@ -143,7 +143,7 @@ const PersonalSchedule = ({ days, scheduleData, weekDates, fullWeekDates, isRead
           {/* Friend sessions overlay (desktop) */}
           {visibleFriends.length > 0 && visibleFriends.map(friend => {
             const fWeek = friendWeekData[friend]?.[currentWeek] || {};
-            const fSessions = (fWeek[day] || []).filter((s: any) => !s.isRestDay);
+            const fSessions = (fWeek[day] || []).filter((s: any) => !s.isRestDay && !s.isDeleted);
             if (fSessions.length === 0) return null;
             const colorClass = friendColors[friend] || 'bg-gray-400';
             return (

@@ -19,6 +19,8 @@ import { useAuth } from './hooks/useAuth';
 import { useScheduleData, useMultiWeekData, useMultiWeekTeamData } from './hooks/useScheduleData';
 import { useSessionHandlers } from './hooks/useSessionHandlers';
 import { computeSeriesOccurrenceDates, recurrenceHorizonEndDate } from './hooks/computeSeriesOccurrences';
+import { persistSeriesDeleteAtomically } from './services/seriesDeleteService';
+import { coordinateDurableSeriesDelete } from './domain/calendar/durableSeriesDeleteFlow';
 import { useToast } from './hooks/useToast';
 import { useTheme } from './hooks/useTheme';
 import { useCatalogue } from './hooks/useCatalogue';
@@ -197,6 +199,10 @@ const App = () => {
       p = cancelInvitationForActivity(activeFighterKey, title, iso, start);
     }
     p.catch((err) => console.error('[invitation] cancel-on-remove failed:', err));
+    // Return the promise so an awaiting caller (the durable delete flow) can
+    // detect failure; fire-and-forget callers ignore it and the .catch above
+    // still handles rejection (no unhandled rejection).
+    return p;
   }, [activeFighterKey, invitations, cancelInvitationForActivity, cancelInvitationsForActivityFrom, cancelSeries]);
 
   // --- Refs & scroll-to-today (must be before early returns) ---
@@ -1364,11 +1370,42 @@ const App = () => {
             : 'indeterminate';
           handleDeleteSession(id, trainingLogSignal);
         }}
-        onDeleteThisAndFuture={(dayName, name, start, fromWeek) => {
+        onDeleteThisAndFuture={async (dayName, name, start, fromWeek) => {
+          const sel = editingSession as any;
+          // Durable self-posted recurring series (seriesId, not catalogue-linked)
+          // route to the seriesId-based durable delete: it ENDS the EventSeries
+          // definition before the selected date so the materializer cannot
+          // regenerate the removed range. Legacy no-seriesId occurrences keep
+          // the unchanged tuple-based handler below.
+          const isDurableSeries = !!sel?.seriesId && !sel?.catalogueClassId;
           setModalOpen(false);
           setEditingWeek(null);
+          if (isDurableSeries) {
+            const selDate = getDateForWeekDay(fromWeek, dayName);
+            const selISO = selDate ? toLocalISODate(selDate) : '';
+            // Ordering: run the durable delete FIRST; cancel invitations only
+            // after it succeeds; surface a distinct partial-side-effect state and
+            // never retry the destructive delete. Deletion marks every affected
+            // occurrence as an invisible isDeleted record (no protection lookup).
+            const outcome = await coordinateDurableSeriesDelete({
+              persist: () => persistSeriesDeleteAtomically({
+                fighterKey: activeFighterKey,
+                selected: { id: String(sel.id), seriesId: sel.seriesId, occurrenceDateISO: selISO, isSeriesException: sel.isSeriesException, status: sel.status },
+              }),
+              cancelInvitations: () => arrangerActivityRemoved({ name, start }, dayName, fromWeek, 'future') ?? Promise.resolve(),
+            });
+            if (outcome.kind === 'deleted') {
+              showToast(`${name} fjernet`, 'success');
+            } else if (outcome.kind === 'deleted_invitations_failed') {
+              // Deletion committed; only the invitation update failed — not a rollback.
+              showToast('Træningen blev slettet, men invitationerne kunne ikke opdateres.', 'error');
+            } else {
+              showToast('Kunne ikke slette den gentagende træning.', 'error');
+            }
+            return;
+          }
+          // Legacy (no durable seriesId) path unchanged.
           showToast(`${name} fjernet`, 'success');
-          // Cancel invitations for this and every future occurrence too (#1201).
           arrangerActivityRemoved({ name, start }, dayName, fromWeek, 'future');
           handleDeleteThisAndFuture(dayName, name, start, fromWeek);
         }}

@@ -58,7 +58,7 @@ export function dispatchCalendarItem(
   raw: unknown,
   context: DayCalendarItemProjectionContext,
 ): CalendarItemSummary | null {
-  const item = raw as { type?: unknown; isRestDay?: unknown };
+  const item = raw as { type?: unknown; isRestDay?: unknown; isDeleted?: unknown };
 
   // Fravær is explicitly out of scope for this projection: PersonalSchedule
   // and MobileScrollView already render it in a structurally separate
@@ -71,6 +71,11 @@ export function dispatchCalendarItem(
   // produce a broken summary (undefined title, midnight fallback time),
   // not a real card, so this projection excludes them the same way.
   if (item.isRestDay) return null;
+
+  // Durable-deletion tombstones are invisible: excluded from every calendar
+  // presentation like rest-day markers, but distinct from them and from
+  // status:'cancelled' (which stays visible as "Aflyst").
+  if (item.isDeleted === true) return null;
 
   if (item.type === 'calendar_entry') {
     return mapProjectedCalendarEntryToCalendarItemSummary(

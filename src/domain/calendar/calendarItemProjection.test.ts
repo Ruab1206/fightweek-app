@@ -108,6 +108,14 @@ describe('projectDayCalendarItems', () => {
     expect(dispatchCalendarItem(makeLegacySession({ id: 'x' }), context)?.itemKey).toBe('self_posted_legacy:33:2026-08-17:x');
   });
 
+  it('excludes an invisible isDeleted deletion record, but still projects a plain cancelled session', () => {
+    const context = makeContext();
+    // Durable-deletion tombstone → invisible.
+    expect(dispatchCalendarItem(makeLegacySession({ id: 'del', isDeleted: true }), context)).toBeNull();
+    // Legacy cancelled session (visible "Aflyst") is NOT excluded by this slice.
+    expect(dispatchCalendarItem(makeLegacySession({ id: 'canc', status: 'cancelled' }), context)).not.toBeNull();
+  });
+
   // 1. Legacy self-posted merged items dispatch to the existing legacy summary adapter.
   it('dispatches a legacy self-posted item to the existing legacy summary adapter', () => {
     const [summary] = projectDayCalendarItems([makeLegacySession({ id: 'sess_7' })], makeContext({ weekNumber: 5, dateISO: '2026-02-02' }));

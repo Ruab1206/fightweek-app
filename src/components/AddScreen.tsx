@@ -307,7 +307,7 @@ const AddScreen = ({ defaultType, activeDay, multiWeekData, isDark, editingFravÃ
   // Derive sessions for the currently selected day from multiWeekData
   const existingSessions = useMemo(() => {
     const weekData = multiWeekData[selectedDay.weekNumber] || {};
-    return (weekData[selectedDay.dayName] || []).filter((s: any) => !s.isRestDay);
+    return (weekData[selectedDay.dayName] || []).filter((s: any) => !s.isRestDay && !s.isDeleted);
   }, [multiWeekData, selectedDay.weekNumber, selectedDay.dayName]);
 
   // FravÃ¦r form - pre-fill from editingFravÃ¦r if present
@@ -363,7 +363,7 @@ const AddScreen = ({ defaultType, activeDay, multiWeekData, isDark, editingFravÃ
     return list;
   }, [allOptions, selDiscipline, selGym, search]);
 
-  const visibleSessions = existingSessions.filter((s: any) => !s.isRestDay && s.status !== 'cancelled');
+  const visibleSessions = existingSessions.filter((s: any) => !s.isRestDay && !s.isDeleted && s.status !== 'cancelled');
 
   const handleHoldSave = (session: any, recurrence: RecurrenceRule, inviteeEmails: string[]) => {
     if (recurrence.interval === 0) {
