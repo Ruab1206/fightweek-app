@@ -43,30 +43,80 @@ checkpoint.
 - recommended next outcome
 - whether this session supersedes an older plan
 
-**Block 2 — M365 handoff** (compact, copy-ready):
+**Block 2 — M365 handoff** (compact, copy-ready, transfer-ready — self-contained enough that a new
+M365 session does not need the prior M365 conversation). Fill every field from this session's live
+evidence; never hardcode transient state (hashes, dates) into this tracked template itself:
 
 ```
 M365 HANDOFF
 
-Live checkpoint:
+## 1. Live checkpoint
+- repository:
 - branch:
-- HEAD:
+- HEAD (hash + subject):
+- tracked worktree:
+- staged state:
 - active uncommitted outcome:
 - last completed outcome:
 - deployed TST HEAD:
+- stale vs. prior plan:
 
-Builder assessment:
-- checkpoint conflict:
-- category-B decision:
-- recommended next outcome:
+## 2. Collaboration contract
+- Roles: Rune = PO (user value, UX, business rules, priority, privacy, major complexity trade-offs).
+  M365 Copilot = solution architect (architectural coherence, domain-model guardrails,
+  environment/migration gates, technical sequencing, reconciling the plan against the live checkpoint).
+  GitHub Copilot = repository-informed builder (inspection, technical dissent, design, implementation,
+  tests, diff review, commit composition).
+- Builder autonomy: Level 1 default for category-A technical mechanics (files, names, signatures,
+  tests, verification, commits) — done silently, reported in one line; may substitute a safer
+  repository-informed mechanism while preserving the approved outcome.
+- Dissent: one short repository-evidenced dissent, then continue if it stays category A; else emit one
+  concise "STOP — category B" line.
+- Three universal hard gates: (1) reconcile the live checkpoint and approved outcome before
+  implementing; (2) stop before any unapproved product/identity/lifecycle/authorization/privacy/
+  environment/migration change; (3) explicit approval + the relevant fast-forward/allow-list/cleanup
+  control for push, PRD, shared Firebase/rules, or destructive operations.
+- Git is authoritative for live repository state; governing docs (copilot-instructions.md, /docs/*)
+  are authoritative for product and architecture meaning.
 
-Instruction:
-Reconcile the M365 plan against this live checkpoint before creating the next builder delegation.
+## 3. Decision state
+- PO decision required:
+- Architect decision required:
+- Builder implementation details still open:
+- Settled — do not reopen:
+
+## 4. Recommended next outcome
+- Next outcome:
+- Why this follows from the live checkpoint:
+- GitHub Copilot session: continue / fresh session recommended — because:
+- Deployment / shared-data gates in play:
+
+## 5. M365 response contract
+Respond using exactly:
+1. Important PO decision
+2. Architecture recommendation
+3. Model recommendation
+4. One complete copy-ready GitHub Copilot prompt
+Rules: the GitHub Copilot prompt must be in English; the model recommendation appears outside the
+prompt, never inside it; do not prescribe internal implementation mechanics unnecessarily (builder-owned
+by default); reconcile this plan against the live checkpoint above before delegating.
+
+## 6. Before switching M365 sessions
+Required only when this handoff will initialize a NEW M365 Copilot session (not an extra approval gate
+for routine delegation within the current session):
+1. Paste this handoff into the CURRENT M365 session first.
+2. Ask that session to verify: the live checkpoint is correctly interpreted; the collaboration model is
+   sufficiently represented; settled decisions are preserved; unresolved decisions are visible; the next
+   outcome is correctly sequenced.
+3. Correct the handoff if that review finds a material omission.
+4. Only then use the reviewed handoff as the first message in the new M365 session.
 ```
 
 The start-session response is sufficient — do not store this checkpoint in normative documentation and
 do not create a manually maintained checkpoint file. A gitignored/ephemeral handoff artifact may be
-offered only as optional.
+offered only as optional. The collaboration contract in Block 2 is a compact restatement sourced from
+`/.github/copilot-instructions.md` for transfer purposes — never paste that file's full contents into
+the handoff.
 
 ## 4. Read context just-in-time
 
