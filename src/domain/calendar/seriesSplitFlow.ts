@@ -27,3 +27,17 @@ export async function coordinateThisAndFollowingEdit<R>(deps: {
   const result = await deps.persist();
   return { kind: 'split', result };
 }
+
+/**
+ * Modal-lifecycle gate for App.tsx's this-and-following dispatch: the edit
+ * flow may close ONLY after a CONFIRMED persistence success. Every other
+ * outcome (ineligible, planner rejection, stale anchor, transaction failure —
+ * or any future outcome shape this has never seen) keeps the modal open with
+ * the user's submitted values intact; it never reports success and never
+ * silently discards the attempted edit.
+ */
+export function shouldCloseThisAndFollowingModal<R extends { ok: boolean }>(
+  outcome: ThisAndFollowingEditOutcome<R>,
+): boolean {
+  return outcome.kind === 'split' && outcome.result.ok === true;
+}

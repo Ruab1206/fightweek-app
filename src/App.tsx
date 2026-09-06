@@ -24,7 +24,7 @@ import { persistSeriesSplitAtomically } from './services/seriesSplitService';
 import { coordinateDurableSeriesDelete } from './domain/calendar/durableSeriesDeleteFlow';
 import { classifyDeleteThisAndFollowingDispatch, describeDurableDeleteOutcome } from './domain/calendar/durableDeleteObservability';
 import { evaluateThisAndFollowingEligibility } from './domain/calendar/seriesEditScopeEligibility';
-import { coordinateThisAndFollowingEdit } from './domain/calendar/seriesSplitFlow';
+import { coordinateThisAndFollowingEdit, shouldCloseThisAndFollowingModal } from './domain/calendar/seriesSplitFlow';
 import { describeSeriesSplitOutcome, describeThisAndFollowingIneligible } from './domain/calendar/seriesSplitObservability';
 import { useToast } from './hooks/useToast';
 import { useTheme } from './hooks/useTheme';
@@ -1439,8 +1439,13 @@ const App = () => {
               occurrenceDateISO: selISO,
               todayISO: toLocalISODate(new Date()),
             });
-            setModalOpen(false);
-            setEditingWeek(null);
+            // Modal-lifecycle contract: the edit flow may close ONLY after a
+            // CONFIRMED persistence success (shouldCloseThisAndFollowingModal).
+            // Every other outcome — ineligible, planner rejection, stale
+            // anchor, transaction failure, or an unexpected exception — leaves
+            // modalOpen/editingWeek/editingSession untouched, so the modal
+            // stays open with the user's submitted values intact; it never
+            // reports success and never silently discards the attempt.
             try {
               // coordinateThisAndFollowingEdit guarantees persistSeriesSplitAtomically
               // runs at most once, and only when eligible. Notes/TrainingLogs/
@@ -1460,13 +1465,17 @@ const App = () => {
                 showToast(feedback.toastMessage, feedback.toastType);
                 return;
               }
-              const feedback = describeSeriesSplitOutcome(outcome.result, { name: submitted.name, seriesId: sel?.seriesId });
+              const feedback = describeSeriesSplitOutcome(outcome.result, { name: submitted.name });
               console.info('[series-split]', feedback.diagnostic);
               showToast(feedback.toastMessage, feedback.toastType);
-              // Success only after the transaction is confirmed committed. The
+              // Close only after the transaction is confirmed committed. The
               // affected week documents refresh via the existing onSnapshot
               // subscriptions (useMultiWeekData) — no separate refetch needed.
-              if (outcome.result.ok) anchorOnDay(startDate);
+              if (shouldCloseThisAndFollowingModal(outcome)) {
+                setModalOpen(false);
+                setEditingWeek(null);
+                anchorOnDay(startDate);
+              }
             } catch (err) {
               console.error('[edit-scope] this-and-following split failed:', err);
               showToast('Kunne ikke opdatere den gentagende træning — prøv igen', 'error');

@@ -3,7 +3,7 @@
  * no React. Mirrors durableSeriesDeleteFlow.test.ts's style.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { coordinateThisAndFollowingEdit } from './seriesSplitFlow';
+import { coordinateThisAndFollowingEdit, shouldCloseThisAndFollowingModal } from './seriesSplitFlow';
 
 describe('coordinateThisAndFollowingEdit', () => {
   it('calls persist exactly once and returns its raw result when eligible', async () => {
@@ -36,5 +36,27 @@ describe('coordinateThisAndFollowingEdit', () => {
   it('propagates a persist rejection instead of swallowing it', async () => {
     const persist = vi.fn().mockRejectedValue(new Error('transaction boom'));
     await expect(coordinateThisAndFollowingEdit({ eligibility: { eligible: true }, persist })).rejects.toThrow('transaction boom');
+  });
+});
+
+describe('shouldCloseThisAndFollowingModal', () => {
+  it('closes the modal only after a confirmed successful split', () => {
+    expect(shouldCloseThisAndFollowingModal({ kind: 'split', result: { ok: true } as any })).toBe(true);
+  });
+
+  it('keeps the modal open for an ineligible dispatch', () => {
+    expect(shouldCloseThisAndFollowingModal({ kind: 'ineligible', reason: 'historical' })).toBe(false);
+  });
+
+  it('keeps the modal open for a planner rejection', () => {
+    expect(shouldCloseThisAndFollowingModal({ kind: 'split', result: { ok: false, kind: 'planner', reason: 'missing_definition' } as any })).toBe(false);
+  });
+
+  it('keeps the modal open for a stale/anchor-not-found result', () => {
+    expect(shouldCloseThisAndFollowingModal({ kind: 'split', result: { ok: false, kind: 'stale', reason: 'anchor_not_found' } as any })).toBe(false);
+  });
+
+  it('keeps the modal open for a transaction failure', () => {
+    expect(shouldCloseThisAndFollowingModal({ kind: 'split', result: { ok: false, kind: 'transaction', error: new Error('boom') } as any })).toBe(false);
   });
 });

@@ -20,9 +20,9 @@ describe('describeSeriesSplitOutcome', () => {
   });
 
   it('describes a successful split as success', () => {
-    const feedback = describeSeriesSplitOutcome({ ok: true, newSeriesId: 'new-1', counts: { definitionUpdates: 1, definitionCreates: 1, occurrenceReparents: 2, suppressionContinuations: 0, total: 4 } }, { name: 'MMA Sparring', seriesId: 'old-1' });
+    const feedback = describeSeriesSplitOutcome({ ok: true, newSeriesId: 'new-1', counts: { definitionUpdates: 1, definitionCreates: 1, occurrenceReparents: 2, suppressionContinuations: 0, total: 4 } }, { name: 'MMA Sparring' });
     expect(feedback.toastType).toBe('success');
-    expect(feedback.diagnostic).toEqual({ path: 'series-split', outcome: 'split', seriesId: 'old-1' });
+    expect(feedback.diagnostic).toEqual({ path: 'series-split', outcome: 'split' });
   });
 
   it('describes a stale anchor distinctly from a planner rejection', () => {
@@ -49,9 +49,32 @@ describe('describeSeriesSplitOutcome', () => {
     expect(new Set(messages).size).toBe(reasons.length);
   });
 
-  it('includes the occurrenceDateISO diagnostic only for the conflict reason that carries one', () => {
+  it('never includes occurrenceDateISO in the diagnostic, even for the conflict reason that used to carry one', () => {
     const feedback = describeSeriesSplitOutcome({ ok: false, kind: 'planner', reason: 'conflicting_occurrence_and_suppression', occurrenceDateISO: '2026-06-19' }, { name: 'MMA' });
-    expect(feedback.diagnostic.occurrenceDateISO).toBe('2026-06-19');
+    expect(feedback.diagnostic).not.toHaveProperty('occurrenceDateISO');
+  });
+
+  it('preserves a sanitized Firestore error code for a transaction failure', () => {
+    const feedback = describeSeriesSplitOutcome({ ok: false, kind: 'transaction', error: { code: 'permission-denied', message: 'Missing or insufficient permissions on artifacts/production/users/sankarem00@gmail.com/eventSeries/e3d02fac' } }, { name: 'MMA' });
+    expect(feedback.diagnostic.firestoreErrorCode).toBe('permission-denied');
+  });
+
+  it('falls back to "unknown" when no sanitizable Firestore error code is present', () => {
+    const withoutCode = describeSeriesSplitOutcome({ ok: false, kind: 'transaction', error: new Error('boom') }, { name: 'MMA' });
+    expect(withoutCode.diagnostic.firestoreErrorCode).toBe('unknown');
+    const withBadCode = describeSeriesSplitOutcome({ ok: false, kind: 'transaction', error: { code: '../../etc/passwd' } }, { name: 'MMA' });
+    expect(withBadCode.diagnostic.firestoreErrorCode).toBe('unknown');
+  });
+
+  it('never includes seriesId, occurrence identifiers, or raw error messages in the diagnostic', () => {
+    const feedback = describeSeriesSplitOutcome(
+      { ok: false, kind: 'transaction', error: { code: 'permission-denied', message: 'Missing or insufficient permissions on artifacts/production/users/sankarem00@gmail.com/eventSeries/e3d02fac' } },
+      { name: 'MMA' },
+    );
+    expect(feedback.diagnostic).not.toHaveProperty('seriesId');
+    expect(feedback.diagnostic).not.toHaveProperty('occurrenceDateISO');
+    const serialized = JSON.stringify(feedback.diagnostic);
+    expect(serialized).not.toMatch(/artifacts\/production|@|sankarem00|e3d02fac|password|token/i);
   });
 
   it('never exposes raw document paths, fighter keys, or credentials in the diagnostic', () => {

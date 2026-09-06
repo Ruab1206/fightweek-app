@@ -43,8 +43,10 @@ export interface SeriesSplitDiagnostic {
   outcome: 'split' | 'rejected' | 'ineligible';
   persistKind?: 'planner' | 'stale' | 'transaction';
   reason?: SplitPlanFailureReason | 'anchor_not_found' | ThisAndFollowingIneligibleReason;
-  occurrenceDateISO?: string;
-  seriesId?: string;
+  /** Sanitized Firestore error code (e.g. 'permission-denied') for a transaction
+   *  failure only — 'unknown' when absent/unrecognized. Never the raw message
+   *  (which can echo document paths) and never an occurrence/series identifier. */
+  firestoreErrorCode?: string;
 }
 
 export interface SeriesSplitFeedback {
@@ -53,11 +55,21 @@ export interface SeriesSplitFeedback {
   diagnostic: SeriesSplitDiagnostic;
 }
 
+/** A Firestore error `code` is a short lowercase-hyphenated token (e.g.
+ *  'permission-denied', 'resource-exhausted', 'aborted'). Anything else
+ *  (missing, wrong type, or an unexpected shape) collapses to 'unknown' so
+ *  arbitrary server error text can never leak into a diagnostic. */
+export function sanitizeFirestoreErrorCode(error: unknown): string {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  if (typeof code === 'string' && /^[a-z][a-z0-9-]*$/.test(code)) return code;
+  return 'unknown';
+}
+
 export function describeSeriesSplitOutcome(
   result: SeriesSplitPersistResult,
-  context: { name: string; seriesId?: string },
+  context: { name: string },
 ): SeriesSplitFeedback {
-  const base = { path: 'series-split' as const, seriesId: context.seriesId };
+  const base = { path: 'series-split' as const };
 
   if (result.ok) {
     return { toastMessage: `${context.name} opdelt fra i dag`, toastType: 'success', diagnostic: { ...base, outcome: 'split' } };
@@ -73,7 +85,7 @@ export function describeSeriesSplitOutcome(
     return {
       toastMessage: 'Kunne ikke opdatere den gentagende træning — prøv igen.',
       toastType: 'error',
-      diagnostic: { ...base, outcome: 'rejected', persistKind: 'transaction' },
+      diagnostic: { ...base, outcome: 'rejected', persistKind: 'transaction', firestoreErrorCode: sanitizeFirestoreErrorCode(result.error) },
     };
   }
   // result.kind === 'planner'
@@ -81,7 +93,7 @@ export function describeSeriesSplitOutcome(
   return {
     toastMessage: `Kunne ikke opdatere den gentagende træning (${reasonMessage}).`,
     toastType: 'error',
-    diagnostic: { ...base, outcome: 'rejected', persistKind: 'planner', reason: result.reason, occurrenceDateISO: result.occurrenceDateISO },
+    diagnostic: { ...base, outcome: 'rejected', persistKind: 'planner', reason: result.reason },
   };
 }
 

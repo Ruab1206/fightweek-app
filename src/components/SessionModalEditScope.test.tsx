@@ -187,6 +187,19 @@ describe('SessionModal — explicit edit-scope prompt', () => {
     expect(submitted).toMatchObject({ name: 'MMA Sparring (ny)' });
   });
 
+  it('after dispatching this_and_following, the submitted edit remains rendered — SessionModal never resets itself while the parent\'s async result is pending (modal-close/reset is the parent\'s decision alone)', () => {
+    // onRecurringEditScope is fire-and-forget from SessionModal's perspective —
+    // it is never awaited here, mirroring the real App.tsx call site.
+    const onRecurringEditScope = vi.fn();
+    renderModal({ initialData: durableRecurringInitialData, onRecurringEditScope });
+
+    fireEvent.change(screen.getByPlaceholderText('F.eks. MMA Sparring'), { target: { value: 'MMA Sparring (ny)' } });
+    fireEvent.click(screen.getByText('Gem'));
+    fireEvent.click(screen.getByText('Denne og alle fremtidige træninger').closest('button')!);
+
+    expect(screen.getByDisplayValue('MMA Sparring (ny)')).toBeTruthy();
+  });
+
   it('enables "Denne og alle fremtidige træninger" for a durable-series occurrence dated exactly today', () => {
     const onRecurringEditScope = vi.fn();
     renderModal({ date: daysFromNow(0), initialData: durableRecurringInitialData, onRecurringEditScope });
