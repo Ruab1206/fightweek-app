@@ -37,6 +37,8 @@ export interface MaterializationOccurrenceInput {
   occurrenceDateISO: string;
   isSeriesException?: boolean;
   status?: string;
+  /** True when this occurrence is an invisible durable-deletion record. */
+  isDeleted?: boolean;
 }
 
 /** A durable suppression the planner must honour as no-regeneration. */
@@ -197,12 +199,13 @@ export function planSeriesMaterialization(params: {
   // A suppression coexisting with an ACTIVE occurrence (plain or exception) is
   // a contradictory lifecycle state — one input says the date is deleted, the
   // other says it must be preserved — and fails closed (E.8/E.9). A CANCELLED
-  // occurrence coexisting with a suppression is valid: both express the same
-  // no-regeneration intent (R7), so it is a normal skip, never a conflict.
+  // occurrence or an invisible isDeleted deletion record coexisting with a
+  // suppression is valid: both express the same no-regeneration intent (R7), so
+  // it is a normal skip, never a conflict.
   for (const date of suppressedDates) {
     const occs = byDate.get(date);
     if (!occs) continue;
-    if (occs[0].status !== 'cancelled') {
+    if (occs[0].status !== 'cancelled' && occs[0].isDeleted !== true) {
       return { ok: false, reason: 'active_occurrence_with_suppression', occurrenceDateISO: date };
     }
   }

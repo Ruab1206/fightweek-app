@@ -152,6 +152,7 @@ function readWeekOccurrences(
       occurrenceDateISO: dateISO,
       isSeriesException: s.isSeriesException === true,
       status: typeof s.status === 'string' ? s.status : undefined,
+      isDeleted: s.isDeleted === true,
     });
   }
   return out;

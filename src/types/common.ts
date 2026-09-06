@@ -40,6 +40,13 @@ export interface TrainingSession {
   // later series materialization must not overwrite it. Never inferred from
   // field differences; only an explicit this-occurrence edit sets it.
   isSeriesException?: boolean;
+  // Durable delete-this-and-following: an invisible transitional deletion
+  // record. The occurrence stays persisted (id/date/seriesId/isSeriesException
+  // + snapshot preserved so Notes/TrainingLogs keep resolving) but is excluded
+  // from all normal presentation and interaction. Distinct from the legacy
+  // `status: 'cancelled'` concept — never paired with cancellation fields.
+  isDeleted?: boolean;
+  deletedAt?: string;
 }
 
 // Fravær (absence aktivitet) — stored inline with training sessions
