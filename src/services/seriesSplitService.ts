@@ -31,7 +31,7 @@ import {
 } from '../domain/calendar/seriesSplitPlan';
 import type { EventSeriesDefinition } from '../domain/calendar/eventSeriesDefinition';
 import { buildOccurrenceSuppression, suppressionDocId } from '../domain/calendar/occurrenceSuppression';
-import { computeSeriesOccurrenceDates, recurrenceHorizonEndDate } from '../hooks/computeSeriesOccurrences';
+import { computeSeriesOccurrenceDates, recurrenceHorizonEndDate, productionWeekNumberForOccurrence } from '../hooks/computeSeriesOccurrences';
 
 const PLAIN_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const EVENT_SERIES_SUBCOLLECTION = 'eventSeries';
@@ -84,13 +84,15 @@ function dayNameForDate(dateISO: string): string {
   return DAYS[(jsDay + 6) % 7];
 }
 
-/** ISO week number for a local YYYY-MM-DD (matches getISOWeekForDate). */
-function isoWeekForDate(dateISO: string): number {
-  const [y, m, d] = dateISO.split('-').map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d));
-  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+/** Week-document key for a candidate forward date, in the SAME continuously-
+ *  incrementing convention the production recurring-session creation path
+ *  uses (see productionWeekNumberForOccurrence) — the OLD series' own anchor
+ *  (startDate) plus a whole-week offset, never resetting at a calendar-year
+ *  boundary. A per-date standard-ISO calculation resets every January and
+ *  silently targets the wrong week document for a forward occurrence in a
+ *  later calendar year than the series anchor. */
+function weekNumberForDate(dateISO: string, seriesStartDateISO: string): number {
+  return productionWeekNumberForOccurrence(dateISO, seriesStartDateISO);
 }
 
 /** Apply the planner's edited (definition-vocabulary) fields onto a week-doc
@@ -166,7 +168,7 @@ export async function persistSeriesSplitAtomically(
         suppExists: boolean;
       }> = [];
       for (const dateISO of candidateDates) {
-        const weekNum = isoWeekForDate(dateISO);
+        const weekNum = weekNumberForDate(dateISO, oldDefinition!.startDate);
         const dayName = dayNameForDate(dateISO);
         const weekRef = doc(fs, ROOT_COLLECTION, fighterKey, WEEKS_SUBCOLLECTION, `week_${weekNum}`);
         const suppRef = doc(fs, ROOT_COLLECTION, fighterKey, EVENT_SERIES_SUBCOLLECTION, oldSeriesId, SUPPRESSIONS_SUBCOLLECTION, suppressionDocId(dateISO));
@@ -195,6 +197,7 @@ export async function persistSeriesSplitAtomically(
             occurrenceDateISO: pd.dateISO,
             isSeriesException: s.isSeriesException,
             status: s.status,
+            isDeleted: s.isDeleted,
           });
         }
       }
@@ -229,7 +232,14 @@ export async function persistSeriesSplitAtomically(
         const dayArr: any[] = Array.isArray(pd.weekData[pd.dayName]) ? pd.weekData[pd.dayName] : [];
         const entry = dayArr.find((s: any) => s?.id === op.occurrenceId);
         if (!entry) continue;
-        applyEditedFieldsToEntry(entry, op.fields, op.occurrenceDateISO, op.toSeriesId, op.clearedException);
+        if (op.preserveExistingFields) {
+          // Active future exception: only its series membership changes —
+          // its independently edited content and isSeriesException flag are
+          // never touched by the submitted series-wide edit.
+          entry.seriesId = op.toSeriesId;
+        } else {
+          applyEditedFieldsToEntry(entry, op.fields!, op.occurrenceDateISO, op.toSeriesId, op.clearedException);
+        }
         dayArr.sort((a: any, b: any) => (a.start || '').localeCompare(b.start || ''));
         touchedWeeks.add(pd);
       }

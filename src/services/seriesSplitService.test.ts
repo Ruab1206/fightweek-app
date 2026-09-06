@@ -349,3 +349,124 @@ describe('seriesSplitService — identity preservation (Notes / TrainingLog)', (
     }
   });
 });
+
+describe('seriesSplitService — year-boundary week-document lookup', () => {
+  // Anchored the Monday before an ISO year boundary so the forward horizon
+  // spans both the same year and the next one.
+  const Y_START = '2026-12-14';
+  const Y_NOW = '2026-12-22T00:00:00.000Z';
+  const Y_HORIZON = '2027-02-01';
+  const EARLIER = '2026-12-14';       // the old series' own first occurrence — before the split date, must stay untouched
+  const SPLIT_DATE = '2026-12-21';    // split anchor
+  const SAME_YEAR_FWD = '2026-12-28'; // forward, no year boundary crossed yet
+  const NEXT_YEAR_1 = '2027-01-04';   // forward, crosses into the next ISO year
+  const NEXT_YEAR_2 = '2027-01-11';   // forward, further into the next ISO year
+  const OTHER = 'unrelated-series-9';
+
+  /**
+   * Independently mirrors the REAL production recurring-session creation
+   * path's week-document convention (computeRecurringWeeks/getDaysInRange):
+   * the series anchor's own ISO week plus a whole-week offset, which keeps
+   * incrementing and never resets at a calendar-year boundary. Built from
+   * first principles here — it never calls into seriesSplitService.ts or its
+   * helpers, so it cannot accidentally encode the same assumption as the code
+   * under test.
+   */
+  function productionWeekPathFor(dateISO: string) {
+    const [sy, sm, sd] = Y_START.split('-').map(Number);
+    const anchorWeek = getISOWeekForDate(new Date(sy, sm - 1, sd));
+    const [ty, tm, td] = dateISO.split('-').map(Number);
+    const diffDays = Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(sy, sm - 1, sd)) / 86400000);
+    return `artifacts/production/users/${OWNER}/weeks/week_${anchorWeek + diffDays / 7}`;
+  }
+
+  function seedYearBoundarySeries() {
+    store.set(seriesPath(OLD), {
+      id: OLD, type: 'self_posted_training', ownerKey: OWNER, title: 'Morning MMA', discipline: 'MMA', location: 'Gym A',
+      dayOfWeek: 1, startTime: '07:00', endTime: '08:30', startDate: Y_START, intervalWeeks: 1, endDate: null,
+      status: 'active', createdAt: Y_NOW, updatedAt: Y_NOW,
+    });
+    store.set(productionWeekPathFor(EARLIER), { Mandag: [occ('occ-earlier')], lastUpdated: Y_NOW });
+    store.set(productionWeekPathFor(SPLIT_DATE), { Mandag: [occ('occ-selected'), { ...occ('occ-unrelated'), seriesId: OTHER }], lastUpdated: Y_NOW });
+    store.set(productionWeekPathFor(SAME_YEAR_FWD), { Mandag: [occ('occ-same-year-fwd')], lastUpdated: Y_NOW });
+    store.set(productionWeekPathFor(NEXT_YEAR_1), { Mandag: [occ('occ-next-year-1')], lastUpdated: Y_NOW });
+    store.set(productionWeekPathFor(NEXT_YEAR_2), { Mandag: [occ('occ-next-year-2')], lastUpdated: Y_NOW });
+  }
+
+  function runYearBoundary() {
+    const selected = { id: 'occ-selected', seriesId: OLD, occurrenceDateISO: SPLIT_DATE };
+    return persistSeriesSplitAtomically(
+      { fighterKey: OWNER, selected, edited: EDITED },
+      { newSeriesId: NEW, now: Y_NOW, horizonEndDate: Y_HORIZON },
+    );
+  }
+
+  it('re-parents the selected occurrence and every persisted future occurrence — including across the ISO year boundary — while leaving the earlier occurrence and an unrelated series untouched', async () => {
+    seedYearBoundarySeries();
+    const res = await runYearBoundary();
+
+    // Characterizes the defect: pre-fix, the two next-year dates are looked
+    // up under the wrong (annually-reset) week document and never reached,
+    // so `occurrenceReparents` stops at 2 instead of 4. This is the assertion
+    // that fails against pre-fix behavior for the intended reason.
+    expect(res).toEqual({ ok: true, newSeriesId: NEW, counts: { definitionUpdates: 1, definitionCreates: 1, occurrenceReparents: 4, suppressionContinuations: 0, total: 6 } });
+
+    const earlier = store.get(productionWeekPathFor(EARLIER)).Mandag.find((s: any) => s.id === 'occ-earlier');
+    expect(earlier.seriesId).toBe(OLD); // earlier occurrence unaffected
+
+    for (const [dateISO, id] of [
+      [SPLIT_DATE, 'occ-selected'],
+      [SAME_YEAR_FWD, 'occ-same-year-fwd'],
+      [NEXT_YEAR_1, 'occ-next-year-1'],
+      [NEXT_YEAR_2, 'occ-next-year-2'],
+    ] as const) {
+      const entry = store.get(productionWeekPathFor(dateISO)).Mandag.find((s: any) => s.id === id);
+      expect(entry).toMatchObject({ id, seriesId: NEW, name: 'Evening MMA' });
+    }
+
+    // Unrelated series sharing the selected week's document is untouched.
+    const sharedWeek = store.get(productionWeekPathFor(SPLIT_DATE)).Mandag;
+    const unrelated = sharedWeek.find((s: any) => s.id === 'occ-unrelated');
+    expect(unrelated.seriesId).toBe(OTHER);
+  });
+});
+
+describe('seriesSplitService — isDeleted future occurrence', () => {
+  it('never re-parents, overwrites, or reactivates an isDeleted future occurrence, and gives the new series a suppression continuity for its date', async () => {
+    seedOldDef();
+    store.set(weekPathFor('2026-01-12'), { Mandag: [occ('occ-w2')], lastUpdated: NOW });
+    store.set(weekPathFor('2026-01-19'), { Mandag: [{ ...occ('occ-w3'), isDeleted: true, deletedAt: NOW }], lastUpdated: NOW });
+    store.set(weekPathFor('2026-01-26'), { Mandag: [occ('occ-w4')], lastUpdated: NOW });
+    const res = await run();
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.counts).toMatchObject({ occurrenceReparents: 2, suppressionContinuations: 1 });
+    expect(store.get(suppPath(NEW, '2026-01-19'))).toMatchObject({ seriesId: NEW, occurrenceDateISO: '2026-01-19' });
+    // The isDeleted occurrence itself: untouched, still on the old series, still isDeleted.
+    const entry = store.get(weekPathFor('2026-01-19')).Mandag[0];
+    expect(entry).toEqual({ ...occ('occ-w3'), isDeleted: true, deletedAt: NOW });
+  });
+});
+
+describe('seriesSplitService — active future exception', () => {
+  it('re-parents an active future exception to the new series while preserving its independently edited fields and isSeriesException flag', async () => {
+    seedOldDef();
+    const customException = { ...occ('occ-w3'), isSeriesException: true, name: 'Custom solo drill', start: '06:00', end: '07:00', location: 'Home gym' };
+    store.set(weekPathFor('2026-01-12'), { Mandag: [occ('occ-w2')], lastUpdated: NOW });
+    store.set(weekPathFor('2026-01-19'), { Mandag: [customException], lastUpdated: NOW });
+    store.set(weekPathFor('2026-01-26'), { Mandag: [occ('occ-w4')], lastUpdated: NOW });
+    const res = await run();
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.counts).toMatchObject({ occurrenceReparents: 3, suppressionContinuations: 0 });
+    const entry = store.get(weekPathFor('2026-01-19')).Mandag[0];
+    // Re-parented (new seriesId) but every other field is exactly as it was — the
+    // submitted series-wide edit (EDITED: 'Evening MMA' / 18:00-19:30 / Gym B) never applied.
+    expect(entry.seriesId).toBe(NEW);
+    expect(entry.isSeriesException).toBe(true);
+    expect(entry.name).toBe('Custom solo drill');
+    expect(entry.start).toBe('06:00');
+    expect(entry.end).toBe('07:00');
+    expect(entry.location).toBe('Home gym');
+  });
+});

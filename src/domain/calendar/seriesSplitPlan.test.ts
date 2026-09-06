@@ -161,8 +161,8 @@ describe('planSeriesSplit — exception anchor', () => {
   });
 });
 
-describe('planSeriesSplit — future exceptions and cancelled occurrences are untouched', () => {
-  it('leaves a future exception on the original series (not re-parented)', () => {
+describe('planSeriesSplit — active future exception is re-parented with fields preserved', () => {
+  it('re-parents a future active exception to the new series, preserving isSeriesException and never applying the submitted edit to its content', () => {
     const futureException: SplitOccurrenceInput = {
       id: 'occ-w3',
       seriesId: OLD_SERIES,
@@ -180,10 +180,36 @@ describe('planSeriesSplit — future exceptions and cancelled occurrences are un
     });
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
-    expect(plan.reparents.map((r) => r.occurrenceId)).toEqual(['occ-w2', 'occ-w4']);
-    expect(plan.reparents.find((r) => r.occurrenceId === 'occ-w3')).toBeUndefined();
+    expect(plan.reparents.map((r) => r.occurrenceId)).toEqual(['occ-w2', 'occ-w3', 'occ-w4']);
+    const exceptionOp = plan.reparents.find((r) => r.occurrenceId === 'occ-w3');
+    expect(exceptionOp).toMatchObject({ fromSeriesId: OLD_SERIES, toSeriesId: NEW_SERIES, clearedException: false, preserveExistingFields: true });
+    expect(exceptionOp?.fields).toBeUndefined();
+    // The input object itself is never mutated by the planner.
+    expect(futureException).toEqual({
+      id: 'occ-w3', seriesId: OLD_SERIES, occurrenceDateISO: '2026-01-19', isSeriesException: true,
+    });
   });
 
+  it('never produces a suppression continuation for a re-parented active exception', () => {
+    const futureException: SplitOccurrenceInput = {
+      id: 'occ-w3', seriesId: OLD_SERIES, occurrenceDateISO: '2026-01-19', isSeriesException: true,
+    };
+    const plan = planSeriesSplit({
+      oldDefinition: oldDef(),
+      selected: OCC.w2,
+      edited: EDITED,
+      forwardOccurrences: [OCC.w2, futureException],
+      forwardSuppressions: [],
+      newSeriesId: NEW_SERIES,
+      now: NOW,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.suppressionContinuations).toEqual([]);
+  });
+});
+
+describe('planSeriesSplit — cancelled occurrences are untouched', () => {
   it('leaves a future cancelled occurrence on the original series, unmodified, and not re-parented', () => {
     const cancelled: SplitOccurrenceInput = {
       id: 'occ-w3',
@@ -361,8 +387,7 @@ describe('planSeriesSplit — cancelled-occurrence suppression continuity', () =
 });
 
 describe('planSeriesSplit — conflicting occurrence and suppression (fail closed)', () => {
-  it('fails closed when a clean active occurrence has a same-date suppression', () => {
-    const plan = planSeriesSplit({
+  it('fails closed when a clean active occurrence has a same-date suppression', () => {    const plan = planSeriesSplit({
       oldDefinition: oldDef(),
       selected: OCC.w2,
       edited: EDITED,
@@ -637,5 +662,106 @@ describe('planSeriesSplit — write-set count reporting', () => {
         plan.counts.suppressionContinuations,
     );
     expect(plan.counts.total).toBe(5);
+  });
+});
+
+describe('planSeriesSplit — isDeleted future occurrence', () => {
+  it('fails closed when the selected anchor itself is isDeleted (defense-in-depth — R32 already excludes it from the UI)', () => {
+    const deletedAnchor: SplitOccurrenceInput = { id: 'occ-w2', seriesId: OLD_SERIES, occurrenceDateISO: '2026-01-12', isDeleted: true };
+    const plan = planSeriesSplit({
+      oldDefinition: oldDef(),
+      selected: deletedAnchor,
+      edited: EDITED,
+      forwardOccurrences: [deletedAnchor],
+      forwardSuppressions: [],
+      newSeriesId: NEW_SERIES,
+      now: NOW,
+    });
+    expect(plan).toEqual({ ok: false, reason: 'anchor_is_deleted' });
+  });
+
+  it('leaves a future isDeleted occurrence on the original series, unmodified, and not re-parented', () => {
+    const deleted: SplitOccurrenceInput = {
+      id: 'occ-w3', seriesId: OLD_SERIES, occurrenceDateISO: '2026-01-19', isDeleted: true,
+    };
+    const plan = planSeriesSplit({
+      oldDefinition: oldDef(),
+      selected: OCC.w2,
+      edited: EDITED,
+      forwardOccurrences: [OCC.w2, deleted, OCC.w4],
+      forwardSuppressions: [],
+      newSeriesId: NEW_SERIES,
+      now: NOW,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.reparents.map((r) => r.occurrenceId)).toEqual(['occ-w2', 'occ-w4']);
+    expect(deleted).toEqual({
+      id: 'occ-w3', seriesId: OLD_SERIES, occurrenceDateISO: '2026-01-19', isDeleted: true,
+    });
+  });
+
+  it('produces exactly one new-series continuity op for a future isDeleted occurrence, so the materializer cannot resurrect it', () => {
+    const deleted: SplitOccurrenceInput = {
+      id: 'occ-w3', seriesId: OLD_SERIES, occurrenceDateISO: '2026-01-19', isDeleted: true,
+    };
+    const plan = planSeriesSplit({
+      oldDefinition: oldDef(),
+      selected: OCC.w2,
+      edited: EDITED,
+      forwardOccurrences: [OCC.w2, deleted],
+      forwardSuppressions: [],
+      newSeriesId: NEW_SERIES,
+      now: NOW,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.suppressionContinuations).toEqual([
+      { from: { seriesId: OLD_SERIES, occurrenceDateISO: '2026-01-19' }, to: { seriesId: NEW_SERIES, occurrenceDateISO: '2026-01-19' } },
+    ]);
+  });
+
+  it('treats an isDeleted occurrence coexisting with a same-date suppression as valid (not a conflict)', () => {
+    const deleted: SplitOccurrenceInput = {
+      id: 'occ-w3', seriesId: OLD_SERIES, occurrenceDateISO: '2026-01-19', isDeleted: true,
+    };
+    const plan = planSeriesSplit({
+      oldDefinition: oldDef(),
+      selected: OCC.w2,
+      edited: EDITED,
+      forwardOccurrences: [OCC.w2, deleted],
+      forwardSuppressions: [{ seriesId: OLD_SERIES, occurrenceDateISO: '2026-01-19' }],
+      newSeriesId: NEW_SERIES,
+      now: NOW,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    // Still exactly one continuity op (deduped), no conflict, no reparent.
+    expect(plan.suppressionContinuations).toEqual([
+      { from: { seriesId: OLD_SERIES, occurrenceDateISO: '2026-01-19' }, to: { seriesId: NEW_SERIES, occurrenceDateISO: '2026-01-19' } },
+    ]);
+    expect(plan.reparents.find((r) => r.occurrenceDateISO === '2026-01-19')).toBeUndefined();
+  });
+
+  it('does not produce a duplicate continuity op for an isDeleted occurrence that is also isSeriesException', () => {
+    const deletedException: SplitOccurrenceInput = {
+      id: 'occ-w3', seriesId: OLD_SERIES, occurrenceDateISO: '2026-01-19', isSeriesException: true, isDeleted: true,
+    };
+    const plan = planSeriesSplit({
+      oldDefinition: oldDef(),
+      selected: OCC.w2,
+      edited: EDITED,
+      forwardOccurrences: [OCC.w2, deletedException],
+      forwardSuppressions: [],
+      newSeriesId: NEW_SERIES,
+      now: NOW,
+    });
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    // isDeleted takes priority over isSeriesException: never re-parented.
+    expect(plan.reparents.find((r) => r.occurrenceId === 'occ-w3')).toBeUndefined();
+    expect(plan.suppressionContinuations).toEqual([
+      { from: { seriesId: OLD_SERIES, occurrenceDateISO: '2026-01-19' }, to: { seriesId: NEW_SERIES, occurrenceDateISO: '2026-01-19' } },
+    ]);
   });
 });

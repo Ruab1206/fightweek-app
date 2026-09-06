@@ -28,6 +28,8 @@ export interface SplitOccurrenceInput {
   occurrenceDateISO: string;
   isSeriesException?: boolean;
   status?: string;
+  /** True when this is an invisible durable-deletion record (J.9/R25-R36). */
+  isDeleted?: boolean;
 }
 
 /** Minimal identity of the occurrence the user split from. */
@@ -37,6 +39,7 @@ export interface SplitSelectedOccurrence {
   occurrenceDateISO: string;
   isSeriesException?: boolean;
   status?: string;
+  isDeleted?: boolean;
 }
 
 export interface SplitSuppressionInput {
@@ -44,15 +47,20 @@ export interface SplitSuppressionInput {
   occurrenceDateISO: string;
 }
 
-/** One planned re-parent of a clean forward occurrence to the new series. */
+/** One planned re-parent to the new series (a clean occurrence, the anchor,
+ *  or an active future exception). */
 export interface SplitReparentOp {
   occurrenceId: string;        // preserved
   occurrenceDateISO: string;   // preserved
   fromSeriesId: string;
   toSeriesId: string;
-  fields: SplitEditedFields;
+  /** Absent when `preserveExistingFields` is true — the exception's own content is left as-is. */
+  fields?: SplitEditedFields;
   /** True only for the selected anchor when it was an exception (flag cleared). */
   clearedException: boolean;
+  /** True for a non-anchor active exception: only `seriesId` changes, its
+   *  independently edited fields and `isSeriesException` are never touched. */
+  preserveExistingFields: boolean;
 }
 
 /** One planned suppression continuity: same date, re-pointed to the new series. */
@@ -75,7 +83,8 @@ export type SplitPlanFailureReason =
   | 'selected_before_definition_start'
   | 'unsupported_legacy_occurrence'
   | 'invalid_occurrence_date'
-  | 'conflicting_occurrence_and_suppression';
+  | 'conflicting_occurrence_and_suppression'
+  | 'anchor_is_deleted';
 
 export interface SplitOldDefinitionUpdate {
   seriesId: string;
@@ -123,7 +132,7 @@ function findConflictingOldSeriesDate(params: {
   for (const occ of forwardOccurrences) {
     if (occ.seriesId !== oldSeriesId) continue;
     if (occ.occurrenceDateISO < splitDate) continue;
-    if (occ.status === 'cancelled') continue; // cancelled + suppression is valid
+    if (occ.status === 'cancelled' || occ.isDeleted === true) continue; // cancelled/isDeleted + suppression is valid
     if (suppressedDates.has(occ.occurrenceDateISO)) return occ.occurrenceDateISO;
   }
   return null;
@@ -158,6 +167,10 @@ export function planSeriesSplit(params: {
 
   if (!selected.seriesId) return { ok: false, reason: 'unsupported_legacy_occurrence' };
   if (!PLAIN_DATE.test(selected.occurrenceDateISO)) return { ok: false, reason: 'invalid_occurrence_date' };
+  // R31: an isDeleted occurrence is never reactivated — not even as a split anchor.
+  // Defense-in-depth: R32 already excludes isDeleted from all presentation/interaction,
+  // so the UI should never let a user select one, but the planner fails closed anyway.
+  if (selected.isDeleted) return { ok: false, reason: 'anchor_is_deleted' };
   if (!oldDefinition) return { ok: false, reason: 'missing_definition' };
   if (oldDefinition.id !== selected.seriesId) return { ok: false, reason: 'missing_series_id' };
   if (selected.occurrenceDateISO < oldDefinition.startDate) return { ok: false, reason: 'selected_before_definition_start' };
@@ -170,15 +183,33 @@ export function planSeriesSplit(params: {
     return { ok: false, reason: 'conflicting_occurrence_and_suppression', occurrenceDateISO: conflictingDate };
   }
 
-  // Re-parent the selected anchor + every clean forward member; leave future
-  // exceptions and cancelled occurrences untouched (not in the plan).
+  // Re-parent the selected anchor, every clean forward member, and every
+  // active future exception (preserving its own edited content). Cancelled
+  // and isDeleted occurrences stay associated with the old (now-ended) series
+  // — never re-parented, never overwritten, never reactivated (R31) — and
+  // instead receive suppression continuity below so the new series' own
+  // materializer cannot resurrect their date.
   const reparents: SplitReparentOp[] = [];
   for (const occ of forwardOccurrences) {
     if (occ.seriesId !== oldSeriesId) continue;
     if (occ.occurrenceDateISO < splitDate) continue;
     const isAnchor = occ.id === selected.id;
-    if (!isAnchor && occ.isSeriesException) continue;   // future exception preserved
-    if (!isAnchor && occ.status === 'cancelled') continue; // cancelled tombstone preserved
+    if (!isAnchor && occ.isDeleted === true) continue;      // isDeleted: never reparented/reactivated
+    if (!isAnchor && occ.status === 'cancelled') continue;  // cancelled tombstone preserved on old series
+    if (!isAnchor && occ.isSeriesException) {
+      // Active future exception: re-parented so its date stays covered under
+      // the new series, but its independently edited fields are NEVER
+      // replaced by the submitted series-wide edit.
+      reparents.push({
+        occurrenceId: occ.id,
+        occurrenceDateISO: occ.occurrenceDateISO,
+        fromSeriesId: oldSeriesId,
+        toSeriesId: newSeriesId,
+        clearedException: false,
+        preserveExistingFields: true,
+      });
+      continue;
+    }
     reparents.push({
       occurrenceId: occ.id,
       occurrenceDateISO: occ.occurrenceDateISO,
@@ -186,16 +217,18 @@ export function planSeriesSplit(params: {
       toSeriesId: newSeriesId,
       fields: edited,
       clearedException: isAnchor && occ.isSeriesException === true,
+      preserveExistingFields: false,
     });
   }
 
   // Suppression continuity: a tombstone on the old series is supplementary,
   // never a regeneration authority (R7) — only a suppression prevents a
   // future new-series materializer from resurrecting the date (R8). Forward
-  // continuity is therefore produced from BOTH (A) existing suppressions and
-  // (B) cancelled occurrences (status:'cancelled' only — never inferred from
-  // other field differences), deduped by {newSeriesId, occurrenceDateISO} so
-  // an already-suppressed cancelled date yields exactly one operation.
+  // continuity is therefore produced from (A) existing suppressions, (B)
+  // cancelled occurrences, and (C) isDeleted occurrences (status:'cancelled'
+  // or isDeleted:true only — never inferred from other field differences),
+  // deduped by {newSeriesId, occurrenceDateISO} so an already-suppressed
+  // cancelled/isDeleted date yields exactly one operation.
   const suppressionContinuations: SplitSuppressionContinuation[] = [];
   const continuedDates = new Set<string>();
   const addContinuation = (occurrenceDateISO: string) => {
@@ -213,8 +246,8 @@ export function planSeriesSplit(params: {
   }
   for (const occ of forwardOccurrences) {
     if (occ.seriesId !== oldSeriesId) continue;
-    if (occ.occurrenceDateISO < splitDate) continue;    // past cancellation stays on old series
-    if (occ.status !== 'cancelled') continue;           // active exceptions do not auto-suppress
+    if (occ.occurrenceDateISO < splitDate) continue;    // past cancellation/deletion stays on old series
+    if (occ.status !== 'cancelled' && occ.isDeleted !== true) continue; // active exceptions do not auto-suppress
     addContinuation(occ.occurrenceDateISO);
   }
 
