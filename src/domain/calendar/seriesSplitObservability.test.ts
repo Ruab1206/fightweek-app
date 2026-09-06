@@ -66,6 +66,33 @@ describe('describeSeriesSplitOutcome', () => {
     expect(withBadCode.diagnostic.firestoreErrorCode).toBe('unknown');
   });
 
+  it('does not normalize a namespace-prefixed SDK form (not a real Firestore code shape) — safely becomes "unknown"', () => {
+    // The real @firebase/firestore SDK never prefixes its codes (that is an
+    // Auth-only convention, e.g. 'auth/popup-closed-by-user'); a prefixed
+    // 'firestore/permission-denied' is therefore not a genuine Firestore code
+    // and must not be normalized/stripped into 'permission-denied'.
+    const feedback = describeSeriesSplitOutcome({ ok: false, kind: 'transaction', error: { code: 'firestore/permission-denied' } }, { name: 'MMA' });
+    expect(feedback.diagnostic.firestoreErrorCode).toBe('unknown');
+  });
+
+  it('rejects an excessively long or otherwise unrecognized code as "unknown"', () => {
+    const longCode = 'permission-denied'.repeat(10);
+    const feedback = describeSeriesSplitOutcome({ ok: false, kind: 'transaction', error: { code: longCode } }, { name: 'MMA' });
+    expect(feedback.diagnostic.firestoreErrorCode).toBe('unknown');
+  });
+
+  it('never assigns a firestoreErrorCode to a planner or stale result', () => {
+    const planner = describeSeriesSplitOutcome({ ok: false, kind: 'planner', reason: 'missing_definition' }, { name: 'MMA' });
+    const stale = describeSeriesSplitOutcome({ ok: false, kind: 'stale', reason: 'anchor_not_found' }, { name: 'MMA' });
+    expect(planner.diagnostic).not.toHaveProperty('firestoreErrorCode');
+    expect(stale.diagnostic).not.toHaveProperty('firestoreErrorCode');
+  });
+
+  it('never assigns a firestoreErrorCode to a successful split', () => {
+    const feedback = describeSeriesSplitOutcome({ ok: true, newSeriesId: 'new-1', counts: { definitionUpdates: 1, definitionCreates: 1, occurrenceReparents: 0, suppressionContinuations: 0, total: 2 } }, { name: 'MMA' });
+    expect(feedback.diagnostic).not.toHaveProperty('firestoreErrorCode');
+  });
+
   it('never includes seriesId, occurrence identifiers, or raw error messages in the diagnostic', () => {
     const feedback = describeSeriesSplitOutcome(
       { ok: false, kind: 'transaction', error: { code: 'permission-denied', message: 'Missing or insufficient permissions on artifacts/production/users/sankarem00@gmail.com/eventSeries/e3d02fac' } },

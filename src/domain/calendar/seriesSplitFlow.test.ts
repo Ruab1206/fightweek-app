@@ -59,4 +59,12 @@ describe('shouldCloseThisAndFollowingModal', () => {
   it('keeps the modal open for a transaction failure', () => {
     expect(shouldCloseThisAndFollowingModal({ kind: 'split', result: { ok: false, kind: 'transaction', error: new Error('boom') } as any })).toBe(false);
   });
+
+  it('keeps the modal open for a production-shaped FirestoreError transaction failure (real code/message/name)', () => {
+    // Mirrors the actual shape a caught @firebase/firestore FirestoreError has
+    // (see seriesSplitService.emulator.test.ts's real-SDK proof) — not a
+    // hand-picked minimal fixture.
+    const realistic = { name: 'FirebaseError', code: 'permission-denied', message: 'Missing or insufficient permissions.' };
+    expect(shouldCloseThisAndFollowingModal({ kind: 'split', result: { ok: false, kind: 'transaction', error: realistic } as any })).toBe(false);
+  });
 });

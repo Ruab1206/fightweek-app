@@ -55,13 +55,29 @@ export interface SeriesSplitFeedback {
   diagnostic: SeriesSplitDiagnostic;
 }
 
-/** A Firestore error `code` is a short lowercase-hyphenated token (e.g.
- *  'permission-denied', 'resource-exhausted', 'aborted'). Anything else
- *  (missing, wrong type, or an unexpected shape) collapses to 'unknown' so
- *  arbitrary server error text can never leak into a diagnostic. */
+/** The complete, finite set of gRPC-derived status codes the real
+ *  `@firebase/firestore` client SDK actually assigns to `FirestoreError.code`
+ *  (verified against the installed SDK's own `Code` enum) — always a bare
+ *  lowercase-hyphenated token, never namespace-prefixed like Auth's
+ *  'auth/xxx' convention. An allow-list (rather than a length/shape regex) is
+ *  possible precisely because this set is fixed and small; anything outside
+ *  it — including a prefixed form such as 'firestore/permission-denied', an
+ *  excessively long value, or arbitrary text — is not a real Firestore code
+ *  and safely collapses to 'unknown'. */
+const KNOWN_FIRESTORE_ERROR_CODES = new Set([
+  'cancelled', 'unknown', 'invalid-argument', 'deadline-exceeded', 'not-found',
+  'already-exists', 'permission-denied', 'unauthenticated', 'resource-exhausted',
+  'failed-precondition', 'aborted', 'out-of-range', 'unimplemented', 'internal',
+  'unavailable', 'data-loss',
+]);
+
+/** Extracts and sanitizes `error.code` for a transaction failure. Anything
+ *  not on the known-code allow-list (missing, wrong type, unrecognized, or
+ *  malformed) collapses to 'unknown' so arbitrary server error text can
+ *  never leak into a diagnostic. */
 export function sanitizeFirestoreErrorCode(error: unknown): string {
   const code = (error as { code?: unknown } | null | undefined)?.code;
-  if (typeof code === 'string' && /^[a-z][a-z0-9-]*$/.test(code)) return code;
+  if (typeof code === 'string' && KNOWN_FIRESTORE_ERROR_CODES.has(code)) return code;
   return 'unknown';
 }
 

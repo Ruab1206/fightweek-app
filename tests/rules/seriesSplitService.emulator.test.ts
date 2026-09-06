@@ -23,6 +23,7 @@ import { afterAll, beforeAll, beforeEach, describe, it, expect } from 'vitest';
 import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { persistSeriesSplitAtomically } from '../../src/services/seriesSplitService';
+import { describeSeriesSplitOutcome } from '../../src/domain/calendar/seriesSplitObservability';
 import { getISOWeekForDate } from '../../src/utils/dateUtils';
 import { computeSeriesOccurrenceDates, recurrenceHorizonEndDate, productionWeekNumberForOccurrence } from '../../src/hooks/computeSeriesOccurrences';
 
@@ -159,6 +160,33 @@ describe('persistSeriesSplitAtomically — emulator', () => {
       expect(field((await getDoc(doc(db, seriesPath(OLD)))).data(), 'endDate')).toBeNull();
       expect(dayArr((await getDoc(doc(db, weekPathFor('2026-01-12')))).data())[0].seriesId).toBe(OLD);
     });
+  });
+
+  // ─── Production-shaped error-code boundary proof ───
+  // Unlike the observability unit tests (which hand-construct a
+  // `{ code, message }` object at the diagnostic layer), this reuses the SAME
+  // rules-denied coach fixture but inspects the REAL exception the Firestore
+  // JS SDK actually threw and caught inside `persistSeriesSplitAtomically`,
+  // then pipes that SAME typed result through `describeSeriesSplitOutcome` in
+  // one continuous call — proving the sanitized code truly survives the whole
+  // production boundary (thrown FirestoreError -> SeriesSplitPersistResult ->
+  // diagnostic), not merely a synthetic fixture.
+  it('a real rules-denied transaction failure carries a genuine FirestoreError code through to the sanitized diagnostic', async () => {
+    await seed();
+    const res = await run('occ-w2', coachDb());
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.kind).toBe('transaction');
+    // The raw caught exception is a real @firebase/firestore FirestoreError —
+    // confirm its shape before trusting the sanitizer to read it.
+    const raw = (res as { error: unknown }).error as { name?: string; code?: string; message?: string };
+    expect(raw?.code).toBe('permission-denied');
+    expect(typeof raw?.message).toBe('string');
+
+    const feedback = describeSeriesSplitOutcome(res, { name: 'MMA' });
+    expect(feedback.diagnostic.firestoreErrorCode).toBe('permission-denied');
+    // The raw message (which can echo document paths) never reaches the diagnostic.
+    expect(JSON.stringify(feedback.diagnostic)).not.toMatch(/artifacts\/production|@|Missing or insufficient/i);
   });
 
   it('teammate cross-owner split FAILS with zero writes', async () => {
